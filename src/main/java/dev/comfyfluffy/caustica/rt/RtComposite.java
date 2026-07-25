@@ -263,6 +263,8 @@ public final class RtComposite {
     private float mvCamDeltaY;
     private float mvCamDeltaZ;
     private boolean mvHasPrev;
+    private float previousWaterWaveTime;
+    private boolean waterWaveTimeValid;
     private long atlasSampler;
     private boolean failed;
     private boolean loggedActive;
@@ -737,6 +739,7 @@ public final class RtComposite {
         exposure.ensureResources(ctx);
 
         mvHasPrev = false; // recreated images -> first MV frame is zero
+        waterWaveTimeValid = false;
         if (worldPipeline != null) {
             worldPipeline.setStorageImage(output.view);
             bindGuideImages();
@@ -834,13 +837,21 @@ public final class RtComposite {
                 wtg = ((wc >> 8) & 0xFF) / 255f;
                 wtb = (wc & 0xFF) / 255f;
             }
-            Float4 waterParams = new Float4(wtr, wtg, wtb,
-                    (float) (System.nanoTime() / 1.0e9 % 3600.0));
+            float waterWaveTime = (float) (System.nanoTime() / 1.0e9 % 3600.0);
+            float waterWaveDelta = waterWaveTime - previousWaterWaveTime;
+            // A first frame, long pause, or one-hour phase wrap has no adjacent wave frame to reproject.
+            // Use the current phase so the reflection MV is neutral instead of manufacturing a huge jump.
+            float priorWaterWaveTime = waterWaveTimeValid
+                    && waterWaveDelta >= 0f && waterWaveDelta <= 0.25f
+                    ? previousWaterWaveTime : waterWaveTime;
+            previousWaterWaveTime = waterWaveTime;
+            waterWaveTimeValid = true;
+            Float4 waterParams = new Float4(wtr, wtg, wtb, waterWaveTime);
             // W1 wave-domain anchor: the terrain rebase origin reduced mod 4096 (kept small for shader
             // float precision). hitPos.xz (rebased) + anchor reconstructs a world-pinned coordinate, so the
             // ripple pattern stays fixed in the world as the player moves and the rebase origin shifts.
             Float4 waterAnchor = new Float4(terrain.blockX & WATER_ANCHOR_MASK,
-                    terrain.blockZ & WATER_ANCHOR_MASK, 0f, 0f);
+                    terrain.blockZ & WATER_ANCHOR_MASK, priorWaterWaveTime, 0f);
 
             // Rebuild the TLAS this frame from static section instances merged with dynamic entity
             // instances, bind it into the pipeline's descriptor ring, record the build, then barrier so

@@ -67,12 +67,21 @@ static float3 gv_motionObjDisp;
 // the foreground glass/water interface for RR's separate specular inputs.
 static float3 gv_specSurfaceCamRel;
 static float3 gv_specSurfaceNormal;
+static float3 gv_specSurfacePreviousNormal;
+static float3 gv_specSurfaceBiasNormal;
 static float gv_specSurfaceRoughness;
 static float3 gv_specSurfaceAlbedo;
+// Per-call control/results for the primary dielectric estimator. Ordinary pixels still trace once;
+// a primary glass/water hit traces both Fresnel continuations and recombines them exactly.
+static uint pathPrimaryDielectricBranch;
+static bool pathPrimaryDielectricHit;
+static float pathPrimaryDielectricF;
 
 void preserveSpecSurfaceGuide() {
     gv_specSurfaceCamRel = gv_hitCamRel;
     gv_specSurfaceNormal = gv_normal;
+    gv_specSurfacePreviousNormal = gv_normal;
+    gv_specSurfaceBiasNormal = gv_normal;
     gv_specSurfaceRoughness = gv_rough;
     gv_specSurfaceAlbedo = gv_specAlb;
 }
@@ -149,13 +158,20 @@ static const int   WAVE_COUNT = 10;            // λ = 14 m … 0.38 m (each oct
 static const float WAVE_G = 9.81;
 static const float2 WAVE_WIND = normalize(float2(1.0, 0.35)); // dominant travel direction
 static const float WAVE_MEANDER = 1.1;         // crest phase-wobble amplitude (rad) on the long components
-float2 waterWaveGrad(float2 p, float t) {
+float waterWaveLodWeight(float wavelength, float footprint) {
+    float cyclesPerPixel = max(footprint, 0.0) / max(wavelength, 1.0e-4);
+    return 1.0 - smoothstep(0.25, 0.5, cyclesPerPixel);
+}
+
+float2 waterWaveGrad(float2 p, float t, float footprint) {
     // Per-wave steepness a·k: gentle in the long swell, concentrated in the mid/short chop.
     const float Q[WAVE_COUNT] = { 0.030, 0.035, 0.042, 0.050, 0.060, 0.065, 0.065, 0.058, 0.048, 0.038 };
     t *= WAVE_SPEED;
     float2 g = float2(0.0, 0.0);
     float lambda = 14.0;
     for (int i = 0; i < WAVE_COUNT; i++) {
+        float lodWeight = waterWaveLodWeight(lambda, footprint);
+        if (lodWeight <= 0.0) break;
         float k = 2.0 * PI / lambda;
         float w = sqrt(WAVE_G * k);   // deep-water dispersion: phase speed √(g/k)
         // Heading: deterministic irregular spread about the wind, widening down the spectrum.
@@ -172,21 +188,78 @@ float2 waterWaveGrad(float2 p, float t) {
         }
         float S = 1.2 + 0.12 * float(i); // crest sharpness: the short chop is choppier
         float e = exp(S * (sin(ph) - 1.0));
-        g += (Q[i] / k) * (S * cos(ph) * e) * dph; // a = Q/k; ∇h = a·S·cos φ·e^{S(sin φ−1)}·∇φ
+        g += lodWeight * (Q[i] / k) * (S * cos(ph) * e) * dph;
         lambda /= 1.5;
     }
     return g * WATER_WAVE_STRENGTH;
+}
+
+float2 waterWaveGrad(float2 p, float t) {
+    return waterWaveGrad(p, t, 0.0);
+}
+
+// Evaluate the current gradient and linearly rewind it to the previous phase in one spectrum walk.
+// Frame deltas are bounded on the CPU, so this avoids a second set of trigonometric/exponential work
+// while remaining accurate over the sub-frame interval used by reflection reprojection.
+void waterWaveGradTemporal(float2 p, float currentT, float previousT, float footprint,
+                           out float2 currentGrad, out float2 previousGrad) {
+    const float Q[WAVE_COUNT] = { 0.030, 0.035, 0.042, 0.050, 0.060, 0.065, 0.065, 0.058, 0.048, 0.038 };
+    currentT *= WAVE_SPEED;
+    previousT *= WAVE_SPEED;
+    currentGrad = float2(0.0, 0.0);
+    float2 gradientDt = float2(0.0, 0.0);
+    float lambda = 14.0;
+    for (int i = 0; i < WAVE_COUNT; i++) {
+        float lodWeight = waterWaveLodWeight(lambda, footprint);
+        if (lodWeight <= 0.0) break;
+        float k = 2.0 * PI / lambda;
+        float w = sqrt(WAVE_G * k);
+        float spread = (0.15 + 0.11 * float(i)) * sin(float(i) * 2.4 + 1.3);
+        float cs = cos(spread), sn = sin(spread);
+        float2 d = float2(WAVE_WIND.x * cs - WAVE_WIND.y * sn,
+                WAVE_WIND.x * sn + WAVE_WIND.y * cs);
+        float phase = k * dot(d, p) - w * currentT + 1.7 * float(i) * float(i);
+        float phaseDt = -w;
+        float2 dph = k * d;
+        float2 dphDt = float2(0.0, 0.0);
+        if (i < 4) {
+            float2 pd = float2(-d.y, d.x);
+            float meanderPhase = 0.4 * k * dot(pd, p) + 0.5 * w * currentT;
+            float meanderDt = 0.5 * w;
+            phase += WAVE_MEANDER * sin(meanderPhase);
+            phaseDt += WAVE_MEANDER * cos(meanderPhase) * meanderDt;
+            dph += (WAVE_MEANDER * cos(meanderPhase) * 0.4 * k) * pd;
+            dphDt = (-WAVE_MEANDER * sin(meanderPhase) * meanderDt * 0.4 * k) * pd;
+        }
+        float S = 1.2 + 0.12 * float(i);
+        float sinPhase = sin(phase);
+        float cosPhase = cos(phase);
+        float e = exp(S * (sinPhase - 1.0));
+        float amplitude = lodWeight * (Q[i] / k) * S;
+        currentGrad += amplitude * cosPhase * e * dph;
+        gradientDt += amplitude * e
+                * (phaseDt * (-sinPhase + S * cosPhase * cosPhase) * dph
+                + cosPhase * dphDt);
+        lambda /= 1.5;
+    }
+    previousGrad = currentGrad - (currentT - previousT) * gradientDt;
+    currentGrad *= WATER_WAVE_STRENGTH;
+    previousGrad *= WATER_WAVE_STRENGTH;
 }
 
 // Perturb a (near-)horizontal water surface normal by the wave field. Flowing side faces (|n.y| small)
 // keep their flat geometric normal. `worldXZ` must be a world-stable coordinate (rebased hit + the pushed
 // anchor) so the ripples stay pinned in the world. `nGeo` is already oriented toward the viewer, so the
 // down-viewed underside (n.y < 0) takes the mirrored slope (-up).
-float3 applyWaterWaves(float3 nGeo, float2 worldXZ, float t) {
+float3 applyWaterWaves(float3 nGeo, float2 worldXZ, float t, float footprint) {
     if (abs(nGeo.y) < 0.5) return nGeo;
-    float2 grad = waterWaveGrad(worldXZ, t);
+    float2 grad = waterWaveGrad(worldXZ, t, footprint);
     float3 up = normalize(float3(-grad.x, 1.0, -grad.y));
     return nGeo.y >= 0.0 ? up : -up;
+}
+
+float3 applyWaterWaves(float3 nGeo, float2 worldXZ, float t) {
+    return applyWaterWaves(nGeo, worldXZ, t, 0.0);
 }
 
 // ---- Water caustics. Sunlight refracting through the waved surface converges/diverges before it
@@ -234,6 +307,9 @@ float waterCaustic(float3 exitPos, float3 lightDir, float waterDist) {
 // turning merely glossy texels into delta lobes.
 static const float AUTHORED_ZERO_ROUGHNESS_MAX = 0.5 / (255.0 * 255.0);
 static const uint MAX_TRANSMISSION_GUIDE_HITS = 8u;
+static const uint PRIMARY_DIELECTRIC_RANDOM = 0u;
+static const uint PRIMARY_DIELECTRIC_TRANSMISSION = 1u;
+static const uint PRIMARY_DIELECTRIC_REFLECTION = 2u;
 
 float luminance(float3 c) { return dot(c, float3(0.2126, 0.7152, 0.0722)); }
 
@@ -787,6 +863,13 @@ RayDesc makeRay(float3 origin, float tmin, float3 dir, float tmax) {
     return r;
 }
 
+float3 offsetSurfaceOrigin(float3 position, float3 surfaceNormal,
+                           float3 outgoingDirection, float bias) {
+    float3 sideNormal = dot(surfaceNormal, outgoingDirection) >= 0.0
+            ? surfaceNormal : -surfaceNormal;
+    return position + sideNormal * bias;
+}
+
 // A radiance payload carrying only the two words the invoked hit/miss shader READS: `flags`
 // (show-celestial gate, consumed by world.rmiss) and the packed ray cone (consumed by world.rchit for
 // texture LOD). Every other member is an OUTPUT that world.rchit/world.rmiss write, so it carries no
@@ -895,7 +978,9 @@ float2 previousReflectionNdc(float3 surfacePos, float3 surfaceNormal, float3 ref
 
 // Reflection motion remains owned by the physical foreground interface even when transmission later
 // replaces the ordinary guide tuple. Guide tracing is intentionally non-SER (traceGuide above).
-float2 specularReflectionMotion(float3 surfacePos, float3 surfaceNormal, float surfaceRoughness,
+float2 specularReflectionMotion(float3 surfacePos, float3 surfaceNormal,
+                                float3 surfaceBiasNormal,
+                                float3 previousSurfaceNormal, float surfaceRoughness,
                                 float3 surfaceSpecularAlbedo, float3 primaryDir,
                                 float2 currentNdc, float2 size, float primaryConeSpread) {
     if (length(surfaceNormal) < 0.5
@@ -906,7 +991,8 @@ float2 specularReflectionMotion(float3 surfacePos, float3 surfaceNormal, float s
 
     float3 n = normalize(surfaceNormal);
     float3 specDir = reflect(primaryDir, n);
-    traceGuide(RAY_FLAG_NONE, CULL_SECONDARY, surfacePos + n * SURF_BIAS,
+    traceGuide(RAY_FLAG_NONE, CULL_SECONDARY,
+            offsetSurfaceOrigin(surfacePos, normalize(surfaceBiasNormal), specDir, SURF_BIAS),
             RAY_TMIN, specDir, 10000.0,
             max(length(surfacePos - worldPush.camOffset) * primaryConeSpread, RAY_CONE_MIN_WIDTH),
             max(primaryConeSpread, RAY_CONE_MIN_SPREAD));
@@ -921,7 +1007,10 @@ float2 specularReflectionMotion(float3 surfacePos, float3 surfaceNormal, float s
         reflectedHit = surfacePos + specDir * 1.0e6;
         reflectedMotionPrev = float3(0.0, 0.0, 0.0);
     }
-    float2 prevNdc = previousReflectionNdc(surfacePos, n, reflectedHit, reflectedMotionPrev);
+    float3 previousN = length(previousSurfaceNormal) >= 0.5
+            ? normalize(previousSurfaceNormal) : n;
+    float2 prevNdc = previousReflectionNdc(
+            surfacePos, previousN, reflectedHit, reflectedMotionPrev);
     return (prevNdc - currentNdc) * 0.5 * size;
 }
 
@@ -939,14 +1028,15 @@ void setTransmissionGuide(float3 hitCamRel, float3 motionPrev, float3 normal,
     gv_albedo = diffuseAlbedo;
 }
 
-void resolveTransmissionGuide(float3 surfacePos, float3 transmittedDir, float3 surfaceNormal,
+void resolveTransmissionGuide(float3 surfacePos, float3 transmittedDir,
+                              float3 surfaceBiasNormal,
                               float currentIor, float3 transmissionFilter, float rayBias,
                               float rayConeWidth, float rayConeSpread) {
     if (dot(transmittedDir, transmittedDir) <= 0.0) return;
 
     float3 direction = normalize(transmittedDir);
-    float3 ro = surfacePos + (dot(surfaceNormal, direction) >= 0.0
-            ? surfaceNormal : -surfaceNormal) * rayBias;
+    float3 ro = offsetSurfaceOrigin(
+            surfacePos, normalize(surfaceBiasNormal), direction, rayBias);
     uint guideVisibilityMask = CULL_PRIMARY;
     currentIor = max(currentIor, 1.0);
 
@@ -974,6 +1064,7 @@ void resolveTransmissionGuide(float3 surfacePos, float3 transmittedDir, float3 s
         }
 
         float3 interfaceNormal = normalize(payload.normal);
+        float3 interfaceBiasNormal = interfaceNormal;
         if (material == MATERIAL_GLASS) {
             // Main models glass as a collapsed thin sheet: no direction/IOR change, but each crossed
             // pane contributes its authored tint exactly as the radiance path does.
@@ -984,8 +1075,11 @@ void resolveTransmissionGuide(float3 surfacePos, float3 transmittedDir, float3 s
         if (material != MATERIAL_WATER) return;
 
         if ((worldPush.flags & 16u) != 0u) {
+            float waterFootprint = rayConeWidth
+                    / max(abs(dot(-direction, interfaceBiasNormal)), 0.2);
             interfaceNormal = applyWaterWaves(interfaceNormal,
-                    interfacePos.xz + worldPush.waterAnchor.xy, worldPush.waterParams.w);
+                    interfacePos.xz + worldPush.waterAnchor.xy,
+                    worldPush.waterParams.w, waterFootprint);
         }
         float targetIor = payloadWaterEntering() ? max(payloadIor(), 1.0) : 1.0;
         float3 nextDirection = refract(direction, interfaceNormal, currentIor / targetIor);
@@ -996,8 +1090,8 @@ void resolveTransmissionGuide(float3 surfacePos, float3 transmittedDir, float3 s
             direction = normalize(nextDirection);
             currentIor = targetIor;
         }
-        ro = interfacePos + (dot(interfaceNormal, direction) >= 0.0
-                ? interfaceNormal : -interfaceNormal) * SURF_BIAS;
+        ro = offsetSurfaceOrigin(
+                interfacePos, interfaceBiasNormal, direction, SURF_BIAS);
     }
 }
 
@@ -1006,6 +1100,8 @@ float3 tracePath(float3 ro, float3 rd, float primaryConeSpread, uint2 pix, uint 
                  inout uint seed) {
     float3 L = float3(0.0, 0.0, 0.0);
     float3 throughput = float3(1.0, 1.0, 1.0);
+    pathPrimaryDielectricHit = false;
+    pathPrimaryDielectricF = 0.0;
     bool captureGuides = sampleIndex == 0u;
     float rayConeWidth = 0.0;
     float rayConeSpread = max(primaryConeSpread, RAY_CONE_MIN_SPREAD);
@@ -1097,6 +1193,10 @@ float3 tracePath(float3 ro, float3 rd, float primaryConeSpread, uint2 pix, uint 
             float transmission = clamp(payloadTransmission(), 0.0, 1.0);
             float cosI = clamp(dot(-rd, n), 0.0, 1.0);
             float F = fresnelDielectric(cosI, 1.0, materialIor);
+            if (bounce == 0 && pathPrimaryDielectricBranch != PRIMARY_DIELECTRIC_RANDOM) {
+                pathPrimaryDielectricHit = true;
+                pathPrimaryDielectricF = F;
+            }
             if (bounce == 0 && captureGuides) { // primary glass hit: feed RR a smooth dielectric specular surface
                 gv_normal = n;
                 gv_rough = clamp(payloadRoughness(), 0.0, 1.0);
@@ -1108,10 +1208,15 @@ float3 tracePath(float3 ro, float3 rd, float primaryConeSpread, uint2 pix, uint 
                 gv_motionObjDisp = payload.motionPrev; // 0 for static terrain
                 preserveSpecSurfaceGuide();
 
-                resolveTransmissionGuide(hitPos, rd, n, 1.0, glassTint * transmission,
+                resolveTransmissionGuide(hitPos, rd, n,
+                        1.0, glassTint * transmission,
                         GLASS_TRANSMIT_BIAS, rayConeWidth, rayConeSpread);
             }
-            if (rndf(seed) < F) {
+            bool chooseReflection = bounce == 0
+                    && pathPrimaryDielectricBranch != PRIMARY_DIELECTRIC_RANDOM
+                    ? pathPrimaryDielectricBranch == PRIMARY_DIELECTRIC_REFLECTION
+                    : rndf(seed) < F;
+            if (chooseReflection) {
                 rd = reflect(rd, n);
                 ro = hitPos + n * SURF_BIAS;       // reflected ray stays on the incidence side
             } else {
@@ -1202,10 +1307,28 @@ float3 tracePath(float3 ro, float3 rd, float primaryConeSpread, uint2 pix, uint 
             // Ripple the (near-flat) surface normal before any Fresnel/guide use → glints, broken
             // reflections, wobbling refraction. This water body's biome tint (carried in payload.albedo
             // for water hits) sets the absorption applied to the next submerged segment.
+            float3 surfaceWaterNormal = n;
+            float3 previousWaterNormal = n;
             if (waterWaves) {
                 // World-stable wave domain: rebased hit XZ + the pushed anchor (terrain origin mod 4096)
                 // reconstructs a world-pinned coordinate that survives the per-move terrain rebase.
-                n = applyWaterWaves(n, hitPos.xz + worldPush.waterAnchor.xy, worldPush.waterParams.w);
+                float2 waterDomain = hitPos.xz + worldPush.waterAnchor.xy;
+                float waterFootprint = rayConeWidth
+                        / max(abs(dot(-rd, surfaceWaterNormal)), 0.2);
+                if (bounce == 0 && captureGuides && abs(surfaceWaterNormal.y) >= 0.5) {
+                    float2 currentGrad;
+                    float2 previousGrad;
+                    waterWaveGradTemporal(waterDomain, worldPush.waterParams.w,
+                            worldPush.waterAnchor.z, waterFootprint,
+                            currentGrad, previousGrad);
+                    float orientation = surfaceWaterNormal.y >= 0.0 ? 1.0 : -1.0;
+                    n = orientation * normalize(float3(-currentGrad.x, 1.0, -currentGrad.y));
+                    previousWaterNormal = orientation
+                            * normalize(float3(-previousGrad.x, 1.0, -previousGrad.y));
+                } else {
+                    n = applyWaterWaves(surfaceWaterNormal, waterDomain,
+                            worldPush.waterParams.w, waterFootprint);
+                }
             }
             waterExt = waterExtinction(payload.albedo);
             float cosI = clamp(dot(-rd, n), 0.0, 1.0);
@@ -1213,9 +1336,13 @@ float3 tracePath(float3 ro, float3 rd, float primaryConeSpread, uint2 pix, uint 
             float etaT = inWater ? 1.0 : materialIor;
             float F = fresnelDielectric(cosI, etaI, etaT);
             float3 transmittedDir = refract(rd, n, etaI / etaT);
+            if (bounce == 0 && pathPrimaryDielectricBranch != PRIMARY_DIELECTRIC_RANDOM) {
+                pathPrimaryDielectricHit = true;
+                pathPrimaryDielectricF = F;
+            }
             if (bounce == 0 && captureGuides) { // primary water hit: feed RR a smooth dielectric specular surface
                 gv_normal = n;
-                gv_rough = clamp(payloadRoughness(), 0.0, 1.0);
+                gv_rough = 0.0; // transport above is an exact Fresnel interface, not finite GGX
                 gv_albedo = float3(0.0, 0.0, 0.0); // pure-specular fallback for TIR/no destination
                 gv_specAlb = float3(F, F, F);
                 gv_hitCamRel = hitPos - worldPush.camOffset;
@@ -1223,21 +1350,28 @@ float3 tracePath(float3 ro, float3 rd, float primaryConeSpread, uint2 pix, uint 
                 gv_motionUseRefracted = false;
                 gv_motionObjDisp = float3(0.0, 0.0, 0.0);
                 preserveSpecSurfaceGuide();
+                gv_specSurfacePreviousNormal = previousWaterNormal;
+                gv_specSurfaceBiasNormal = surfaceWaterNormal;
 
                 if (dot(transmittedDir, transmittedDir) > 0.0) {
-                    resolveTransmissionGuide(hitPos, transmittedDir, n,
+                    resolveTransmissionGuide(hitPos, transmittedDir, surfaceWaterNormal,
                             materialEntering ? materialIor : 1.0,
                             float3(1.0, 1.0, 1.0), SURF_BIAS,
                             rayConeWidth, rayConeSpread);
                 }
             }
-            if (rndf(seed) < F) {
+            bool chooseReflection = bounce == 0
+                    && pathPrimaryDielectricBranch != PRIMARY_DIELECTRIC_RANDOM
+                    ? pathPrimaryDielectricBranch == PRIMARY_DIELECTRIC_REFLECTION
+                    : rndf(seed) < F;
+            if (chooseReflection) {
                 rd = reflect(rd, n);
-                ro = hitPos + n * SURF_BIAS; // reflected ray stays on the incidence side
+                ro = offsetSurfaceOrigin(hitPos, surfaceWaterNormal, rd, SURF_BIAS);
             } else {
+                if (dot(transmittedDir, transmittedDir) <= 0.0) break;
                 rd = transmittedDir; // F < 1 here, so this is never total internal reflection
                 throughput *= transmission;
-                ro = hitPos - n * SURF_BIAS;       // transmitted ray crosses to the far side
+                ro = offsetSurfaceOrigin(hitPos, surfaceWaterNormal, rd, SURF_BIAS);
                 // Derived from this hit's face orientation, not toggled — self-corrects instead of a
                 // stray/missing face corrupting the medium for the rest of the path (see PAYLOAD_WATER_ENTERING).
                 inWater = materialEntering;
@@ -1454,14 +1588,42 @@ void main() {
     float3 frameRadiance = float3(0.0, 0.0, 0.0);
     for (uint s = 0u; s < spp; s++) {
         seed = pcg(seed); // decorrelate per-sample paths (shared camera ray, no AA jitter yet)
-        frameRadiance += tracePath(origin, dir, rayConeSpread, uint2(pix), s, seed);
+        uint transmissionSeed = seed;
+        pathPrimaryDielectricBranch = PRIMARY_DIELECTRIC_TRANSMISSION;
+        float3 transmissionRadiance =
+                tracePath(origin, dir, rayConeSpread, uint2(pix), s, transmissionSeed);
+
+        bool primaryDielectricHit = pathPrimaryDielectricHit;
+        float primaryDielectricF = pathPrimaryDielectricF;
+        float3 sampleRadiance = transmissionRadiance;
+
+        if (primaryDielectricHit) {
+            uint reflectionSeed = seed ^ 0xa511e9b3u;
+            reflectionSeed = pcg(reflectionSeed);
+            pathPrimaryDielectricBranch = PRIMARY_DIELECTRIC_REFLECTION;
+            float3 reflectionRadiance =
+                    tracePath(origin, dir, rayConeSpread, uint2(pix), s + spp, reflectionSeed);
+
+            float dielectricF = saturate(primaryDielectricF);
+            sampleRadiance =
+                    dielectricF * reflectionRadiance
+                    + (1.0 - dielectricF) * transmissionRadiance;
+            seed = transmissionSeed ^ reflectionSeed;
+            seed = pcg(seed);
+        } else {
+            seed = transmissionSeed;
+        }
+
+        frameRadiance += sampleRadiance;
     }
+    pathPrimaryDielectricBranch = PRIMARY_DIELECTRIC_RANDOM;
     frameRadiance /= float(spp);
 
     // Reflection remains owned by the foreground interface even when glass/water replaced the ordinary
     // tuple with the transmitted destination.
     float2 specMotion = specularReflectionMotion(
             gv_specSurfaceCamRel + worldPush.camOffset, gv_specSurfaceNormal,
+            gv_specSurfaceBiasNormal, gv_specSurfacePreviousNormal,
             gv_specSurfaceRoughness, gv_specSurfaceAlbedo,
             dir, jndc, size, rayConeSpread);
 
