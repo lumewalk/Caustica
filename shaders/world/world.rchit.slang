@@ -25,14 +25,11 @@ void payloadSetPacked(inout Payload payload, uint material, float roughness, flo
     payload.iorTransmission = packHalf2(float2(ior, transmission));
 }
 
-// Dielectric side/kind bits, shared by every hit path. `entering` comes from the face orientation, so it
-// is re-derived at each crossing instead of toggled (see PAYLOAD_DIELECTRIC_ENTERING).
-void payloadSetDielectric(inout Payload payload, uint material, MaterialHeader header, bool entering) {
-    if (material != MATERIAL_WATER && material != MATERIAL_GLASS) return;
+// Which side of a dielectric face this hit is on, shared by every hit path. Comes from the face
+// orientation, so it is re-derived at each crossing instead of toggled (see PAYLOAD_DIELECTRIC_ENTERING).
+void payloadSetDielectric(inout Payload payload, uint material, bool entering) {
+    if (material != MATERIAL_WATER && material != MATERIAL_DIELECTRIC) return;
     if (entering) payload.flags |= PAYLOAD_DIELECTRIC_ENTERING;
-    if ((header.features & MATERIAL_FEATURE_DIELECTRIC_VOLUME) != 0u) {
-        payload.flags |= PAYLOAD_DIELECTRIC_VOLUME;
-    }
 }
 
 uint materialEmissionSource(MaterialHeader header, float emission) {
@@ -300,7 +297,7 @@ void main(inout Payload payload, in BuiltInTriangleIntersectionAttributes attr) 
         MaterialHeader header = ConstPtr<MaterialHeader>(pc.materialTableAddr)[pr.materialId];
         uint material = header.model;
         float3 baseAlbedo = srgbToLinear(entityTexel.rgb) * pr.tint.rgb;
-        float3 albedo = material == MATERIAL_GLASS
+        float3 albedo = material == MATERIAL_DIELECTRIC
                 ? lerp(float3(1.0, 1.0, 1.0), baseAlbedo, entityTexel.a) : baseAlbedo;
         Surface surface = evaluateMaterial(header, euvCoord, entityLod, albedo, n,
                 ep0, ep1, ep2, euv[e0], euv[e1], euv[e2], vdir,
@@ -325,7 +322,7 @@ void main(inout Payload payload, in BuiltInTriangleIntersectionAttributes attr) 
         payloadSetPacked(payload, material, surface.roughness, surface.metalness,
                 emission, sss, header.params.z, header.params.w,
                 materialEmissionSource(header, emission));
-        payloadSetDielectric(payload, material, header, entering);
+        payloadSetDielectric(payload, material, entering);
         return;
     }
 
@@ -375,7 +372,7 @@ void main(inout Payload payload, in BuiltInTriangleIntersectionAttributes attr) 
     // Stained glass / ice: a thin colored filter resolved in raygen
     // (material 3). albedo carries the transmission tint = texel rgb mixed toward white by (1 − opacity),
     // so a more opaque texel tints transmitted light more strongly.
-    if (materialHeader.model == MATERIAL_GLASS) {
+    if (materialHeader.model == MATERIAL_DIELECTRIC) {
         float4 gtex = blockAlbedoAtlas.SampleLevel(uv, blockLod);
         float3 gtexRgb = srgbToLinear(gtex.rgb);
         float3 glassAlbedo = lerp(float3(1.0, 1.0, 1.0), gtexRgb * tint, gtex.a);
@@ -391,10 +388,10 @@ void main(inout Payload payload, in BuiltInTriangleIntersectionAttributes attr) 
         payload.hitT = RayTCurrent();
         payload.motionPrev = half3(0.0h, 0.0h, 0.0h);
         payload.f0 = half3(glassSurface.f0);
-        payloadSetPacked(payload, MATERIAL_GLASS, glassSurface.roughness,
+        payloadSetPacked(payload, MATERIAL_DIELECTRIC, glassSurface.roughness,
                 glassSurface.metalness, 0.0, 0.0, materialHeader.params.z,
                 materialHeader.params.w, EMISSION_SOURCE_NONE);
-        payloadSetDielectric(payload, MATERIAL_GLASS, materialHeader, entering);
+        payloadSetDielectric(payload, MATERIAL_DIELECTRIC, entering);
         return;
     }
 
@@ -427,7 +424,7 @@ void main(inout Payload payload, in BuiltInTriangleIntersectionAttributes attr) 
     payloadSetPacked(payload, material, surface.roughness, surface.metalness,
             surface.emission, surface.sss, materialHeader.params.z, materialHeader.params.w,
             materialEmissionSource(materialHeader, surface.emission));
-    payloadSetDielectric(payload, material, materialHeader, entering);
+    payloadSetDielectric(payload, material, entering);
     // RIS emitter-NEE membership: raygen gates this emitter's direct-hit emission term (RIS covers it).
     if ((pr.flags & TERRAIN_PRIM_IN_LIGHT_BUFFER) != 0u) {
         payload.flags |= PAYLOAD_EMITTER_IN_LIST;

@@ -105,10 +105,8 @@ uint payloadEmissionSource() {
     return (payload.flags >> PAYLOAD_EMISSION_SOURCE_SHIFT) & PAYLOAD_EMISSION_SOURCE_MASK;
 }
 // Set by world.rchit on any dielectric hit (see PAYLOAD_DIELECTRIC_ENTERING) — whether the ray was
-// travelling into the volume (vs. out of it) at this hit's face, and whether the material is a volume
-// dielectric at all rather than a thin slab.
+// travelling into the volume (vs. out of it) at this hit's face.
 bool payloadDielectricEntering() { return (payload.flags & PAYLOAD_DIELECTRIC_ENTERING) != 0u; }
-bool payloadDielectricVolume() { return (payload.flags & PAYLOAD_DIELECTRIC_VOLUME) != 0u; }
 bool payloadEmitterInList() { return (payload.flags & PAYLOAD_EMITTER_IN_LIST) != 0u; }
 // LINEAR roughness, i.e. GGX alpha directly — NOT perceptual roughness. This is the one convention used
 // end to end: LabPBR defines roughness = (1 - perceptualSmoothness)^2 and RtLabPbr.decode stores exactly
@@ -136,13 +134,14 @@ static const float WATER_IOR = 1.333;
 static const float3 SKY_SPEC_ALBEDO = float3(0.5, 0.5, 0.5); // RR guide default for sky pixels.
 static const float3 SKY_DIFF_ALBEDO = float3(0.5, 0.5, 0.5);
 
-// Stained glass / ice (material 3): a thin colored dielectric. IOR ~1.5 (soda-lime glass).
-// Transmitted-ray origin offset when crossing a glass face. Must be SMALLER than the terrain-side
-// TRANSLUCENT_INSET (RtTerrain, 2e-4 blocks): glass is recessed into its block by that inset, so a face
-// touching a slab/stair leaves a tiny gap before the neighbour's surface. A large bias (SURF_BIAS) would
-// restart the ray past that neighbour and see through it; this lands the ray inside the gap so the
-// neighbour is still hit, while still clearing the glass surface to avoid self-intersection.
-static const float GLASS_TRANSMIT_BIAS = 1.0e-4;
+// Transmitted-ray origin offset when crossing a face from the TRANSLUCENT terrain layer (glass, ice).
+// Must be SMALLER than the mesher-side TRANSLUCENT_INSET (RtTerrainMesher, 2e-4 blocks): those quads are
+// recessed into their block by that inset, so a face touching a slab/stair leaves a tiny gap before the
+// neighbour's surface. A large bias (SURF_BIAS) would restart the ray past that neighbour and see
+// through it; this lands the ray inside the gap so the neighbour is still hit, while still clearing the
+// surface it left to avoid self-intersection. Water is meshed by RtFluidMesher with no inset, so it uses
+// the ordinary bias.
+static const float INSET_TRANSMIT_BIAS = 1.0e-4;
 
 // Ray-cone texture LOD: raygen tracks a one-pixel footprint along the path, and closest-hit converts it
 // to texture mip levels from the local UV/world-space scale. Diffuse/glossy bounces widen the cone so
@@ -162,14 +161,16 @@ float3 waterExtinction(float3 tint) {
     return WATER_ABSORB_FLOOR + WATER_DENSITY * (float3(1.0, 1.0, 1.0) - clamp(tint, 0.0, 1.0));
 }
 
-// A volume dielectric's tint is a filter over one block of travel rather than a biome water colour, so it
-// maps to extinction by inverting Beer-Lambert over that reference distance: a tint of t after 1 block
-// means sigma = -ln(t). Clamped away from 0 so a fully saturated texel stays finite.
+// A non-water dielectric's tint is a filter over one block of travel rather than a biome water colour, so
+// it maps to extinction by inverting Beer-Lambert over that reference distance: transmittance t after one
+// block means sigma = -ln(t). `transmission` scales that transmittance, so it keeps the sense the
+// material's authored factor has everywhere else — 1 passes the tint through unchanged, 0 is opaque.
+// Clamped away from zero so a fully saturated texel stays finite instead of producing an infinite sigma.
 static const float VOLUME_TINT_REFERENCE_DISTANCE = 1.0; // blocks
 float3 volumeExtinction(float3 tint, float transmission) {
-    float3 filtered = clamp(lerp(float3(1.0, 1.0, 1.0), tint, clamp(transmission, 0.0, 1.0)),
+    float3 blockTransmittance = clamp(clamp(tint, 0.0, 1.0) * clamp(transmission, 0.0, 1.0),
             1.0e-3, 1.0);
-    return -log(filtered) / VOLUME_TINT_REFERENCE_DISTANCE;
+    return -log(blockTransmittance) / VOLUME_TINT_REFERENCE_DISTANCE;
 }
 
 // ---- Participating medium the path is currently inside.
@@ -827,7 +828,7 @@ static const uint SECONDARY_RIS_DIVISOR = 4u;
 // failure mode is noisier emitter light at depth rather than missing light. Unlike the divisor this also
 // drops shadeReservoir's per-vertex shadow ray, which never scaled with M. Gating at all: 16.1 -> 15.7ms.
 //
-// This counts diffuseDepth, not `bounce`, and the difference is not cosmetic. MATERIAL_GLASS and
+// This counts diffuseDepth, not `bounce`, and the difference is not cosmetic. MATERIAL_DIELECTRIC and
 // MATERIAL_WATER continue without shading anything, so looking through a pane spends bounce 0 on the
 // glass and lands the first shaded surface at bounce 1. Gating on `bounce` therefore starved surfaces
 // seen through glass or water — visually primary, but counted as depth — and they went black, since only
@@ -1110,7 +1111,7 @@ float2 specularReflectionMotion(SpecSurface surface, float3 primaryDir,
 }
 
 // Deterministic transmitted destination for clear-interface RR guides. The first interface has already
-// been crossed. Continue through thin glass and water until opaque/particle content or sky is reached;
+// been crossed. Continue through every crossed dielectric until opaque/particle content or sky is reached;
 // TIR changes the walk into a reflected secondary ray instead of producing a false foreground guide.
 void setTransmissionGuide(float3 hitCamRel, float3 motionPrev, float3 normal,
                           float roughness, float3 diffuseAlbedo) {
@@ -1125,7 +1126,7 @@ void setTransmissionGuide(float3 hitCamRel, float3 motionPrev, float3 normal,
 
 void resolveTransmissionGuide(float3 surfacePos, float3 transmittedDir,
                               float3 surfaceBiasNormal,
-                              float currentIor, float3 transmissionFilter, float rayBias,
+                              float currentIor, float rayBias,
                               float rayConeWidth, float rayConeSpread) {
     if (dot(transmittedDir, transmittedDir) <= 0.0) return;
 
@@ -1140,8 +1141,7 @@ void resolveTransmissionGuide(float3 surfacePos, float3 transmittedDir,
                 rayConeWidth, rayConeSpread);
         if (payload.hitT <= 0.0) {
             setTransmissionGuide((ro + direction * 1.0e6) - worldPush.camOffset,
-                    float3(0.0, 0.0, 0.0), float3(0.0, 0.0, 0.0),
-                    1.0, SKY_DIFF_ALBEDO * transmissionFilter);
+                    float3(0.0, 0.0, 0.0), float3(0.0, 0.0, 0.0), 1.0, SKY_DIFF_ALBEDO);
             return;
         }
 
@@ -1154,25 +1154,17 @@ void resolveTransmissionGuide(float3 surfacePos, float3 transmittedDir,
                     ? payload.albedo
                     : payload.albedo * (1.0 - clamp(payloadMetalness(), 0.0, 1.0));
             setTransmissionGuide(interfacePos - worldPush.camOffset, payload.motionPrev,
-                    payload.normal, endpointRoughness, endpointAlbedo * transmissionFilter);
+                    payload.normal, endpointRoughness, endpointAlbedo);
             return;
         }
 
-        if (material != MATERIAL_WATER && material != MATERIAL_GLASS) return;
+        if (material != MATERIAL_WATER && material != MATERIAL_DIELECTRIC) return;
 
+        // Mirror the radiance path's refraction. Absorption inside the crossed media is deliberately NOT
+        // folded into the albedo guide: RR demodulates by albedo, and a distance-dependent attenuation
+        // baked into it would disagree with the colour, which is where the extinction actually lands.
         float3 interfaceNormal = normalize(payload.normal);
         float3 interfaceBiasNormal = interfaceNormal;
-        if (!payloadDielectricVolume()) {
-            // Thin slab: no direction or index change, but each crossed pane contributes its authored
-            // tint exactly as the radiance path does.
-            transmissionFilter *= payload.albedo * clamp(payloadTransmission(), 0.0, 1.0);
-            ro = interfacePos - interfaceNormal * GLASS_TRANSMIT_BIAS;
-            continue;
-        }
-
-        // Volume: mirror the radiance path's refraction. Absorption inside the medium is deliberately
-        // NOT accumulated into transmissionFilter — RR demodulates by albedo, and folding a
-        // distance-dependent attenuation into the albedo guide would make it disagree with the colour.
         if (material == MATERIAL_WATER && (worldPush.flags & 16u) != 0u) {
             float waterFootprint = rayConeWidth
                     / max(abs(dot(-direction, interfaceBiasNormal)), 0.2);
@@ -1283,21 +1275,18 @@ float3 tracePath(float3 ro, float3 rd, float primaryConeSpread, uint2 pix, uint 
             gv_emissionSource = payloadEmissionSource();
         }
 
-        // ---- Dielectric interface: water, stained glass, ice. ONE handler, because the transport is the
-        // same physics — Fresnel from the relative index across the face, then reflect or transmit, with
-        // no diffuse response and no sun NEE (the surface is specular). What varies is per material, not
-        // per branch:
-        //   * volume (PAYLOAD_DIELECTRIC_VOLUME): the interface bends the ray and pushes a participating
-        //     medium, so the segment inside is attenuated by that medium's extinction. Water and ice.
-        //   * thin: a collapsed slab whose two interfaces cancel — no bend, no medium, and the tint is
-        //     applied once per crossing. Glass panes and vanilla-style windows, which should read as
-        //     coloured windows rather than solid refracting cubes.
-        //   * water additionally takes the animated wave normal and marks its medium for the caustic term.
-        // Which side of the face we are on comes from the geometry (payloadDielectricEntering), so a
-        // stray or missing face cannot desync the medium for the rest of the path.
-        if (material == MATERIAL_WATER || material == MATERIAL_GLASS) {
+        // ---- Dielectric interface: water, stained glass, ice. ONE handler and one behaviour — every
+        // dielectric is a volume. Fresnel from the relative index across the face, then reflect or
+        // refract; no diffuse response and no sun NEE, because the surface is specular. Transmission
+        // pushes or pops a participating medium, and the segment travelled inside it is attenuated by
+        // that medium's extinction rather than by a tint multiply at the interface.
+        //
+        // Water is the only material that adds anything: the animated wave normal, and a medium marked
+        // for the caustic term. Which side of the face we are on comes from the geometry
+        // (payloadDielectricEntering), so a stray or missing face cannot desync the medium for the rest
+        // of the path.
+        if (material == MATERIAL_WATER || material == MATERIAL_DIELECTRIC) {
             bool isWater = material == MATERIAL_WATER;
-            bool volumeDielectric = payloadDielectricVolume();
             bool entering = payloadDielectricEntering();
             float3 tint = payload.albedo;
             float transmission = clamp(payloadTransmission(), 0.0, 1.0);
@@ -1325,20 +1314,20 @@ float3 tracePath(float3 ro, float3 rd, float primaryConeSpread, uint2 pix, uint 
                 }
             }
 
-            // The medium this face opens into. Exiting returns to whatever enclosed it, which is what the
-            // stack remembers; a thin slab opens into nothing, so both sides stay in the current medium.
+            // The medium this face opens into, and the one it returns to on the way out — which is what
+            // the stack remembers.
             Medium entered = makeDielectricMedium(isWater, max(payloadIor(), 1.0), tint, transmission);
             float etaI = medium.current.ior;
-            // A thin slab still has the material's index at BOTH faces — it just never becomes the
-            // medium, so the ray does not bend and the enclosing medium never changes. Only a volume
-            // exit reads the enclosing index back off the stack.
-            float etaT = volumeDielectric && !entering ? medium.outer.ior : entered.ior;
+            float etaT = entering ? entered.ior : medium.outer.ior;
 
             float cosI = clamp(dot(-rd, n), 0.0, 1.0);
             float F = fresnelDielectric(cosI, etaI, etaT);
-            // A thin slab does not bend, so its "transmitted direction" is simply the incident one.
-            float3 transmittedDir = volumeDielectric ? refract(rd, n, etaI / etaT) : rd;
-            float transmitBias = volumeDielectric ? SURF_BIAS : GLASS_TRANSMIT_BIAS;
+            float3 transmittedDir = refract(rd, n, etaI / etaT);
+            // The translucent terrain layer is recessed by TRANSLUCENT_INSET (RtTerrainMesher), so a
+            // glass/ice face touching a slab or stair sits a hair behind that neighbour's surface. A full
+            // SURF_BIAS would restart the transmitted ray past the neighbour and see through it. Water
+            // comes from the fluid mesher, which applies no inset, so it takes the ordinary bias.
+            float transmitBias = isWater ? SURF_BIAS : INSET_TRANSMIT_BIAS;
 
             if (bounce == 0 && pathPrimaryDielectricBranch != PRIMARY_DIELECTRIC_RANDOM) {
                 pathPrimaryDielectricHit = true;
@@ -1346,9 +1335,7 @@ float3 tracePath(float3 ro, float3 rd, float primaryConeSpread, uint2 pix, uint 
             }
             if (bounce == 0 && captureGuides) { // feed RR a smooth dielectric specular surface
                 gv_normal = n;
-                // Transport here is an exact Fresnel interface, not a finite GGX lobe. A thin slab keeps
-                // its authored roughness because frosted/etched panes do scatter.
-                gv_rough = volumeDielectric ? 0.0 : clamp(payloadRoughness(), 0.0, 1.0);
+                gv_rough = 0.0; // an exact Fresnel interface, not a finite GGX lobe
                 gv_albedo = float3(0.0, 0.0, 0.0); // fallback when TIR leaves no transmitted layer
                 gv_hitCamRel = hitPos - worldPush.camOffset;
                 gv_motionHitCamRel = gv_hitCamRel;
@@ -1359,8 +1346,7 @@ float3 tracePath(float3 ro, float3 rd, float primaryConeSpread, uint2 pix, uint 
 
                 if (dot(transmittedDir, transmittedDir) > 0.0) {
                     resolveTransmissionGuide(hitPos, transmittedDir, geometricNormal,
-                            volumeDielectric && entering ? entered.ior : medium.current.ior,
-                            volumeDielectric ? float3(1.0, 1.0, 1.0) : tint * transmission,
+                            entering ? entered.ior : medium.outer.ior,
                             transmitBias, rayConeWidth, rayConeSpread);
                 }
             }
@@ -1376,16 +1362,12 @@ float3 tracePath(float3 ro, float3 rd, float primaryConeSpread, uint2 pix, uint 
                 if (dot(transmittedDir, transmittedDir) <= 0.0) break; // TIR with F < 1 cannot happen
                 rd = normalize(transmittedDir);
                 ro = offsetSurfaceOrigin(hitPos, geometricNormal, rd, transmitBias);
-                if (volumeDielectric) {
-                    // Crossing into or out of the volume. Absorption is the medium's job from here, so
-                    // the tint is NOT also multiplied into the throughput — that would double-count it.
-                    if (entering) {
-                        mediumPush(medium, entered);
-                    } else {
-                        mediumPop(medium);
-                    }
+                // Crossing into or out of the volume. Absorption is the medium's job from here, so the
+                // tint is NOT also multiplied into the throughput — that would double-count it.
+                if (entering) {
+                    mediumPush(medium, entered);
                 } else {
-                    throughput *= tint * transmission; // collapsed slab: colour the ray once per crossing
+                    mediumPop(medium);
                 }
             }
             showCelestial = true; // specular interface: the continuation ray may see the sun/moon disc

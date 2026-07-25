@@ -140,18 +140,13 @@ public static const uint PAYLOAD_SHOW_CELESTIAL = 4u;
 // Set by world.rchit on a terrain hit whose prim carries TERRAIN_PRIM_IN_LIGHT_BUFFER: this emitter is
 // RIS-sampled, so raygen gates its direct-hit emission on diffuse continuation rays (no double count).
 public static const uint PAYLOAD_EMITTER_IN_LIST = 128u;
-// Set by world.rchit on any dielectric hit (water or glass): true when the incoming ray travels against
-// the prim's outward face normal (entering the volume), false when it exits. Derived from face
+// Set by world.rchit on any dielectric hit (water or glass/ice): true when the incoming ray travels
+// against the prim's outward face normal (entering the volume), false when it exits. Derived from face
 // orientation rather than toggled, so a stray or missing face cannot corrupt the medium for the rest of
 // the path — each crossing re-derives which side it is on. Bit 2 (PAYLOAD_SHOW_CELESTIAL) is only
 // meaningful on a miss and this bit only on a hit, so they never need to be read together, but they get
 // distinct bits anyway to keep the two concerns unambiguous.
 public static const uint PAYLOAD_DIELECTRIC_ENTERING = 8u;
-// Set by world.rchit when the hit material is a VOLUME dielectric: the interface refracts the ray and
-// pushes a participating medium whose extinction attenuates the segment inside it. Clear means a THIN
-// dielectric — a collapsed slab whose two interfaces cancel, so the ray passes straight through and the
-// tint is applied once. Glass panes and vanilla-style windows are thin; ice and solid blocks are volume.
-public static const uint PAYLOAD_DIELECTRIC_VOLUME = 256u;
 public static const uint PAYLOAD_EMISSION_SOURCE_SHIFT = 4u;
 public static const uint PAYLOAD_EMISSION_SOURCE_MASK = 7u;
 public static const uint EMISSION_SOURCE_NONE = 0u;
@@ -161,9 +156,14 @@ public static const uint EMISSION_SOURCE_LAB_PBR = 3u;
 
 public static const uint PAYLOAD_MATERIAL_MASK = 3u;
 public static const uint MATERIAL_OPAQUE = 0u;
+// Both dielectrics are volumes: they refract and push a participating medium. They stay distinct ids
+// because water owns behaviour nothing else has — an animated wave surface, the caustic term, biome-tint
+// absorption calibrated per block of depth, and a chit path fed by the fluid mesher rather than the
+// (inset) translucent terrain layer. MATERIAL_DIELECTRIC is everything else transparent: glass, ice, and
+// any solid transparent block a pack defines.
 public static const uint MATERIAL_WATER = 1u;
 public static const uint MATERIAL_PARTICLE = 2u;
-public static const uint MATERIAL_GLASS = 3u;
+public static const uint MATERIAL_DIELECTRIC = 3u;
 
 // Entity per-triangle record (48 B). The final lane mirrors TerrainPrim's integer material metadata.
 public struct Prim {
@@ -203,8 +203,6 @@ public struct MaterialHeader {
 public static const uint MATERIAL_FEATURE_SPEC = 1u;
 public static const uint MATERIAL_FEATURE_NORMAL = 2u;
 public static const uint MATERIAL_FEATURE_HEURISTIC_EMISSION = 4u;
-// This dielectric is a volume, not a thin slab: refract and track a medium. See PAYLOAD_DIELECTRIC_VOLUME.
-public static const uint MATERIAL_FEATURE_DIELECTRIC_VOLUME = 8u;
 public static const uint MATERIAL_FEATURE_STOCHASTIC_ALPHA = 16u;
 // Final HDR emission strength (EMISSIVE_STRENGTH baseline * any JSON override multiplier), baked in Java
 // at material-compile time (RtMaterialRegistry) and packed here as a 16-bit fraction of the max — every
