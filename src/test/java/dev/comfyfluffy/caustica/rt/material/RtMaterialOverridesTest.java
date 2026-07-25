@@ -39,6 +39,36 @@ final class RtMaterialOverridesTest {
     }
 
     @Test
+    void transmissionVolumeFlagTogglesTheDielectricFeatureBit() {
+        RtMaterialDesc thinBase = new RtMaterialDesc(RtMaterialRegistry.MODEL_GLASS,
+                RtMaterialDesc.Source.HEURISTIC, 0, 0.0025f, 0.0f, 1.52f, 1.0f,
+                RtMaterialDesc.EmissionSource.NONE, 0.0f, RtMaterialDesc.EmissionSummary.NONE);
+        var toVolume = RtMaterialOverrides.parse(JsonParser.parseString("""
+                {"format":1,"match":{"sprite":"minecraft:block/ice"},
+                "transmission":{"ior":1.309,"volume":true}}
+                """).getAsJsonObject(), Identifier.parse("test:caustica/materials/ice.json"));
+        RtMaterialDesc volume = toVolume.apply(thinBase);
+        assertEquals(1.309f, volume.ior());
+        assertTrue((volume.features() & RtMaterialRegistry.FEATURE_DIELECTRIC_VOLUME) != 0);
+
+        // The flag must be able to turn the bit OFF as well, or a pack could not make a modded solid
+        // dielectric behave like a window pane.
+        var toThin = RtMaterialOverrides.parse(JsonParser.parseString("""
+                {"format":1,"match":{"sprite":"minecraft:block/ice"},
+                "transmission":{"volume":false}}
+                """).getAsJsonObject(), Identifier.parse("test:caustica/materials/ice.json"));
+        assertFalse((toThin.apply(volume).features()
+                & RtMaterialRegistry.FEATURE_DIELECTRIC_VOLUME) != 0);
+
+        // Omitting it leaves whatever the material resolved to.
+        var silent = RtMaterialOverrides.parse(JsonParser.parseString("""
+                {"format":1,"match":{"sprite":"minecraft:block/ice"},"base":{"roughness":0.5}}
+                """).getAsJsonObject(), Identifier.parse("test:caustica/materials/ice.json"));
+        assertTrue((silent.apply(volume).features()
+                & RtMaterialRegistry.FEATURE_DIELECTRIC_VOLUME) != 0);
+    }
+
+    @Test
     void emissionStrengthCannotForceEmissionOntoANonEmissiveMaterial() {
         var rule = RtMaterialOverrides.parse(JsonParser.parseString("""
                 {"format":1,"match":{"sprite":"minecraft:block/stone"},

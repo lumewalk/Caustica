@@ -25,6 +25,16 @@ void payloadSetPacked(inout Payload payload, uint material, float roughness, flo
     payload.iorTransmission = packHalf2(float2(ior, transmission));
 }
 
+// Dielectric side/kind bits, shared by every hit path. `entering` comes from the face orientation, so it
+// is re-derived at each crossing instead of toggled (see PAYLOAD_DIELECTRIC_ENTERING).
+void payloadSetDielectric(inout Payload payload, uint material, MaterialHeader header, bool entering) {
+    if (material != MATERIAL_WATER && material != MATERIAL_GLASS) return;
+    if (entering) payload.flags |= PAYLOAD_DIELECTRIC_ENTERING;
+    if ((header.features & MATERIAL_FEATURE_DIELECTRIC_VOLUME) != 0u) {
+        payload.flags |= PAYLOAD_DIELECTRIC_VOLUME;
+    }
+}
+
 uint materialEmissionSource(MaterialHeader header, float emission) {
     if (emission <= 0.0) return EMISSION_SOURCE_NONE;
     if ((header.features & MATERIAL_FEATURE_SPEC) != 0u) return EMISSION_SOURCE_LAB_PBR;
@@ -315,9 +325,7 @@ void main(inout Payload payload, in BuiltInTriangleIntersectionAttributes attr) 
         payloadSetPacked(payload, material, surface.roughness, surface.metalness,
                 emission, sss, header.params.z, header.params.w,
                 materialEmissionSource(header, emission));
-        if (material == MATERIAL_WATER && entering) {
-            payload.flags |= PAYLOAD_WATER_ENTERING;
-        }
+        payloadSetDielectric(payload, material, header, entering);
         return;
     }
 
@@ -333,10 +341,11 @@ void main(inout Payload payload, in BuiltInTriangleIntersectionAttributes attr) 
     float3 tint = pr.tint.rgb;
 
     // Water prims are single-sided, wound outward from the fluid volume (RtFluidMesher), so the
-    // UNFLIPPED geometric normal is a reliable "which side is water" signal: a ray travelling against
-    // it is entering the volume, one travelling with it is exiting. Captured before the toward-viewer
-    // flip below and carried in the payload so raygen can set inWater from hit orientation instead of
-    // toggling parity per crossing (a single missing/extra face no longer desyncs the rest of the path).
+    // UNFLIPPED geometric normal is a reliable "which side of the dielectric" signal: a ray travelling
+    // against it is entering the volume, one travelling with it is exiting. Captured before the
+    // toward-viewer flip below and carried in the payload so raygen derives the medium from hit
+    // orientation instead of toggling parity per crossing (a single missing/extra face no longer
+    // desyncs the rest of the path).
     bool entering = dot(WorldRayDirection(), n) < 0.0;
 
     // Lever B: per-triangle corner UVs in primitive order. uvs[3*pid + k] is a contiguous,
@@ -385,6 +394,7 @@ void main(inout Payload payload, in BuiltInTriangleIntersectionAttributes attr) 
         payloadSetPacked(payload, MATERIAL_GLASS, glassSurface.roughness,
                 glassSurface.metalness, 0.0, 0.0, materialHeader.params.z,
                 materialHeader.params.w, EMISSION_SOURCE_NONE);
+        payloadSetDielectric(payload, MATERIAL_GLASS, materialHeader, entering);
         return;
     }
 
@@ -417,9 +427,7 @@ void main(inout Payload payload, in BuiltInTriangleIntersectionAttributes attr) 
     payloadSetPacked(payload, material, surface.roughness, surface.metalness,
             surface.emission, surface.sss, materialHeader.params.z, materialHeader.params.w,
             materialEmissionSource(materialHeader, surface.emission));
-    if (material == MATERIAL_WATER && entering) {
-        payload.flags |= PAYLOAD_WATER_ENTERING;
-    }
+    payloadSetDielectric(payload, material, materialHeader, entering);
     // RIS emitter-NEE membership: raygen gates this emitter's direct-hit emission term (RIS covers it).
     if ((pr.flags & TERRAIN_PRIM_IN_LIGHT_BUFFER) != 0u) {
         payload.flags |= PAYLOAD_EMITTER_IN_LIST;

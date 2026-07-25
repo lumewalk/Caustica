@@ -44,6 +44,8 @@ public final class RtMaterialRegistry {
     public static final int FEATURE_SPEC = 1;
     public static final int FEATURE_NORMAL = 2;
     public static final int FEATURE_HEURISTIC_EMISSION = 4;
+    /** Mirrors MATERIAL_FEATURE_DIELECTRIC_VOLUME: refract and track a medium instead of a thin slab. */
+    public static final int FEATURE_DIELECTRIC_VOLUME = 8;
     public static final int FEATURE_STOCHASTIC_ALPHA = 16;
     // HDR radiance of a full (level-15-equivalent) emitter, modulated by albedo — the single knob
     // (formerly duplicated as a literal in world.rgen.slang and RtLightCollector). Baked into every
@@ -171,6 +173,9 @@ public final class RtMaterialRegistry {
                     break;
                 }
             }
+            // Resolved once per sprite: IOR/volume is a property of the material, so it costs no extra
+            // variants — it varies with the sprite, not with the profile/glass/emitting cross product.
+            RtDielectrics.Dielectric dielectric = RtDielectrics.forSprite(sprite.contents().name());
             int[] variants = new int[profileVariants];
             for (RtMaterials.Profile profile : SPRITE_PROFILES) {
                 for (boolean glass : new boolean[]{false, true}) {
@@ -178,7 +183,8 @@ public final class RtMaterialRegistry {
                         int features = emitting ? baseFeatures : baseFeatures & ~FEATURE_HEURISTIC_EMISSION;
                         RtMaterialDesc desc = compileDesc(glass ? MODEL_GLASS : MODEL_OPAQUE, features,
                                 profile, emitting, false,
-                                variantSummary(features, emitting, entry, stats.uniformSummary()));
+                                variantSummary(features, emitting, entry, stats.uniformSummary()),
+                                dielectric);
                         if (spriteWide != null) {
                             desc = spriteWide.rule.apply(desc);
                         }
@@ -198,7 +204,8 @@ public final class RtMaterialRegistry {
                             int features = emitting ? baseFeatures : baseFeatures & ~FEATURE_HEURISTIC_EMISSION;
                             RtMaterialDesc base = compileDesc(glass ? MODEL_GLASS : MODEL_OPAQUE,
                                     features, profile, emitting, false,
-                                    variantSummary(features, emitting, entry, stats.uniformSummary()));
+                                    variantSummary(features, emitting, entry, stats.uniformSummary()),
+                                    dielectric);
                             RtMaterialDesc desc = compiled.rule.apply(base);
                             overrideVariants[index(profile, glass, emitting)] = headers.size();
                             add(headers, descriptions, grids, desc, stats.average(), entry, stats.albedoGrid());
@@ -424,9 +431,26 @@ public final class RtMaterialRegistry {
     private static RtMaterialDesc compileDesc(int model, int features, RtMaterials.Profile profile,
                                               boolean emitting, boolean neutral,
                                               RtMaterialDesc.EmissionSummary emissionSummary) {
+        return compileDesc(model, features, profile, emitting, neutral, emissionSummary,
+                RtDielectrics.defaultGlass());
+    }
+
+    private static RtMaterialDesc compileDesc(int model, int features, RtMaterials.Profile profile,
+                                              boolean emitting, boolean neutral,
+                                              RtMaterialDesc.EmissionSummary emissionSummary,
+                                              RtDielectrics.Dielectric dielectric) {
         float roughness = model == MODEL_GLASS ? 0.0025f : profile.roughness(); // linear; s = 0.95
         float metalness = model == MODEL_GLASS ? 0.0f : profile.metalness();
-        float ior = model == MODEL_WATER ? 1.333f : (model == MODEL_GLASS ? 1.52f : 1.0f);
+        // Refractive index and thin/volume behaviour are per material, not per model: ice and window
+        // glass are both MODEL_GLASS but refract differently and only one of them is a volume.
+        float ior = switch (model) {
+            case MODEL_WATER -> RtDielectrics.WATER_IOR;
+            case MODEL_GLASS -> dielectric.ior();
+            default -> 1.0f;
+        };
+        if (model == MODEL_WATER || (model == MODEL_GLASS && dielectric.volume())) {
+            features |= FEATURE_DIELECTRIC_VOLUME;
+        }
         float transmission = model == MODEL_WATER || model == MODEL_GLASS ? 1.0f : 0.0f;
         boolean labPbr = (features & (FEATURE_SPEC | FEATURE_NORMAL)) != 0;
         RtMaterialDesc.Source source = neutral ? RtMaterialDesc.Source.NEUTRAL

@@ -84,10 +84,14 @@ public final class RtMaterialOverrides {
         }
         Float transmission = null;
         Float ior = null;
+        Boolean volume = null;
         if (root.has("transmission")) {
             JsonObject value = root.getAsJsonObject("transmission");
             transmission = optionalFloat(value, "factor");
             ior = optionalFloat(value, "ior");
+            // "volume": true refracts and tracks a participating medium (ice, solid dielectric blocks);
+            // false is a collapsed thin slab that passes the ray straight through (window glass, panes).
+            if (value.has("volume")) volume = value.get("volume").getAsBoolean();
         }
         validate01("roughness", roughness);
         validate01("metalness", metalness);
@@ -105,7 +109,7 @@ public final class RtMaterialOverrides {
             emissionStrength = clamped;
         }
         return new Rule(source, sprite, block, model, roughness, metalness, ior, transmission,
-                emissionStrength);
+                volume, emissionStrength);
     }
 
     public List<Rule> rules() {
@@ -114,6 +118,11 @@ public final class RtMaterialOverrides {
 
     public record Rule(Identifier source, Identifier sprite, Identifier block, Integer model,
                        Float roughness, Float metalness, Float ior, Float transmission,
+                       /**
+                        * Overrides the built-in thin/volume classification (see {@link RtDielectrics}).
+                        * Null leaves whatever the material resolved to.
+                        */
+                       Boolean volume,
                        /**
                         * Multiplier on whatever emission the material naturally resolves to (LabPBR
                         * {@code _s}, heuristic mask, or state-uniform block light) — NOT a replacement.
@@ -142,18 +151,24 @@ public final class RtMaterialOverrides {
                     : (model != null ? defaultIor(nextModel) : base.ior());
             float nextTransmission = transmission != null ? transmission
                     : (model != null ? defaultTransmission(nextModel) : base.transmission());
+            int nextFeatures = base.features();
+            if (volume != null) {
+                nextFeatures = volume
+                        ? nextFeatures | RtMaterialRegistry.FEATURE_DIELECTRIC_VOLUME
+                        : nextFeatures & ~RtMaterialRegistry.FEATURE_DIELECTRIC_VOLUME;
+            }
             // A multiplier on the base's already-resolved strength (0 when emissionSource is NONE):
             // this can brighten/dim an existing emitter but never light up a genuinely non-emissive one.
             float nextEmissionStrength = emissionStrength != null
                     ? base.emissionStrength() * emissionStrength : base.emissionStrength();
-            return new RtMaterialDesc(nextModel, RtMaterialDesc.Source.OVERRIDE, base.features(),
+            return new RtMaterialDesc(nextModel, RtMaterialDesc.Source.OVERRIDE, nextFeatures,
                     nextRoughness, nextMetalness, nextIor, nextTransmission,
                     base.emissionSource(), nextEmissionStrength, base.emissionSummary());
         }
 
         private static float defaultIor(int model) {
-            return model == RtMaterialRegistry.MODEL_WATER ? 1.333f
-                    : model == RtMaterialRegistry.MODEL_GLASS ? 1.52f : 1.0f;
+            return model == RtMaterialRegistry.MODEL_WATER ? RtDielectrics.WATER_IOR
+                    : model == RtMaterialRegistry.MODEL_GLASS ? RtDielectrics.GLASS_IOR : 1.0f;
         }
 
         private static float defaultTransmission(int model) {

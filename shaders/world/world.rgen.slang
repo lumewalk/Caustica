@@ -104,9 +104,11 @@ uint payloadMaterial() { return payload.flags & PAYLOAD_MATERIAL_MASK; }
 uint payloadEmissionSource() {
     return (payload.flags >> PAYLOAD_EMISSION_SOURCE_SHIFT) & PAYLOAD_EMISSION_SOURCE_MASK;
 }
-// Set by world.rchit only on a MATERIAL_WATER hit (see PAYLOAD_WATER_ENTERING) — whether the ray was
-// travelling into the water volume (vs. out of it) at this hit's face.
-bool payloadWaterEntering() { return (payload.flags & PAYLOAD_WATER_ENTERING) != 0u; }
+// Set by world.rchit on any dielectric hit (see PAYLOAD_DIELECTRIC_ENTERING) — whether the ray was
+// travelling into the volume (vs. out of it) at this hit's face, and whether the material is a volume
+// dielectric at all rather than a thin slab.
+bool payloadDielectricEntering() { return (payload.flags & PAYLOAD_DIELECTRIC_ENTERING) != 0u; }
+bool payloadDielectricVolume() { return (payload.flags & PAYLOAD_DIELECTRIC_VOLUME) != 0u; }
 bool payloadEmitterInList() { return (payload.flags & PAYLOAD_EMITTER_IN_LIST) != 0u; }
 // LINEAR roughness, i.e. GGX alpha directly — NOT perceptual roughness. This is the one convention used
 // end to end: LabPBR defines roughness = (1 - perceptualSmoothness)^2 and RtLabPbr.decode stores exactly
@@ -158,6 +160,74 @@ static const float WATER_DENSITY = 0.05;
 static const float3 WATER_ABSORB_FLOOR = float3(0.015, 0.010, 0.008);
 float3 waterExtinction(float3 tint) {
     return WATER_ABSORB_FLOOR + WATER_DENSITY * (float3(1.0, 1.0, 1.0) - clamp(tint, 0.0, 1.0));
+}
+
+// A volume dielectric's tint is a filter over one block of travel rather than a biome water colour, so it
+// maps to extinction by inverting Beer-Lambert over that reference distance: a tint of t after 1 block
+// means sigma = -ln(t). Clamped away from 0 so a fully saturated texel stays finite.
+static const float VOLUME_TINT_REFERENCE_DISTANCE = 1.0; // blocks
+float3 volumeExtinction(float3 tint, float transmission) {
+    float3 filtered = clamp(lerp(float3(1.0, 1.0, 1.0), tint, clamp(transmission, 0.0, 1.0)),
+            1.0e-3, 1.0);
+    return -log(filtered) / VOLUME_TINT_REFERENCE_DISTANCE;
+}
+
+// ---- Participating medium the path is currently inside.
+//
+// Refraction needs the RELATIVE index across an interface, so the renderer has to know what it is
+// travelling through, not just what it is hitting. `ior` drives Snell/Fresnel; `extinction` drives the
+// per-segment Beer-Lambert attenuation.
+//
+// The stack is depth 2 (current + the one it will return to) held in named fields, NOT an array. A
+// dynamically indexed local array lands in scratch memory, and this raygen is already register-bound —
+// paying an occupancy hit for nesting that Minecraft does not produce would be a bad trade. Depth 2
+// covers air->water->glass and air->glass->water, which is the realistic worst case; anything deeper
+// degrades to air on the way out, and because `entering` is re-derived per face from geometry rather
+// than toggled, the path re-synchronises at the next crossing instead of staying corrupted.
+struct Medium {
+    float ior;
+    float3 extinction;
+    bool water; // drives the wave-refraction caustic on submerged receivers; nothing else is water-specific
+};
+
+struct MediumStack {
+    Medium current;
+    Medium outer;
+};
+
+Medium airMedium() {
+    Medium m;
+    m.ior = 1.0;
+    m.extinction = float3(0.0, 0.0, 0.0);
+    m.water = false;
+    return m;
+}
+
+MediumStack makeMediumStack(Medium start) {
+    MediumStack s;
+    s.current = start;
+    s.outer = airMedium();
+    return s;
+}
+
+void mediumPush(inout MediumStack stack, Medium entered) {
+    stack.outer = stack.current;
+    stack.current = entered;
+}
+
+void mediumPop(inout MediumStack stack) {
+    stack.current = stack.outer;
+    stack.outer = airMedium();
+}
+
+// Water's tint is a biome colour whose absorption is calibrated per block of depth; any other volume
+// dielectric's tint is a filter over a reference block of travel. Both end up as per-channel extinction.
+Medium makeDielectricMedium(bool isWater, float ior, float3 tint, float transmission) {
+    Medium m;
+    m.ior = ior;
+    m.extinction = isWater ? waterExtinction(tint) : volumeExtinction(tint, transmission);
+    m.water = isWater;
+    return m;
 }
 
 // Animated surface waves — a directional wave spectrum, gradient-only (the surface stays geometrically
@@ -1088,25 +1158,31 @@ void resolveTransmissionGuide(float3 surfacePos, float3 transmittedDir,
             return;
         }
 
+        if (material != MATERIAL_WATER && material != MATERIAL_GLASS) return;
+
         float3 interfaceNormal = normalize(payload.normal);
         float3 interfaceBiasNormal = interfaceNormal;
-        if (material == MATERIAL_GLASS) {
-            // Main models glass as a collapsed thin sheet: no direction/IOR change, but each crossed
-            // pane contributes its authored tint exactly as the radiance path does.
+        if (!payloadDielectricVolume()) {
+            // Thin slab: no direction or index change, but each crossed pane contributes its authored
+            // tint exactly as the radiance path does.
             transmissionFilter *= payload.albedo * clamp(payloadTransmission(), 0.0, 1.0);
             ro = interfacePos - interfaceNormal * GLASS_TRANSMIT_BIAS;
             continue;
         }
-        if (material != MATERIAL_WATER) return;
 
-        if ((worldPush.flags & 16u) != 0u) {
+        // Volume: mirror the radiance path's refraction. Absorption inside the medium is deliberately
+        // NOT accumulated into transmissionFilter — RR demodulates by albedo, and folding a
+        // distance-dependent attenuation into the albedo guide would make it disagree with the colour.
+        if (material == MATERIAL_WATER && (worldPush.flags & 16u) != 0u) {
             float waterFootprint = rayConeWidth
                     / max(abs(dot(-direction, interfaceBiasNormal)), 0.2);
             interfaceNormal = applyWaterWaves(interfaceNormal,
                     interfacePos.xz + worldPush.waterAnchor.xy,
                     worldPush.waterParams.w, waterFootprint);
         }
-        float targetIor = payloadWaterEntering() ? max(payloadIor(), 1.0) : 1.0;
+        // Exiting returns to air: the walk keeps only the current index, which is the same depth-1
+        // approximation the guide already made and is exact for a single enclosing volume.
+        float targetIor = payloadDielectricEntering() ? max(payloadIor(), 1.0) : 1.0;
         float3 nextDirection = refract(direction, interfaceNormal, currentIor / targetIor);
         if (dot(nextDirection, nextDirection) <= 0.0) {
             guideVisibilityMask = CULL_SECONDARY;
@@ -1141,12 +1217,12 @@ float3 tracePath(float3 ro, float3 rd, float primaryConeSpread, uint2 pix, uint 
     uint proposalSeed = pix.x * 1973u + pix.y * 9277u + 26699u
             ^ worldPush.frameIndex * 2654435761u ^ sampleIndex * 2246822519u;
     proposalSeed = pcg(proposalSeed);
-    // Start submerged if the camera is in water so the first segment gets the right medium orientation
-    // and absorption when the eye is underwater.
-    bool inWater = (worldPush.flags & 1u) != 0u;
-    // Current medium extinction. Defaults to the camera-biome tint (correct when the eye starts
-    // submerged, before any water surface is hit); refreshed to the hit water body's tint on each crossing.
-    float3 waterExt = waterExtinction(worldPush.waterParams.xyz);
+    // Start submerged if the camera is in water, so the first segment already carries the right relative
+    // index and absorption when the eye is underwater. The camera-biome tint is the correct extinction
+    // until the first water surface is crossed, after which each hit supplies its own body's tint.
+    MediumStack medium = makeMediumStack((worldPush.flags & 1u) != 0u
+            ? makeDielectricMedium(true, WATER_IOR, worldPush.waterParams.xyz, 1.0)
+            : airMedium());
     bool waterWaves = (worldPush.flags & 16u) != 0u; // animated wave-normal perturbation
     // Sky-disc gate (see world.rmiss): the sun/moon disc is shown to the primary ray and to rays spawned
     // by a specular/dielectric bounce (mirror reflections + refractions of the sun/moon), but hidden from
@@ -1190,11 +1266,12 @@ float3 tracePath(float3 ro, float3 rd, float primaryConeSpread, uint2 pix, uint 
             break;
         }
 
-        // Beer–Lambert: attenuate along the segment just travelled if it lay inside water. Applied to
-        // every hit reached while submerged (the water-exit face or the underwater floor), shifting the
-        // transmitted radiance with depth.
-        if (inWater) {
-            throughput *= exp(-waterExt * payload.hitT);
+        // Beer–Lambert: attenuate along the segment just travelled by the medium it lay inside. Applies
+        // to every hit reached while inside a volume dielectric (its own exit face, or whatever content
+        // lies within it), shifting the transmitted radiance with distance. Air's extinction is zero, so
+        // the ordinary case costs one comparison.
+        if (any(medium.current.extinction > 0.0)) {
+            throughput *= exp(-medium.current.extinction * payload.hitT);
         }
 
         float3 n = payload.normal; // oriented toward the incoming ray by the closest-hit
@@ -1206,47 +1283,112 @@ float3 tracePath(float3 ro, float3 rd, float primaryConeSpread, uint2 pix, uint 
             gv_emissionSource = payloadEmissionSource();
         }
 
-        // Stained glass / ice (material 3): a thin colored dielectric. Stochastically reflect (Fresnel
-        // glint) or transmit; on transmission the throughput is multiplied by the pane's tint, so light
-        // passing through is colored. payload.albedo is the transmission tint (texel rgb mixed toward
-        // white by 1 − opacity). Treated as a thin pane, so the transmitted ray continues straight (no
-        // refraction bend) — the instance stays double-sided and the normal already faces the incoming ray.
-        if (material == MATERIAL_GLASS) {
-            float3 glassTint = payload.albedo;
-            float materialIor = max(payloadIor(), 1.0e-3);
+        // ---- Dielectric interface: water, stained glass, ice. ONE handler, because the transport is the
+        // same physics — Fresnel from the relative index across the face, then reflect or transmit, with
+        // no diffuse response and no sun NEE (the surface is specular). What varies is per material, not
+        // per branch:
+        //   * volume (PAYLOAD_DIELECTRIC_VOLUME): the interface bends the ray and pushes a participating
+        //     medium, so the segment inside is attenuated by that medium's extinction. Water and ice.
+        //   * thin: a collapsed slab whose two interfaces cancel — no bend, no medium, and the tint is
+        //     applied once per crossing. Glass panes and vanilla-style windows, which should read as
+        //     coloured windows rather than solid refracting cubes.
+        //   * water additionally takes the animated wave normal and marks its medium for the caustic term.
+        // Which side of the face we are on comes from the geometry (payloadDielectricEntering), so a
+        // stray or missing face cannot desync the medium for the rest of the path.
+        if (material == MATERIAL_WATER || material == MATERIAL_GLASS) {
+            bool isWater = material == MATERIAL_WATER;
+            bool volumeDielectric = payloadDielectricVolume();
+            bool entering = payloadDielectricEntering();
+            float3 tint = payload.albedo;
             float transmission = clamp(payloadTransmission(), 0.0, 1.0);
+
+            // Ripple the (near-flat) surface normal before any Fresnel/guide use → glints, broken
+            // reflections, wobbling refraction. The wave domain is world-stable: rebased hit XZ plus the
+            // pushed anchor (terrain origin mod 4096) survives the per-move terrain rebase.
+            float3 geometricNormal = n; // unrippled; ray origins offset along this
+            float3 previousNormal = n;  // wave normal one frame ago, for the reflection MV
+            if (isWater && waterWaves) {
+                float2 waterDomain = hitPos.xz + worldPush.waterAnchor.xy;
+                float waterFootprint = rayConeWidth / max(abs(dot(-rd, geometricNormal)), 0.2);
+                if (bounce == 0 && captureGuides && abs(geometricNormal.y) >= 0.5) {
+                    float2 currentGrad;
+                    float2 previousGrad;
+                    waterWaveGradTemporal(waterDomain, worldPush.waterParams.w,
+                            worldPush.waterAnchor.z, waterFootprint, currentGrad, previousGrad);
+                    float orientation = geometricNormal.y >= 0.0 ? 1.0 : -1.0;
+                    n = orientation * normalize(float3(-currentGrad.x, 1.0, -currentGrad.y));
+                    previousNormal = orientation
+                            * normalize(float3(-previousGrad.x, 1.0, -previousGrad.y));
+                } else {
+                    n = applyWaterWaves(geometricNormal, waterDomain,
+                            worldPush.waterParams.w, waterFootprint);
+                }
+            }
+
+            // The medium this face opens into. Exiting returns to whatever enclosed it, which is what the
+            // stack remembers; a thin slab opens into nothing, so both sides stay in the current medium.
+            Medium entered = makeDielectricMedium(isWater, max(payloadIor(), 1.0), tint, transmission);
+            float etaI = medium.current.ior;
+            // A thin slab still has the material's index at BOTH faces — it just never becomes the
+            // medium, so the ray does not bend and the enclosing medium never changes. Only a volume
+            // exit reads the enclosing index back off the stack.
+            float etaT = volumeDielectric && !entering ? medium.outer.ior : entered.ior;
+
             float cosI = clamp(dot(-rd, n), 0.0, 1.0);
-            float F = fresnelDielectric(cosI, 1.0, materialIor);
+            float F = fresnelDielectric(cosI, etaI, etaT);
+            // A thin slab does not bend, so its "transmitted direction" is simply the incident one.
+            float3 transmittedDir = volumeDielectric ? refract(rd, n, etaI / etaT) : rd;
+            float transmitBias = volumeDielectric ? SURF_BIAS : GLASS_TRANSMIT_BIAS;
+
             if (bounce == 0 && pathPrimaryDielectricBranch != PRIMARY_DIELECTRIC_RANDOM) {
                 pathPrimaryDielectricHit = true;
                 pathPrimaryDielectricF = F;
             }
-            if (bounce == 0 && captureGuides) { // primary glass hit: feed RR a smooth dielectric specular surface
+            if (bounce == 0 && captureGuides) { // feed RR a smooth dielectric specular surface
                 gv_normal = n;
-                gv_rough = clamp(payloadRoughness(), 0.0, 1.0);
-                gv_albedo = float3(0.0, 0.0, 0.0); // coherent fallback when no transmitted layer exists
+                // Transport here is an exact Fresnel interface, not a finite GGX lobe. A thin slab keeps
+                // its authored roughness because frosted/etched panes do scatter.
+                gv_rough = volumeDielectric ? 0.0 : clamp(payloadRoughness(), 0.0, 1.0);
+                gv_albedo = float3(0.0, 0.0, 0.0); // fallback when TIR leaves no transmitted layer
                 gv_hitCamRel = hitPos - worldPush.camOffset;
                 gv_motionHitCamRel = gv_hitCamRel;
                 gv_motionUseRefracted = false;
-                gv_motionObjDisp = payload.motionPrev; // 0 for static terrain
-                gv_spec = makeSpecSurface(gv_hitCamRel, n, gv_rough, float3(F, F, F));
+                gv_motionObjDisp = isWater ? float3(0.0, 0.0, 0.0) : payload.motionPrev;
+                gv_spec = makeSpecSurface(gv_hitCamRel, n, previousNormal, geometricNormal,
+                        gv_rough, float3(F, F, F));
 
-                resolveTransmissionGuide(hitPos, rd, n,
-                        1.0, glassTint * transmission,
-                        GLASS_TRANSMIT_BIAS, rayConeWidth, rayConeSpread);
+                if (dot(transmittedDir, transmittedDir) > 0.0) {
+                    resolveTransmissionGuide(hitPos, transmittedDir, geometricNormal,
+                            volumeDielectric && entering ? entered.ior : medium.current.ior,
+                            volumeDielectric ? float3(1.0, 1.0, 1.0) : tint * transmission,
+                            transmitBias, rayConeWidth, rayConeSpread);
+                }
             }
+
             bool chooseReflection = bounce == 0
                     && pathPrimaryDielectricBranch != PRIMARY_DIELECTRIC_RANDOM
                     ? pathPrimaryDielectricBranch == PRIMARY_DIELECTRIC_REFLECTION
                     : rndf(seed) < F;
             if (chooseReflection) {
                 rd = reflect(rd, n);
-                ro = hitPos + n * SURF_BIAS;       // reflected ray stays on the incidence side
+                ro = offsetSurfaceOrigin(hitPos, geometricNormal, rd, SURF_BIAS);
             } else {
-                throughput *= glassTint * transmission; // colored, optionally partial transmission
-                ro = hitPos - n * GLASS_TRANSMIT_BIAS; // cross to the far side without overshooting a close neighbour
+                if (dot(transmittedDir, transmittedDir) <= 0.0) break; // TIR with F < 1 cannot happen
+                rd = normalize(transmittedDir);
+                ro = offsetSurfaceOrigin(hitPos, geometricNormal, rd, transmitBias);
+                if (volumeDielectric) {
+                    // Crossing into or out of the volume. Absorption is the medium's job from here, so
+                    // the tint is NOT also multiplied into the throughput — that would double-count it.
+                    if (entering) {
+                        mediumPush(medium, entered);
+                    } else {
+                        mediumPop(medium);
+                    }
+                } else {
+                    throughput *= tint * transmission; // collapsed slab: colour the ray once per crossing
+                }
             }
-            showCelestial = true;                  // specular interface: the continuation ray may see the disc
+            showCelestial = true; // specular interface: the continuation ray may see the sun/moon disc
             if (bounce >= rrStart) {
                 float q = clamp(max(throughput.r, max(throughput.g, throughput.b)), 0.02, 1.0);
                 if (rndf(seed) > q) {
@@ -1316,102 +1458,6 @@ float3 tracePath(float3 ro, float3 rd, float primaryConeSpread, uint2 pix, uint 
             continue;
         }
 
-        // Water: smooth dielectric interface. Choose reflection or refraction stochastically by the
-        // Fresnel reflectance F — sampling by F leaves the throughput unchanged (lossless interface), so
-        // there is no diffuse albedo multiply and no sun NEE here (the surface is specular). On
-        // transmission, the new medium is read from this hit's face orientation (payloadWaterEntering),
-        // not toggled — see PAYLOAD_WATER_ENTERING. The bounce cap bounds stacked refractions.
-        if (material == MATERIAL_WATER) {
-            float materialIor = max(payloadIor(), 1.0e-3);
-            float transmission = clamp(payloadTransmission(), 0.0, 1.0);
-            // The primary-water guide traces another radiance ray through the global payload. Preserve
-            // this interface's orientation before that nested trace overwrites payload.flags.
-            bool materialEntering = payloadWaterEntering();
-            // Ripple the (near-flat) surface normal before any Fresnel/guide use → glints, broken
-            // reflections, wobbling refraction. This water body's biome tint (carried in payload.albedo
-            // for water hits) sets the absorption applied to the next submerged segment.
-            float3 surfaceWaterNormal = n;
-            float3 previousWaterNormal = n;
-            if (waterWaves) {
-                // World-stable wave domain: rebased hit XZ + the pushed anchor (terrain origin mod 4096)
-                // reconstructs a world-pinned coordinate that survives the per-move terrain rebase.
-                float2 waterDomain = hitPos.xz + worldPush.waterAnchor.xy;
-                float waterFootprint = rayConeWidth
-                        / max(abs(dot(-rd, surfaceWaterNormal)), 0.2);
-                if (bounce == 0 && captureGuides && abs(surfaceWaterNormal.y) >= 0.5) {
-                    float2 currentGrad;
-                    float2 previousGrad;
-                    waterWaveGradTemporal(waterDomain, worldPush.waterParams.w,
-                            worldPush.waterAnchor.z, waterFootprint,
-                            currentGrad, previousGrad);
-                    float orientation = surfaceWaterNormal.y >= 0.0 ? 1.0 : -1.0;
-                    n = orientation * normalize(float3(-currentGrad.x, 1.0, -currentGrad.y));
-                    previousWaterNormal = orientation
-                            * normalize(float3(-previousGrad.x, 1.0, -previousGrad.y));
-                } else {
-                    n = applyWaterWaves(surfaceWaterNormal, waterDomain,
-                            worldPush.waterParams.w, waterFootprint);
-                }
-            }
-            waterExt = waterExtinction(payload.albedo);
-            float cosI = clamp(dot(-rd, n), 0.0, 1.0);
-            float etaI = inWater ? materialIor : 1.0;
-            float etaT = inWater ? 1.0 : materialIor;
-            float F = fresnelDielectric(cosI, etaI, etaT);
-            float3 transmittedDir = refract(rd, n, etaI / etaT);
-            if (bounce == 0 && pathPrimaryDielectricBranch != PRIMARY_DIELECTRIC_RANDOM) {
-                pathPrimaryDielectricHit = true;
-                pathPrimaryDielectricF = F;
-            }
-            if (bounce == 0 && captureGuides) { // primary water hit: feed RR a smooth dielectric specular surface
-                gv_normal = n;
-                gv_rough = 0.0; // transport above is an exact Fresnel interface, not finite GGX
-                gv_albedo = float3(0.0, 0.0, 0.0); // pure-specular fallback for TIR/no destination
-                gv_hitCamRel = hitPos - worldPush.camOffset;
-                gv_motionHitCamRel = gv_hitCamRel;
-                gv_motionUseRefracted = false;
-                gv_motionObjDisp = float3(0.0, 0.0, 0.0);
-                // The reflection reprojects off the wave-displaced normal (now and last frame) but must
-                // leave the surface along the flat geometric one.
-                gv_spec = makeSpecSurface(gv_hitCamRel, n, previousWaterNormal, surfaceWaterNormal,
-                        0.0, float3(F, F, F));
-
-                if (dot(transmittedDir, transmittedDir) > 0.0) {
-                    resolveTransmissionGuide(hitPos, transmittedDir, surfaceWaterNormal,
-                            materialEntering ? materialIor : 1.0,
-                            float3(1.0, 1.0, 1.0), SURF_BIAS,
-                            rayConeWidth, rayConeSpread);
-                }
-            }
-            bool chooseReflection = bounce == 0
-                    && pathPrimaryDielectricBranch != PRIMARY_DIELECTRIC_RANDOM
-                    ? pathPrimaryDielectricBranch == PRIMARY_DIELECTRIC_REFLECTION
-                    : rndf(seed) < F;
-            if (chooseReflection) {
-                rd = reflect(rd, n);
-                ro = offsetSurfaceOrigin(hitPos, surfaceWaterNormal, rd, SURF_BIAS);
-            } else {
-                if (dot(transmittedDir, transmittedDir) <= 0.0) break;
-                rd = transmittedDir; // F < 1 here, so this is never total internal reflection
-                throughput *= transmission;
-                ro = offsetSurfaceOrigin(hitPos, surfaceWaterNormal, rd, SURF_BIAS);
-                // Derived from this hit's face orientation, not toggled — self-corrects instead of a
-                // stray/missing face corrupting the medium for the rest of the path (see PAYLOAD_WATER_ENTERING).
-                inWater = materialEntering;
-            }
-            // Specular interface (mirror reflect / clear refract): the continuation ray should see the
-            // sun/moon disc directly — no NEE happened here to double-count it.
-            showCelestial = true;
-            if (bounce >= rrStart) {
-                float q = clamp(max(throughput.r, max(throughput.g, throughput.b)), 0.02, 1.0);
-                if (rndf(seed) > q) {
-                    break;
-                }
-                throughput /= q;
-            }
-            continue;
-        }
-
         float3 albedo = payload.albedo;
         float sss = payloadSss(); // LabPBR SSS strength (0 when absent)
         float3 p = hitPos + n * SURF_BIAS;
@@ -1477,7 +1523,7 @@ float3 tracePath(float3 ro, float3 rd, float primaryConeSpread, uint2 pix, uint 
             // Underwater receiver whose shadow ray crossed a water surface: scale the direct light by
             // the wave-refraction caustic at the exit point. Focusing scales the incident irradiance,
             // so it applies to the whole NEE term (diffuse + specular).
-            if (inWater && waterWaves && shadow.waterHitT > 0.0) {
+            if (medium.current.water && waterWaves && shadow.waterHitT > 0.0) {
                 vis *= waterCaustic(p + lightDir * shadow.waterHitT, lightDir, shadow.waterHitT);
             }
             if (max(vis.r, max(vis.g, vis.b)) > 0.0) {
@@ -1522,7 +1568,7 @@ float3 tracePath(float3 ro, float3 rd, float primaryConeSpread, uint2 pix, uint 
                 float3 visB = shadowBack.transmittance;
                 // Same caustic as the front-face NEE — underwater kelp/seagrass transmission should
                 // flicker with the same light bands as the floor around it.
-                if (inWater && waterWaves && shadowBack.waterHitT > 0.0) {
+                if (medium.current.water && waterWaves && shadowBack.waterHitT > 0.0) {
                     visB *= waterCaustic(hitPos + lightDir * shadowBack.waterHitT,
                             lightDir, shadowBack.waterHitT);
                 }
