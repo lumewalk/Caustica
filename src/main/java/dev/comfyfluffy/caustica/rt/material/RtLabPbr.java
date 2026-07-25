@@ -35,6 +35,10 @@ public final class RtLabPbr {
     public static Specular decodeSpec(float red, float green, float blue, float alpha,
                                       float albedoR, float albedoG, float albedoB) {
         float smoothness = clamp01(red);
+        // LabPBR red is perceptual smoothness; roughness = (1 - perceptualSmoothness)^2 is LabPBR's
+        // LINEAR roughness, which is GGX alpha. That is the convention the whole pipeline uses (see
+        // RtMaterials.Profile and world.rgen's payloadRoughness), so it is stored as-is and never squared
+        // again downstream.
         float roughness = (1.0f - smoothness) * (1.0f - smoothness);
         float g = clamp01(green) * 255.0f;
         float metalness;

@@ -26,8 +26,9 @@ import world_common;
 // HDR trace target: linear radiance, may exceed 1. Tonemap happens later at the display.comp seam.
 [[vk::binding(1, 0)]] [format("rgba16f")] RWTexture2D<float4> outImage;
 // Guide buffers — first-hit (primary-visibility) attributes consumed by the denoiser/DLSS-RR. Written
-// every frame regardless of accumulation. gNormal.w carries roughness; gDepth carries HW reversed-Z depth.
-[[vk::binding(3, 0)]] [format("rgba16f")] RWTexture2D<float4> gNormal;     // xyz world normal, w roughness
+// every frame regardless of accumulation. gNormal.w carries LINEAR roughness (= GGX alpha, which is what
+// DLSS-RR documents for this input); gDepth carries HW reversed-Z depth.
+[[vk::binding(3, 0)]] [format("rgba16f")] RWTexture2D<float4> gNormal;     // xyz world normal, w linear roughness
 [[vk::binding(4, 0)]] [format("rgba16f")] RWTexture2D<float4> gAlbedo;     // rgb diffuse albedo
 [[vk::binding(5, 0)]] [format("r32f")]    RWTexture2D<float>  gDepth;      // HW reversed-Z depth
 [[vk::binding(6, 0)]] [format("rg16f")]   RWTexture2D<float2> gMotion;     // screen-space motion (render px)
@@ -51,7 +52,6 @@ struct VisibilityResult {
 // is deterministic (no AA jitter yet), so every SPP sample's bounce 0 yields identical values.
 static float3 gv_normal;
 static float3 gv_albedo;
-static float3 gv_specAlb; // specular albedo fed to DLSS-RR for specular demodulation (0 = pure diffuse).
 static float gv_rough;
 static float gv_emission;
 static uint gv_emissionSource;
@@ -63,28 +63,42 @@ static bool gv_motionUseRefracted; // true when the MV tracks the refracted hit 
 // World-space displacement of the motion-guide surface since the previous frame (0 for static
 // terrain/sky, an entity's per-vertex/object motion for a dynamic hit).
 static float3 gv_motionObjDisp;
-// Transmission replaces the ordinary guide tuple with the visible destination. These four values retain
-// the foreground glass/water interface for RR's separate specular inputs.
-static float3 gv_specSurfaceCamRel;
-static float3 gv_specSurfaceNormal;
-static float3 gv_specSurfacePreviousNormal;
-static float3 gv_specSurfaceBiasNormal;
-static float gv_specSurfaceRoughness;
-static float3 gv_specSurfaceAlbedo;
+// Transmission replaces the ordinary guide tuple with the visible destination, so RR's specular inputs
+// (specular albedo + reflection MV) need the foreground glass/water interface kept separately. This is
+// the surface the reflection physically lives on; for an opaque primary hit it is that hit itself.
+struct SpecSurface {
+    float3 camRel;         // interface position relative to the current camera
+    float3 normal;         // shading normal (wave-perturbed for water)
+    float3 previousNormal; // the same normal one frame ago; equal to `normal` unless the surface animates
+    float3 biasNormal;     // geometric normal, used only to offset a ray origin off the surface
+    float roughness;
+    float3 albedo;         // specular albedo fed to DLSS-RR for demodulation (0 = pure diffuse)
+};
+static SpecSurface gv_spec;
+
+// Static surfaces reuse one normal for all three roles. Water overrides them (wave-displaced shading
+// normal now and last frame, flat geometric normal for the bias) via the six-argument form.
+SpecSurface makeSpecSurface(float3 camRel, float3 normal, float3 previousNormal, float3 biasNormal,
+                            float roughness, float3 albedo) {
+    SpecSurface s;
+    s.camRel = camRel;
+    s.normal = normal;
+    s.previousNormal = previousNormal;
+    s.biasNormal = biasNormal;
+    s.roughness = roughness;
+    s.albedo = albedo;
+    return s;
+}
+
+SpecSurface makeSpecSurface(float3 camRel, float3 normal, float roughness, float3 albedo) {
+    return makeSpecSurface(camRel, normal, normal, normal, roughness, albedo);
+}
+
 // Per-call control/results for the primary dielectric estimator. Ordinary pixels still trace once;
 // a primary glass/water hit traces both Fresnel continuations and recombines them exactly.
 static uint pathPrimaryDielectricBranch;
 static bool pathPrimaryDielectricHit;
 static float pathPrimaryDielectricF;
-
-void preserveSpecSurfaceGuide() {
-    gv_specSurfaceCamRel = gv_hitCamRel;
-    gv_specSurfaceNormal = gv_normal;
-    gv_specSurfacePreviousNormal = gv_normal;
-    gv_specSurfaceBiasNormal = gv_normal;
-    gv_specSurfaceRoughness = gv_rough;
-    gv_specSurfaceAlbedo = gv_specAlb;
-}
 
 uint payloadMaterial() { return payload.flags & PAYLOAD_MATERIAL_MASK; }
 uint payloadEmissionSource() {
@@ -94,6 +108,11 @@ uint payloadEmissionSource() {
 // travelling into the water volume (vs. out of it) at this hit's face.
 bool payloadWaterEntering() { return (payload.flags & PAYLOAD_WATER_ENTERING) != 0u; }
 bool payloadEmitterInList() { return (payload.flags & PAYLOAD_EMITTER_IN_LIST) != 0u; }
+// LINEAR roughness, i.e. GGX alpha directly — NOT perceptual roughness. This is the one convention used
+// end to end: LabPBR defines roughness = (1 - perceptualSmoothness)^2 and RtLabPbr.decode stores exactly
+// that, RtMaterials.Profile carries the same units, and DLSS-RR wants linear roughness in its guide. So
+// nothing squares it: ggxD/ggxG1/sampleGGXVNDF/rrSpecularAlbedo all take this value as alpha as-is, and
+// any threshold compared against it is an alpha threshold.
 float payloadRoughness() { return unpackHalf2(payload.roughMetal).x; }
 float payloadMetalness() { return unpackHalf2(payload.roughMetal).y; }
 float payloadEmission() { return unpackHalf2(payload.emissionSss).x; }
@@ -163,11 +182,16 @@ float waterWaveLodWeight(float wavelength, float footprint) {
     return 1.0 - smoothstep(0.25, 0.5, cyclesPerPixel);
 }
 
-float2 waterWaveGrad(float2 p, float t, float footprint) {
+// One walk of the wave spectrum, shared by every consumer so the spectrum constants exist once. WITH_DT
+// is a generic so the derivative terms are compiled out entirely for callers that only want the
+// gradient — the trigonometry is shared, but the chain-rule work is not free.
+void waterWaveSpectrum<let WITH_DT : int>(float2 p, float t, float footprint,
+                                          out float2 grad, out float2 gradDt) {
     // Per-wave steepness a·k: gentle in the long swell, concentrated in the mid/short chop.
     const float Q[WAVE_COUNT] = { 0.030, 0.035, 0.042, 0.050, 0.060, 0.065, 0.065, 0.058, 0.048, 0.038 };
     t *= WAVE_SPEED;
-    float2 g = float2(0.0, 0.0);
+    grad = float2(0.0, 0.0);
+    gradDt = float2(0.0, 0.0);
     float lambda = 14.0;
     for (int i = 0; i < WAVE_COUNT; i++) {
         float lodWeight = waterWaveLodWeight(lambda, footprint);
@@ -180,18 +204,41 @@ float2 waterWaveGrad(float2 p, float t, float footprint) {
         float2 d = float2(WAVE_WIND.x * cs - WAVE_WIND.y * sn, WAVE_WIND.x * sn + WAVE_WIND.y * cs);
         float ph = k * dot(d, p) - w * t + 1.7 * float(i) * float(i);
         float2 dph = k * d;
+        float phDt = -w;                      // ∂φ/∂t
+        float2 dphDt = float2(0.0, 0.0);      // ∂(∇φ)/∂t
         if (i < 4) { // meander only the components whose fronts are long enough to read as lines
             float2 pd = float2(-d.y, d.x);
             float wph = 0.4 * k * dot(pd, p) + 0.5 * w * t;
             ph += WAVE_MEANDER * sin(wph);
             dph += (WAVE_MEANDER * cos(wph) * 0.4 * k) * pd;
+            if (WITH_DT != 0) {
+                float wphDt = 0.5 * w;
+                phDt += WAVE_MEANDER * cos(wph) * wphDt;
+                dphDt = (-WAVE_MEANDER * sin(wph) * wphDt * 0.4 * k) * pd;
+            }
         }
         float S = 1.2 + 0.12 * float(i); // crest sharpness: the short chop is choppier
-        float e = exp(S * (sin(ph) - 1.0));
-        g += lodWeight * (Q[i] / k) * (S * cos(ph) * e) * dph;
+        float sinPh = sin(ph);
+        float cosPh = cos(ph);
+        float e = exp(S * (sinPh - 1.0));
+        // a = Q/k; ∇h = a·S·cos φ·e^{S(sin φ−1)}·∇φ
+        float amplitude = lodWeight * (Q[i] / k) * S;
+        grad += amplitude * cosPh * e * dph;
+        if (WITH_DT != 0) {
+            // ∂/∂t of the term above, chain-ruled through φ and ∇φ.
+            gradDt += amplitude * e
+                    * (phDt * (-sinPh + S * cosPh * cosPh) * dph + cosPh * dphDt);
+        }
         lambda /= 1.5;
     }
-    return g * WATER_WAVE_STRENGTH;
+    grad *= WATER_WAVE_STRENGTH;
+    gradDt *= WATER_WAVE_STRENGTH;
+}
+
+float2 waterWaveGrad(float2 p, float t, float footprint) {
+    float2 grad, gradDt;
+    waterWaveSpectrum<0>(p, t, footprint, grad, gradDt);
+    return grad;
 }
 
 float2 waterWaveGrad(float2 p, float t) {
@@ -203,48 +250,9 @@ float2 waterWaveGrad(float2 p, float t) {
 // while remaining accurate over the sub-frame interval used by reflection reprojection.
 void waterWaveGradTemporal(float2 p, float currentT, float previousT, float footprint,
                            out float2 currentGrad, out float2 previousGrad) {
-    const float Q[WAVE_COUNT] = { 0.030, 0.035, 0.042, 0.050, 0.060, 0.065, 0.065, 0.058, 0.048, 0.038 };
-    currentT *= WAVE_SPEED;
-    previousT *= WAVE_SPEED;
-    currentGrad = float2(0.0, 0.0);
-    float2 gradientDt = float2(0.0, 0.0);
-    float lambda = 14.0;
-    for (int i = 0; i < WAVE_COUNT; i++) {
-        float lodWeight = waterWaveLodWeight(lambda, footprint);
-        if (lodWeight <= 0.0) break;
-        float k = 2.0 * PI / lambda;
-        float w = sqrt(WAVE_G * k);
-        float spread = (0.15 + 0.11 * float(i)) * sin(float(i) * 2.4 + 1.3);
-        float cs = cos(spread), sn = sin(spread);
-        float2 d = float2(WAVE_WIND.x * cs - WAVE_WIND.y * sn,
-                WAVE_WIND.x * sn + WAVE_WIND.y * cs);
-        float phase = k * dot(d, p) - w * currentT + 1.7 * float(i) * float(i);
-        float phaseDt = -w;
-        float2 dph = k * d;
-        float2 dphDt = float2(0.0, 0.0);
-        if (i < 4) {
-            float2 pd = float2(-d.y, d.x);
-            float meanderPhase = 0.4 * k * dot(pd, p) + 0.5 * w * currentT;
-            float meanderDt = 0.5 * w;
-            phase += WAVE_MEANDER * sin(meanderPhase);
-            phaseDt += WAVE_MEANDER * cos(meanderPhase) * meanderDt;
-            dph += (WAVE_MEANDER * cos(meanderPhase) * 0.4 * k) * pd;
-            dphDt = (-WAVE_MEANDER * sin(meanderPhase) * meanderDt * 0.4 * k) * pd;
-        }
-        float S = 1.2 + 0.12 * float(i);
-        float sinPhase = sin(phase);
-        float cosPhase = cos(phase);
-        float e = exp(S * (sinPhase - 1.0));
-        float amplitude = lodWeight * (Q[i] / k) * S;
-        currentGrad += amplitude * cosPhase * e * dph;
-        gradientDt += amplitude * e
-                * (phaseDt * (-sinPhase + S * cosPhase * cosPhase) * dph
-                + cosPhase * dphDt);
-        lambda /= 1.5;
-    }
-    previousGrad = currentGrad - (currentT - previousT) * gradientDt;
-    currentGrad *= WATER_WAVE_STRENGTH;
-    previousGrad *= WATER_WAVE_STRENGTH;
+    float2 gradDt;
+    waterWaveSpectrum<1>(p, currentT, footprint, currentGrad, gradDt);
+    previousGrad = currentGrad - (currentT - previousT) * WAVE_SPEED * gradDt;
 }
 
 // Perturb a (near-)horizontal water surface normal by the wave field. Flowing side faces (|n.y| small)
@@ -256,10 +264,6 @@ float3 applyWaterWaves(float3 nGeo, float2 worldXZ, float t, float footprint) {
     float2 grad = waterWaveGrad(worldXZ, t, footprint);
     float3 up = normalize(float3(-grad.x, 1.0, -grad.y));
     return nGeo.y >= 0.0 ? up : -up;
-}
-
-float3 applyWaterWaves(float3 nGeo, float2 worldXZ, float t) {
-    return applyWaterWaves(nGeo, worldXZ, t, 0.0);
 }
 
 // ---- Water caustics. Sunlight refracting through the waved surface converges/diverges before it
@@ -302,10 +306,26 @@ float waterCaustic(float3 exitPos, float3 lightDir, float waterDist) {
     return lerp(1.0, min(focus, CAUSTIC_MAX), fade);
 }
 
-// LabPBR smoothness is 8-bit and this renderer stores squared perceptual roughness. Half of the gap
-// between the exact-zero code and the first nonzero code robustly identifies authored zero without
-// turning merely glossy texels into delta lobes.
-static const float AUTHORED_ZERO_ROUGHNESS_MAX = 0.5 / (255.0 * 255.0);
+// Below this GGX alpha the lobe is treated as a delta mirror. The threshold is not about detecting an
+// authored zero — it is about the point where a finite lobe stops being distinguishable from a mirror.
+// A GGX lobe's half-angle is ~alpha, and the sun's angular radius is ~0.0047 rad, so alpha = 4e-4 is
+// ~12x tighter than the sun disc and far under a pixel footprint at any reflection distance. Nothing
+// below it can be resolved, and the delta path is both sharper and better conditioned there.
+//
+// Two things follow from taking the delta path, and both are why the threshold is set here rather than
+// at the 8-bit quantum:
+//   * ggxD(_, 0) is exactly 0, so the NEE specular term vanishes by construction and the sun arrives
+//     solely via the mirror ray hitting the disc (showCelestial). That is the correct, unbiased
+//     accounting — see the double-count note on ggxD below.
+//   * There is no floor to apply above the threshold: alpha > 4e-4 is well conditioned for both the
+//     VNDF sample and the NDF, so authored roughness passes through unmodified and the mapping stays
+//     continuous. A separate MIN_ROUGH would only reintroduce a cliff.
+//
+// Stored roughness IS alpha (see payloadRoughness), so these compare against it directly.
+static const float MIRROR_ALPHA_MAX = 4.0e-4; // LabPBR perceptual smoothness >= 0.98
+// Above this the specular lobe is too broad for a single mirrored reprojection to describe, so the
+// reflection MV is left at zero and RR falls back to the ordinary MV.
+static const float SPEC_MOTION_ALPHA_MAX = 0.25; // perceptual smoothness <= 0.5
 static const uint MAX_TRANSMISSION_GUIDE_HITS = 8u;
 static const uint PRIMARY_DIELECTRIC_RANDOM = 0u;
 static const uint PRIMARY_DIELECTRIC_TRANSMISSION = 1u;
@@ -314,17 +334,23 @@ static const uint PRIMARY_DIELECTRIC_REFLECTION = 2u;
 float luminance(float3 c) { return dot(c, float3(0.2126, 0.7152, 0.0722)); }
 
 // GGX normal distribution.
-float ggxD(float ndh, float rough) {
-    float a = rough * rough;
-    float a2 = a * a;
+// NOTE: the 1e-7 denominator guard is not merely a divide-by-zero epsilon, and it is load-bearing. At
+// the lobe peak d == a2, so the guard dominates PI*d*d until a2 >> 1.8e-4, i.e. rough >> 0.116; every
+// smoother material has its NEE highlight peak truncated. That truncation is what keeps the sun from
+// being counted twice: a specular continuation sets showCelestial, so the BSDF-sampled ray may hit the
+// sun disc in world.rmiss while NEE is also adding a sun term for the same lobe, with no MIS weighting
+// between them. Removing the guard restores the physical peak AND the double count, and makes the
+// single-sample sun estimator explode wherever the lobe is tighter than the disc (~0.0047 rad). The
+// real fix is MIS (or a disc-aware specular light sample), not an epsilon edit — left as-is.
+float ggxD(float ndh, float alpha) {
+    float a2 = alpha * alpha;
     float d = ndh * ndh * (a2 - 1.0) + 1.0;
     return a2 / (PI * d * d + 1.0e-7);
 }
 
 // Smith GGX masking term for one direction (separable form; G2 = G1(v) * G1(l)).
-float ggxG1(float ndx, float rough) {
-    float a = rough * rough;
-    float a2 = a * a;
+float ggxG1(float ndx, float alpha) {
+    float a2 = alpha * alpha;
     return 2.0 * ndx / (ndx + sqrt(a2 + (1.0 - a2) * ndx * ndx) + 1.0e-7);
 }
 
@@ -349,7 +375,7 @@ float hg(float cosT, float g) {
 }
 
 // NVIDIA RR guide-buffer helper: integrated/view-dependent specular reflectivity, not raw F0.
-// alpha is GGX alpha (perceptual roughness squared), NoV is the first-hit view cosine.
+// alpha is GGX alpha (== the linear roughness materials store), NoV is the first-hit view cosine.
 float3 rrSpecularAlbedo(float3 specularColor, float alpha, float NoV) {
     NoV = abs(NoV);
     float NoV2 = NoV * NoV;
@@ -454,14 +480,14 @@ float3 sampleSquare(float3 axis, float halfAngle, inout uint s) {
 }
 
 // Sample a GGX visible-normal (VNDF, Heitz 2018) about geometric normal n for view ve, returning the
-// sampled microfacet normal (half-vector) in world space. alpha = rough^2. Paired with the separable
-// Smith term, the importance-sampling weight reduces to F * G1(NdotL) (applied by the caller).
-float3 sampleGGXVNDF(float3 n, float3 ve, float rough, inout uint s) {
+// sampled microfacet normal (half-vector) in world space. Paired with the separable Smith term, the
+// importance-sampling weight reduces to F * G1(NdotL) (applied by the caller).
+float3 sampleGGXVNDF(float3 n, float3 ve, float alpha, inout uint s) {
     float3 t = normalize(abs(n.x) > 0.9 ? float3(0.0, 1.0, 0.0) : float3(1.0, 0.0, 0.0));
     float3 b = normalize(cross(n, t));
     t = cross(b, n);
     float3 Ve = float3(dot(ve, t), dot(ve, b), dot(ve, n)); // view in tangent space (z = n)
-    float a = rough * rough;
+    float a = alpha;
     float3 Vh = normalize(float3(a * Ve.x, a * Ve.y, Ve.z));
     float lensq = Vh.x * Vh.x + Vh.y * Vh.y;
     float3 T1 = lensq > 0.0 ? float3(-Vh.y, Vh.x, 0.0) * rsqrt(lensq) : float3(1.0, 0.0, 0.0);
@@ -918,10 +944,10 @@ void traceRadianceReordered(uint cullMask, float3 ro, float tmin, float3 rd, flo
 // result is consumed immediately, so paying a reorder barrier and carrying guide state across it only
 // adds latency. The dedicated miss record also avoids the atmosphere march: guides need hit-vs-miss,
 // not sky radiance.
-void traceGuide(uint rayFlags, uint cullMask, float3 ro, float tmin, float3 rd, float tmax,
+void traceGuide(uint cullMask, float3 ro, float tmin, float3 rd, float tmax,
                 float rayConeWidth, float rayConeSpread) {
     payload = makeRadiancePayload(0u, packHalf2(float2(rayConeWidth, rayConeSpread)));
-    TraceRay(topLevelAS, rayFlags, cullMask, SBT_RADIANCE, SBT_STRIDE_BUCKET,
+    TraceRay(topLevelAS, RAY_FLAG_NONE, cullMask, SBT_RADIANCE, SBT_STRIDE_BUCKET,
             MISS_GUIDE, makeRay(ro, tmin, rd, tmax), payload);
 }
 
@@ -978,23 +1004,22 @@ float2 previousReflectionNdc(float3 surfacePos, float3 surfaceNormal, float3 ref
 
 // Reflection motion remains owned by the physical foreground interface even when transmission later
 // replaces the ordinary guide tuple. Guide tracing is intentionally non-SER (traceGuide above).
-float2 specularReflectionMotion(float3 surfacePos, float3 surfaceNormal,
-                                float3 surfaceBiasNormal,
-                                float3 previousSurfaceNormal, float surfaceRoughness,
-                                float3 surfaceSpecularAlbedo, float3 primaryDir,
+float2 specularReflectionMotion(SpecSurface surface, float3 primaryDir,
                                 float2 currentNdc, float2 size, float primaryConeSpread) {
-    if (length(surfaceNormal) < 0.5
-            || max(surfaceSpecularAlbedo.r, max(surfaceSpecularAlbedo.g, surfaceSpecularAlbedo.b)) <= 0.001
-            || surfaceRoughness > 0.5) {
+    if (length(surface.normal) < 0.5
+            || max(surface.albedo.r, max(surface.albedo.g, surface.albedo.b)) <= 0.001
+            || surface.roughness > SPEC_MOTION_ALPHA_MAX) {
         return float2(0.0, 0.0);
     }
 
-    float3 n = normalize(surfaceNormal);
+    float3 surfacePos = surface.camRel + worldPush.camOffset;
+    float3 n = normalize(surface.normal);
     float3 specDir = reflect(primaryDir, n);
-    traceGuide(RAY_FLAG_NONE, CULL_SECONDARY,
-            offsetSurfaceOrigin(surfacePos, normalize(surfaceBiasNormal), specDir, SURF_BIAS),
+    // biasNormal is a closest-hit normal, already unit length, and only its sign matters here.
+    traceGuide(CULL_SECONDARY,
+            offsetSurfaceOrigin(surfacePos, surface.biasNormal, specDir, SURF_BIAS),
             RAY_TMIN, specDir, 10000.0,
-            max(length(surfacePos - worldPush.camOffset) * primaryConeSpread, RAY_CONE_MIN_WIDTH),
+            max(length(surface.camRel) * primaryConeSpread, RAY_CONE_MIN_WIDTH),
             max(primaryConeSpread, RAY_CONE_MIN_SPREAD));
 
     float3 reflectedHit;
@@ -1007,8 +1032,8 @@ float2 specularReflectionMotion(float3 surfacePos, float3 surfaceNormal,
         reflectedHit = surfacePos + specDir * 1.0e6;
         reflectedMotionPrev = float3(0.0, 0.0, 0.0);
     }
-    float3 previousN = length(previousSurfaceNormal) >= 0.5
-            ? normalize(previousSurfaceNormal) : n;
+    float3 previousN = length(surface.previousNormal) >= 0.5
+            ? normalize(surface.previousNormal) : n;
     float2 prevNdc = previousReflectionNdc(
             surfacePos, previousN, reflectedHit, reflectedMotionPrev);
     return (prevNdc - currentNdc) * 0.5 * size;
@@ -1035,13 +1060,13 @@ void resolveTransmissionGuide(float3 surfacePos, float3 transmittedDir,
     if (dot(transmittedDir, transmittedDir) <= 0.0) return;
 
     float3 direction = normalize(transmittedDir);
-    float3 ro = offsetSurfaceOrigin(
-            surfacePos, normalize(surfaceBiasNormal), direction, rayBias);
+    // surfaceBiasNormal is a closest-hit normal, already unit length, and only its sign matters here.
+    float3 ro = offsetSurfaceOrigin(surfacePos, surfaceBiasNormal, direction, rayBias);
     uint guideVisibilityMask = CULL_PRIMARY;
     currentIor = max(currentIor, 1.0);
 
     for (uint crossing = 0u; crossing < MAX_TRANSMISSION_GUIDE_HITS; ++crossing) {
-        traceGuide(RAY_FLAG_NONE, guideVisibilityMask, ro, RAY_TMIN, direction, 10000.0,
+        traceGuide(guideVisibilityMask, ro, RAY_TMIN, direction, 10000.0,
                 rayConeWidth, rayConeSpread);
         if (payload.hitT <= 0.0) {
             setTransmissionGuide((ro + direction * 1.0e6) - worldPush.camOffset,
@@ -1097,12 +1122,11 @@ void resolveTransmissionGuide(float3 surfacePos, float3 transmittedDir,
 
 // One Monte Carlo path from (ro, rd). Returns accumulated radiance along the path.
 float3 tracePath(float3 ro, float3 rd, float primaryConeSpread, uint2 pix, uint sampleIndex,
-                 inout uint seed) {
+                 bool captureGuides, inout uint seed) {
     float3 L = float3(0.0, 0.0, 0.0);
     float3 throughput = float3(1.0, 1.0, 1.0);
     pathPrimaryDielectricHit = false;
     pathPrimaryDielectricF = 0.0;
-    bool captureGuides = sampleIndex == 0u;
     float rayConeWidth = 0.0;
     float rayConeSpread = max(primaryConeSpread, RAY_CONE_MIN_SPREAD);
     int maxBounces = int(worldPush.maxBounces);
@@ -1152,7 +1176,6 @@ float3 tracePath(float3 ro, float3 rd, float primaryConeSpread, uint2 pix, uint 
                 // by the huge sun-disc radiance rings/artifacts around the sun. A constant albedo keeps
                 // the brightness in the lighting channel where RR resolves it cleanly.
                 gv_albedo = SKY_DIFF_ALBEDO;
-                gv_specAlb = SKY_SPEC_ALBEDO;
                 gv_rough = 1.0;
                 gv_emission = 0.0;
                 gv_emissionSource = EMISSION_SOURCE_NONE;
@@ -1160,7 +1183,8 @@ float3 tracePath(float3 ro, float3 rd, float primaryConeSpread, uint2 pix, uint 
                 gv_motionHitCamRel = gv_hitCamRel;
                 gv_motionUseRefracted = false;
                 gv_motionObjDisp = float3(0.0, 0.0, 0.0); // sky is static
-                preserveSpecSurfaceGuide();
+                // Zero normal: specularReflectionMotion rejects this and returns a zero reflection MV.
+                gv_spec = makeSpecSurface(gv_hitCamRel, gv_normal, 1.0, SKY_SPEC_ALBEDO);
             }
             L += throughput * sky; // escaped to sky
             break;
@@ -1200,13 +1224,12 @@ float3 tracePath(float3 ro, float3 rd, float primaryConeSpread, uint2 pix, uint 
             if (bounce == 0 && captureGuides) { // primary glass hit: feed RR a smooth dielectric specular surface
                 gv_normal = n;
                 gv_rough = clamp(payloadRoughness(), 0.0, 1.0);
-                gv_specAlb = float3(F, F, F);
                 gv_albedo = float3(0.0, 0.0, 0.0); // coherent fallback when no transmitted layer exists
                 gv_hitCamRel = hitPos - worldPush.camOffset;
                 gv_motionHitCamRel = gv_hitCamRel;
                 gv_motionUseRefracted = false;
                 gv_motionObjDisp = payload.motionPrev; // 0 for static terrain
-                preserveSpecSurfaceGuide();
+                gv_spec = makeSpecSurface(gv_hitCamRel, n, gv_rough, float3(F, F, F));
 
                 resolveTransmissionGuide(hitPos, rd, n,
                         1.0, glassTint * transmission,
@@ -1242,13 +1265,13 @@ float3 tracePath(float3 ro, float3 rd, float primaryConeSpread, uint2 pix, uint 
             if (captureGuides) {
                 gv_normal = n;
                 gv_albedo = albedo; // RR demodulation target = the particle texel (keeps it sharp)
-                gv_specAlb = float3(0.0, 0.0, 0.0);
                 gv_rough = 1.0;
                 gv_hitCamRel = hitPos - worldPush.camOffset;
                 gv_motionHitCamRel = gv_hitCamRel;
                 gv_motionUseRefracted = false;
                 gv_motionObjDisp = payload.motionPrev; // per-particle MV: de-ghost moving particles
-                preserveSpecSurfaceGuide();
+                // Zero specular albedo: no reflection MV is traced for a diffuse billboard.
+                gv_spec = makeSpecSurface(gv_hitCamRel, n, 1.0, float3(0.0, 0.0, 0.0));
             }
 
             float3 lightDir = worldPush.lightDir.xyz;
@@ -1344,14 +1367,14 @@ float3 tracePath(float3 ro, float3 rd, float primaryConeSpread, uint2 pix, uint 
                 gv_normal = n;
                 gv_rough = 0.0; // transport above is an exact Fresnel interface, not finite GGX
                 gv_albedo = float3(0.0, 0.0, 0.0); // pure-specular fallback for TIR/no destination
-                gv_specAlb = float3(F, F, F);
                 gv_hitCamRel = hitPos - worldPush.camOffset;
                 gv_motionHitCamRel = gv_hitCamRel;
                 gv_motionUseRefracted = false;
                 gv_motionObjDisp = float3(0.0, 0.0, 0.0);
-                preserveSpecSurfaceGuide();
-                gv_specSurfacePreviousNormal = previousWaterNormal;
-                gv_specSurfaceBiasNormal = surfaceWaterNormal;
+                // The reflection reprojects off the wave-displaced normal (now and last frame) but must
+                // leave the surface along the flat geometric one.
+                gv_spec = makeSpecSurface(gv_hitCamRel, n, previousWaterNormal, surfaceWaterNormal,
+                        0.0, float3(F, F, F));
 
                 if (dot(transmittedDir, transmittedDir) > 0.0) {
                     resolveTransmissionGuide(hitPos, transmittedDir, surfaceWaterNormal,
@@ -1398,7 +1421,11 @@ float3 tracePath(float3 ro, float3 rd, float primaryConeSpread, uint2 pix, uint 
         // 0.04 F0, sourced from the chit (LabPBR custom/metal F0, or the dielectric default it applies).
         float rough = clamp(payloadRoughness(), 0.0, 1.0);
         float metal = clamp(payloadMetalness(), 0.0, 1.0);
-        bool exactSpecular = rough <= AUTHORED_ZERO_ROUGHNESS_MAX;
+        // Unresolvably tight lobes become exact delta mirrors; everything else keeps its authored value.
+        // Snapping to 0 also propagates into the guide buffers, which is what tells RR to hold the
+        // reflection sharp instead of accumulating it as a glossy lobe.
+        bool exactSpecular = rough <= MIRROR_ALPHA_MAX;
+        rough = exactSpecular ? 0.0 : rough;
         float3 diffAlb = albedo * (1.0 - metal);
         float3 F0 = payload.f0;
 
@@ -1406,12 +1433,12 @@ float3 tracePath(float3 ro, float3 rd, float primaryConeSpread, uint2 pix, uint 
             gv_normal = n;
             gv_albedo = diffAlb;  // RR diffuse-albedo demodulation target
             gv_rough = rough;
-            gv_specAlb = rrSpecularAlbedo(F0, rough * rough, dot(n, v));
             gv_hitCamRel = ro + rd * payload.hitT - worldPush.camOffset; // camera-relative hit position
             gv_motionHitCamRel = gv_hitCamRel;
             gv_motionUseRefracted = false;
             gv_motionObjDisp = payload.motionPrev; // per-vertex world motion (0 for static terrain/sky)
-            preserveSpecSurfaceGuide();
+            gv_spec = makeSpecSurface(gv_hitCamRel, n, rough,
+                    rrSpecularAlbedo(F0, rough, dot(n, v)));
         }
 
         // Emissive surfaces (lava, glowstone, torches, ...) add radiance directly, colored by albedo.
@@ -1533,8 +1560,7 @@ float3 tracePath(float3 ro, float3 rd, float primaryConeSpread, uint2 pix, uint 
                 // VNDF + separable Smith ⇒ weight = F · G2/G1(v) = F · G1(l); divide by the lobe pdf ps.
                 float3 F = fresnelSchlick(max(0.0, dot(v, h)), F0);
                 throughput *= F * ggxG1(ndl2, rough) / ps;
-                rayConeSpread = max(rayConeSpread,
-                        rough * rough * RAY_CONE_GLOSSY_SPREAD_SCALE);
+                rayConeSpread = max(rayConeSpread, rough * RAY_CONE_GLOSSY_SPREAD_SCALE);
             }
             ro = p;
             rd = l;
@@ -1590,8 +1616,10 @@ void main() {
         seed = pcg(seed); // decorrelate per-sample paths (shared camera ray, no AA jitter yet)
         uint transmissionSeed = seed;
         pathPrimaryDielectricBranch = PRIMARY_DIELECTRIC_TRANSMISSION;
-        float3 transmissionRadiance =
-                tracePath(origin, dir, rayConeSpread, uint2(pix), s, transmissionSeed);
+        // Guides describe one deterministic surface, so only the first sample's transmission branch
+        // writes them; the reflection branch and every later sample reuse what it captured.
+        float3 transmissionRadiance = tracePath(origin, dir, rayConeSpread, uint2(pix), s,
+                s == 0u, transmissionSeed);
 
         bool primaryDielectricHit = pathPrimaryDielectricHit;
         float primaryDielectricF = pathPrimaryDielectricF;
@@ -1601,8 +1629,8 @@ void main() {
             uint reflectionSeed = seed ^ 0xa511e9b3u;
             reflectionSeed = pcg(reflectionSeed);
             pathPrimaryDielectricBranch = PRIMARY_DIELECTRIC_REFLECTION;
-            float3 reflectionRadiance =
-                    tracePath(origin, dir, rayConeSpread, uint2(pix), s + spp, reflectionSeed);
+            float3 reflectionRadiance = tracePath(origin, dir, rayConeSpread, uint2(pix), s + spp,
+                    false, reflectionSeed);
 
             float dielectricF = saturate(primaryDielectricF);
             sampleRadiance =
@@ -1621,11 +1649,7 @@ void main() {
 
     // Reflection remains owned by the foreground interface even when glass/water replaced the ordinary
     // tuple with the transmitted destination.
-    float2 specMotion = specularReflectionMotion(
-            gv_specSurfaceCamRel + worldPush.camOffset, gv_specSurfaceNormal,
-            gv_specSurfaceBiasNormal, gv_specSurfacePreviousNormal,
-            gv_specSurfaceRoughness, gv_specSurfaceAlbedo,
-            dir, jndc, size, rayConeSpread);
+    float2 specMotion = specularReflectionMotion(gv_spec, dir, jndc, size, rayConeSpread);
 
     // Hardware (non-linear, reversed-Z) depth for DLSS-RR + Frame Generation: project the camera-relative
     // primary hit through the forward view-projection and take ndc z/w — exactly the value a rasterizer
@@ -1656,7 +1680,7 @@ void main() {
     gAlbedo[pix] = float4(gv_albedo, 1.0);
     gDepth[pix] = gv_depth;
     gMotion[pix] = motion;
-    gSpecAlbedo[pix] = float4(gv_specSurfaceAlbedo, 1.0);
+    gSpecAlbedo[pix] = float4(gv_spec.albedo, 1.0);
     gSpecMotion[pix] = specMotion;
 
     // Debug guide-buffer visualization: bypass accumulation and show a guide directly.
@@ -1671,7 +1695,7 @@ void main() {
         } else if (pc.debugView == 4u) {
             dbg = float3(gv_rough, gv_rough, gv_rough); // roughness
         } else if (pc.debugView == 6u) {
-            dbg = gv_specSurfaceAlbedo;             // exact value bound to DLSS-RR
+            dbg = gv_spec.albedo;                   // exact value bound to DLSS-RR
         } else if (pc.debugView == 7u) {
             dbg = float3(clamp(0.5 + specMotion * 0.05, 0.0, 1.0), 0.5); // reflection motion
         } else if (pc.debugView == 8u) {

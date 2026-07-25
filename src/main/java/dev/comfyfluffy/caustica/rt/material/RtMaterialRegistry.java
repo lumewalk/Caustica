@@ -424,7 +424,7 @@ public final class RtMaterialRegistry {
     private static RtMaterialDesc compileDesc(int model, int features, RtMaterials.Profile profile,
                                               boolean emitting, boolean neutral,
                                               RtMaterialDesc.EmissionSummary emissionSummary) {
-        float roughness = model == MODEL_GLASS ? 0.05f : profile.roughness();
+        float roughness = model == MODEL_GLASS ? 0.0025f : profile.roughness(); // linear; s = 0.95
         float metalness = model == MODEL_GLASS ? 0.0f : profile.metalness();
         float ior = model == MODEL_WATER ? 1.333f : (model == MODEL_GLASS ? 1.52f : 1.0f);
         float transmission = model == MODEL_WATER || model == MODEL_GLASS ? 1.0f : 0.0f;

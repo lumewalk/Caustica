@@ -69,6 +69,8 @@ public final class RtMaterialOverrides {
         Float metalness = null;
         if (root.has("base")) {
             JsonObject base = root.getAsJsonObject("base");
+            // "roughness" is LINEAR roughness (GGX alpha), the same units LabPBR stores and
+            // RtMaterials.Profile carries — NOT perceptual roughness. alpha = (1 - smoothness)^2.
             roughness = optionalFloat(base, "roughness");
             metalness = optionalFloat(base, "metalness");
         }
