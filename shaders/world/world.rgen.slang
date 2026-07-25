@@ -1054,9 +1054,14 @@ VisibilityResult visibility(float3 origin, float3 dir, float tmax) {
     return result;
 }
 
-float2 projectPrevNdc(float3 worldPos) {
+// `valid` is false when the point projects behind the previous camera, where the perspective divide
+// would otherwise manufacture an arbitrarily large NDC. Mirror images reach that case easily: a virtual
+// image sits as far behind the reflector as the source is in front, so a reflection seen at a grazing
+// angle can land behind the eye even though the reflector itself is comfortably in view.
+float2 projectPrevNdc(float3 worldPos, out bool valid) {
     float4 clip = mul(worldPush.prevViewProj, float4(worldPos - worldPush.camOffset + worldPush.camDelta, 1.0));
-    return clip.xy / clip.w;
+    valid = clip.w > 0.0;
+    return valid ? clip.xy / clip.w : float2(0.0, 0.0);
 }
 
 // Previous-frame screen position of a planar reflection. The reflected image of a world point P seen
@@ -1066,11 +1071,12 @@ float2 projectPrevNdc(float3 worldPos) {
 // explodes at grazing angles and produces non-zero MV in a static scene. Mirroring is division-free, so
 // static MV is bit-exact zero at any incidence. The reflector is assumed static (terrain / water);
 // reflectedMotionPrev carries the reflected content's own displacement.
-float2 previousReflectionNdc(float3 surfacePos, float3 surfaceNormal, float3 reflectedWorldPos, float3 reflectedMotionPrev) {
+float2 previousReflectionNdc(float3 surfacePos, float3 surfaceNormal, float3 reflectedWorldPos,
+                             float3 reflectedMotionPrev, out bool valid) {
     float3 n = normalize(surfaceNormal); // mirror(P) is orientation-independent, so no viewer flip needed
     float3 prevHit = reflectedWorldPos - reflectedMotionPrev;
     float3 mirroredHit = prevHit - 2.0 * n * dot(prevHit - surfacePos, n);
-    return projectPrevNdc(mirroredHit);
+    return projectPrevNdc(mirroredHit, valid);
 }
 
 // Reflection motion remains owned by the physical foreground interface even when transmission later
@@ -1105,9 +1111,10 @@ float2 specularReflectionMotion(SpecSurface surface, float3 primaryDir,
     }
     float3 previousN = length(surface.previousNormal) >= 0.5
             ? normalize(surface.previousNormal) : n;
+    bool prevValid;
     float2 prevNdc = previousReflectionNdc(
-            surfacePos, previousN, reflectedHit, reflectedMotionPrev);
-    return (prevNdc - currentNdc) * 0.5 * size;
+            surfacePos, previousN, reflectedHit, reflectedMotionPrev, prevValid);
+    return prevValid ? (prevNdc - currentNdc) * 0.5 * size : float2(0.0, 0.0);
 }
 
 // Deterministic transmitted destination for clear-interface RR guides. The first interface has already
@@ -1133,11 +1140,10 @@ void resolveTransmissionGuide(float3 surfacePos, float3 transmittedDir,
     float3 direction = normalize(transmittedDir);
     // surfaceBiasNormal is a closest-hit normal, already unit length, and only its sign matters here.
     float3 ro = offsetSurfaceOrigin(surfacePos, surfaceBiasNormal, direction, rayBias);
-    uint guideVisibilityMask = CULL_PRIMARY;
     currentIor = max(currentIor, 1.0);
 
     for (uint crossing = 0u; crossing < MAX_TRANSMISSION_GUIDE_HITS; ++crossing) {
-        traceGuide(guideVisibilityMask, ro, RAY_TMIN, direction, 10000.0,
+        traceGuide(CULL_PRIMARY, ro, RAY_TMIN, direction, 10000.0,
                 rayConeWidth, rayConeSpread);
         if (payload.hitT <= 0.0) {
             setTransmissionGuide((ro + direction * 1.0e6) - worldPush.camOffset,
@@ -1177,12 +1183,21 @@ void resolveTransmissionGuide(float3 surfacePos, float3 transmittedDir,
         float targetIor = payloadDielectricEntering() ? max(payloadIor(), 1.0) : 1.0;
         float3 nextDirection = refract(direction, interfaceNormal, currentIor / targetIor);
         if (dot(nextDirection, nextDirection) <= 0.0) {
-            guideVisibilityMask = CULL_SECONDARY;
-            direction = normalize(reflect(direction, interfaceNormal));
-        } else {
-            direction = normalize(nextDirection);
-            currentIor = targetIor;
+            // Total internal reflection: there is no transmitted destination to describe, and following
+            // the reflection instead would be actively harmful. setTransmissionGuide marks its endpoint
+            // as its own feature, whose MV is that point's own reprojection delta — valid for a
+            // refracted point (the near-constant refraction offset cancels between frames) but WRONG for
+            // a mirror image, which sweeps at roughly twice the camera's rate and in the opposite sense.
+            // That produced motion vectors that grew with camera motion.
+            //
+            // Bailing leaves the foreground interface tuple the caller already wrote, which is what TIR
+            // physically deserves: F is 1, so specular albedo is 1 and diffuse albedo is 0, the pixel is
+            // pure reflection, and gSpecMotion already describes it with a proper mirror-image
+            // reprojection. Depth stays on the interface, which is the only real surface here.
+            return;
         }
+        direction = normalize(nextDirection);
+        currentIor = targetIor;
         ro = offsetSurfaceOrigin(
                 interfacePos, interfaceBiasNormal, direction, SURF_BIAS);
     }
@@ -1693,15 +1708,24 @@ void main() {
     // For a dynamic surface, previous-frame position is the current point minus its world-space
     // displacement; subtracting gv_motionObjDisp de-cameras the MV.
     float4 prevClip = mul(worldPush.prevViewProj, float4(gv_motionHitCamRel + worldPush.camDelta - gv_motionObjDisp, 1.0));
-    float2 prevNdc = prevClip.xy / prevClip.w;
     float2 curNdc = jndc; // primary hit's current screen position is exactly the jittered ray ndc
     // Transmitted content is its own feature: compare its previous and current projections rather than
     // subtracting the primary interface's jittered NDC.
-    if (gv_motionUseRefracted) {
-        float4 curClipRefr = mul(worldPush.curViewProj, float4(gv_motionHitCamRel, 1.0));
-        curNdc = curClipRefr.xy / curClipRefr.w;
+    float4 curClipMotion = gv_motionUseRefracted
+            ? mul(worldPush.curViewProj, float4(gv_motionHitCamRel, 1.0))
+            : float4(0.0, 0.0, 0.0, 1.0); // unused; keeps the guard below uniform
+    // Guard both perspective divides the way the depth above does. A guide point can land behind either
+    // camera — most easily a transmitted destination seen at a grazing angle, or one that leaves the
+    // frustum as the camera turns — and w at or below zero turns the divide into an arbitrarily large
+    // vector that DLSS-RR reprojects with. No valid previous position exists in that case, so report no
+    // motion and let RR fall back instead of handing it garbage.
+    float2 motion;
+    if (prevClip.w > 0.0 && (!gv_motionUseRefracted || curClipMotion.w > 0.0)) {
+        if (gv_motionUseRefracted) curNdc = curClipMotion.xy / curClipMotion.w;
+        motion = (prevClip.xy / prevClip.w - curNdc) * 0.5 * size;
+    } else {
+        motion = float2(0.0, 0.0);
     }
-    float2 motion = (prevNdc - curNdc) * 0.5 * size;
 
     // Guide buffers: first-hit or coherently replaced attributes consumed by the denoiser/DLSS-RR.
     gNormal[pix] = float4(gv_normal, gv_rough);
