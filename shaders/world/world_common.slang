@@ -8,6 +8,7 @@ module world_common;
 // scalarBlockLayout device feature. Keep std430 unless RtDeviceBringup explicitly enables that feature;
 // this alias is the single layout switch and generated Java serialization stays in lock-step.
 public typealias ConstPtr<T> = Ptr<T, Access.Read, AddressSpace.Device, Std430DataLayout>;
+public typealias DevicePtr<T> = Ptr<T, Access.ReadWrite, AddressSpace.Device, Std430DataLayout>;
 
 // Push constant block. The hot inline lanes avoid dereferencing WorldPush for values that are read in
 // hit shaders or used for raygen control flow — every 64-bit device address lives here for exactly that
@@ -25,6 +26,7 @@ public struct WorldPushConstants {
     public uint64_t lightLocalAliasAddr; // power aliases relative to each section's range
     public uint64_t lightGridCellAddr;   // dense light grid cell headers (0 = global proposals only)
     public uint64_t lightGridSpanAddr;   // packed weighted section spans referenced by cell headers
+    public uint64_t pathQueueAddr;       // packed primary -> indirect continuation records
     public uint frameIndex;
     public uint debugView;
 };

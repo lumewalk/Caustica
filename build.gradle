@@ -160,11 +160,14 @@ abstract class CompileShaders extends DefaultTask {
 			def base = outBase(src)
 			def spv = new File(scratchDir, "${base}.spv")
 			if (src.name.endsWith(".slang")) {
-				// Build both SER encodings from one source; RtDeviceBringup selects the supported variant.
-				compileOneSlang(src, spv, base == "world.rgen"
+				// Build both SER encodings for the two world raygens; RtDeviceBringup selects the
+				// supported variant for both passes.
+				def worldRaygen = base == "world.rgen" || base == "world_primary.rgen"
+				compileOneSlang(src, spv, worldRaygen
 						? ["-capability", "spvShaderInvocationReorderEXT"] : [])
-				if (base == "world.rgen") {
-					compileOneSlang(src, new File(scratchDir, "world_nv.rgen.spv"),
+				if (worldRaygen) {
+					def nvBase = base == "world.rgen" ? "world_nv.rgen.spv" : "world_primary_nv.rgen.spv"
+					compileOneSlang(src, new File(scratchDir, nvBase),
 							["-capability", "spvShaderInvocationReorderNV"])
 				}
 			} else {

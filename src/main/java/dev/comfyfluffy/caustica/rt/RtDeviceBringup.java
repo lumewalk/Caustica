@@ -216,17 +216,22 @@ public final class RtDeviceBringup {
             RAY_QUERY_FEATURE);
 
     private enum SerBackend {
-        NONE("none", null, "world.rgen.spv"),
-        NV("NV", VK_NV_RAY_TRACING_INVOCATION_REORDER_EXTENSION_NAME, "world_nv.rgen.spv"),
-        EXT("EXT", VK_EXT_RAY_TRACING_INVOCATION_REORDER_EXTENSION_NAME, "world.rgen.spv");
+        NONE("none", null, "world_primary.rgen.spv", "world.rgen.spv"),
+        NV("NV", VK_NV_RAY_TRACING_INVOCATION_REORDER_EXTENSION_NAME,
+                "world_primary_nv.rgen.spv", "world_nv.rgen.spv"),
+        EXT("EXT", VK_EXT_RAY_TRACING_INVOCATION_REORDER_EXTENSION_NAME,
+                "world_primary.rgen.spv", "world.rgen.spv");
 
         final String label;
         final String extensionName;
+        final String worldPrimaryRaygenShader;
         final String worldRaygenShader;
 
-        SerBackend(String label, String extensionName, String worldRaygenShader) {
+        SerBackend(String label, String extensionName, String worldPrimaryRaygenShader,
+                   String worldRaygenShader) {
             this.label = label;
             this.extensionName = extensionName;
+            this.worldPrimaryRaygenShader = worldPrimaryRaygenShader;
             this.worldRaygenShader = worldRaygenShader;
         }
     }
@@ -248,6 +253,10 @@ public final class RtDeviceBringup {
 
     public static String worldRaygenShader() {
         return serBackend.worldRaygenShader;
+    }
+
+    public static String worldPrimaryRaygenShader() {
+        return serBackend.worldPrimaryRaygenShader;
     }
 
     public static boolean serNvEnabled() {

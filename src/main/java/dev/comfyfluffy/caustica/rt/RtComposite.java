@@ -95,6 +95,7 @@ public final class RtComposite {
     // Hot addresses/frameIndex and raygen's debugView avoid unnecessary global-memory dereferences;
     // WorldPushConstantsData is generated from the same Slang module and owns this second ABI as well.
     private static final int GUIDE_COUNT = 6; // RR guide buffers bound at world-pipeline bindings 3..8
+    private static final long PATH_RECORD_BYTES = 48L;
     private static int debugView() {
         return CausticaConfig.Rt.Composite.DEBUG_VIEW.value();
     }
@@ -179,6 +180,10 @@ public final class RtComposite {
     private int pushSlot;
     private RtDisplayPipeline displayPipeline;
     private RtImage output;
+    // Packed primary -> indirect continuations. M1 stores one record per render pixel per configured
+    // sample; the indirect dispatch keeps one invocation per pixel and consumes that pixel's records.
+    private RtBuffer continuationQueue;
+    private int continuationQueueSpp = -1;
     private RtImage displayImage;
     // Parallel PQ-encoded ([0,1], ST.2084) HDR display image. Written alongside displayImage when HDR is
     // enabled. When the PQ swapchain is active, the combined UI overlay is composited over this image, then
@@ -521,7 +526,9 @@ public final class RtComposite {
     private RtPipeline ensureWorld(RtContext ctx) {
         if (worldPipeline == null) {
             bindlessTextureCapacity = RtEntityTextures.maxTextures();
-            worldPipeline = RtPipeline.create(ctx, new String[]{RtDeviceBringup.worldRaygenShader()},
+            worldPipeline = RtPipeline.create(ctx, new String[]{
+                            RtDeviceBringup.worldPrimaryRaygenShader(),
+                            RtDeviceBringup.worldRaygenShader()},
                     new String[]{"world.rmiss.spv", "world_guide.rmiss.spv"},
                     "world.rchit.spv", "world.rahit.spv",
                     WorldPushConstantsData.BYTE_SIZE, true, GUIDE_COUNT, bindlessTextureCapacity, true);
@@ -690,8 +697,11 @@ public final class RtComposite {
     private void ensureOutput(RtContext ctx, int width, int height) {
         boolean rrEnabled = RtDlssRr.enabled();
         int rrQuality = rrEnabled ? RtDlssRr.quality() : Integer.MIN_VALUE;
-        if (output != null && displayImage != null && hdrDisplayImage != null && rrOutput != null && exposure.ready()
+        int desiredSpp = Math.max(spp(), 1);
+        if (output != null && continuationQueue != null
+                && displayImage != null && hdrDisplayImage != null && rrOutput != null && exposure.ready()
                 && displayW == width && displayH == height
+                && continuationQueueSpp == desiredSpp
                 && renderSizeRrEnabled == rrEnabled && renderSizeRrQuality == rrQuality) {
             return;
         }
@@ -704,6 +714,10 @@ public final class RtComposite {
         }
         if (output != null) {
             output.destroy();
+        }
+        if (continuationQueue != null) {
+            continuationQueue.destroy();
+            continuationQueue = null;
         }
         destroyGuideImages();
 
@@ -724,6 +738,13 @@ public final class RtComposite {
         // mapping seam. displayImage stays R8G8B8A8 to match the main target it is copied into
         // (vkCmdCopyImage requires texel-size-compatible formats).
         output = ctx.createStorageImage(renderW, renderH, VK10.VK_FORMAT_R16G16B16A16_SFLOAT, "trace color " + renderW + "x" + renderH);
+        continuationQueueSpp = desiredSpp;
+        long continuationBytes = Math.multiplyExact(
+                Math.multiplyExact((long) renderW, (long) renderH),
+                Math.multiplyExact((long) continuationQueueSpp, PATH_RECORD_BYTES));
+        continuationQueue = ctx.createBuffer(continuationBytes,
+                VK10.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, false,
+                "path continuation queue " + renderW + "x" + renderH + "x" + continuationQueueSpp);
         displayImage = ctx.createStorageImage(width, height, VK10.VK_FORMAT_R8G8B8A8_UNORM, "RT display image " + width + "x" + height);
         // PQ-encoded ([0,1], ST.2084) HDR display image, written in parallel by display.comp when HDR mode is active.
         hdrDisplayImage = ctx.createStorageImage(width, height, VK10.VK_FORMAT_R16G16B16A16_SFLOAT, "RT HDR display image " + width + "x" + height);
@@ -936,11 +957,16 @@ public final class RtComposite {
                     RtMaterialRegistry.INSTANCE.tableAddress(),
                     terrain.lightBufferAddress(), terrain.lightAliasBufferAddress(),
                     terrain.lightLocalAliasBufferAddress(), terrain.lightGridCellBufferAddress(),
-                    terrain.lightGridSpanBufferAddress(),
+                    terrain.lightGridSpanBufferAddress(), continuationQueue.deviceAddress,
                     (int) frameCounter, debugView).write(pushConstants);
-            try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd, "world trace");
-                 RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage("frame.trace")) {
-                active.trace(cmd, renderW, renderH, pushConstants);
+            try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd, "world primary trace");
+                 RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage("frame.tracePrimary")) {
+                active.trace(cmd, renderW, renderH, pushConstants, 0);
+            }
+            VulkanCommandEncoder.memoryBarrier(cmd, stack); // continuation/guide writes visible to pass B
+            try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd, "world indirect trace");
+                 RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage("frame.traceIndirect")) {
+                active.trace(cmd, renderW, renderH, pushConstants, 1);
             }
             VulkanCommandEncoder.memoryBarrier(cmd, stack); // RT writes visible to DLSS reads
             // DLSS-RR denoise + upscale. The RT pass wrote noisy color (render res) + guides;
@@ -1222,6 +1248,11 @@ public final class RtComposite {
         if (output != null) {
             output.destroy();
             output = null;
+        }
+        if (continuationQueue != null) {
+            continuationQueue.destroy();
+            continuationQueue = null;
+            continuationQueueSpp = -1;
         }
         destroyGuideImages();
         exposure.destroy();

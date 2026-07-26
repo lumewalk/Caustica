@@ -149,7 +149,8 @@ dispatch for the common single-segment case and only spill splits — measure be
 - [x] Step 2 (single instantiation + guide hoist) — `b4a0e7b`, **GPU-tested: 21 ms -> 47 ms, REGRESSION**
       (kept deliberately; the split is its fix, see §0.1)
 - [x] M0 plumbing — `d76f450`, multiple raygens per pipeline, no behaviour change
-- [ ] no-reorder A/B (prerequisite, independent)
-- [ ] M1 split
+- [ ] no-reorder A/B (prerequisite, independent; intentionally skipped for this work)
+- [x] M1 split — 48 B packed records, primary/guide + indirect dispatches, stochastic dielectric
+      fallback. **GPU-tested: primary 4.4 ms + indirect 9.8 ms = 14.2 ms**, versus the 21 ms baseline.
 - [ ] M2 splits restored
 - [ ] M3 measure
