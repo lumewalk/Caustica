@@ -82,6 +82,7 @@ public final class RtPipeline {
     private final long pipeline;
     private final RtBuffer sbt;
     private final long sbtStride;
+    private final int raygenCount;
     private final int missCount;
     private final int hitGroupCount;
     private final int pushConstantSize;
@@ -96,7 +97,7 @@ public final class RtPipeline {
     private final int skyAtlasBinding;
     private boolean destroyed;
 
-    private RtPipeline(RtContext ctx, long dsl, long pool, long[] sets, long layout, long pipeline, RtBuffer sbt, long stride, int missCount, int hitGroupCount, int pushConstantSize, int pushConstantStages, int firstExtraBinding,
+    private RtPipeline(RtContext ctx, long dsl, long pool, long[] sets, long layout, long pipeline, RtBuffer sbt, long stride, int raygenCount, int missCount, int hitGroupCount, int pushConstantSize, int pushConstantStages, int firstExtraBinding,
                        long bindlessLayout, long bindlessPool, long bindlessSet, int skyAtlasBinding) {
         this.ctx = ctx;
         this.descriptorSetLayout = dsl;
@@ -111,6 +112,7 @@ public final class RtPipeline {
         this.pipeline = pipeline;
         this.sbt = sbt;
         this.sbtStride = stride;
+        this.raygenCount = raygenCount;
         this.missCount = missCount;
         this.hitGroupCount = hitGroupCount;
         this.pushConstantSize = pushConstantSize;
@@ -128,8 +130,12 @@ public final class RtPipeline {
      * constants: radiance records first, shadow records second, then entity records. {@code extraStorageImages}
      * adds that many raygen-visible storage images at bindings 3.. (the DLSS-RR guide buffers);
      * write them with {@link #setExtraStorageImage}.
+     *
+     * <p>{@code rgen} may hold several raygen shaders. They share this pipeline's descriptor set, miss
+     * table and hit table; {@link #trace(VkCommandBuffer, int, int, ByteBuffer, int)} picks one per
+     * dispatch by index.
      */
-    public static RtPipeline create(RtContext ctx, String rgen, String[] rmiss, String rchit, String rahit, int pushConstantSize, boolean withBlockAlbedoAtlas, int extraStorageImages, int bindlessTextures, boolean skyAtlas) {
+    public static RtPipeline create(RtContext ctx, String[] rgen, String[] rmiss, String rchit, String rahit, int pushConstantSize, boolean withBlockAlbedoAtlas, int extraStorageImages, int bindlessTextures, boolean skyAtlas) {
         VkDevice vk = ctx.vk();
         boolean hasAhit = rahit != null;
         String label = "world RT pipeline";
@@ -260,17 +266,24 @@ public final class RtPipeline {
             long layout = p.get(0);
             RtDebugLabels.name(ctx, VK10.VK_OBJECT_TYPE_PIPELINE_LAYOUT, layout, label + " pipeline layout");
 
-            // Stages: raygen, one miss per rmiss entry, the closest-hit, then (optionally) the any-hit.
-            // Groups are raygen + N miss + the hit records selected by traceRayEXT's SBT offset/stride.
+            // Stages: one per rgen entry, one miss per rmiss entry, the closest-hit, then (optionally)
+            // the any-hit. Groups are N raygen + M miss + the hit records selected by traceRayEXT's SBT
+            // offset/stride. Multiple raygens share one pipeline and are selected at dispatch by pointing
+            // the raygen SBT region at a different record — that is how the primary/guide pass and the
+            // indirect pass coexist without duplicating the hit and miss tables.
+            int raygenCount = rgen.length;
             int missCount = rmiss.length;
             int hitGroupCount = hasAhit ? RtAccel.SBT_HIT_GROUP_COUNT : 1;
-            int groupCount = 1 + missCount + hitGroupCount;
-            int hitGroupIdx = 1 + missCount;
-            int chitStage = 1 + missCount;
+            int groupCount = raygenCount + missCount + hitGroupCount;
+            int hitGroupIdx = raygenCount + missCount;
+            int chitStage = raygenCount + missCount;
             int ahitStage = chitStage + 1;
-            int stageCount = 1 + missCount + 1 + (hasAhit ? 1 : 0);
-            long mGen = loadModule(vk, stack, rgen);
-            RtDebugLabels.name(ctx, VK10.VK_OBJECT_TYPE_SHADER_MODULE, mGen, label + " " + rgen);
+            int stageCount = raygenCount + missCount + 1 + (hasAhit ? 1 : 0);
+            long[] mGen = new long[raygenCount];
+            for (int g = 0; g < raygenCount; g++) {
+                mGen[g] = loadModule(vk, stack, rgen[g]);
+                RtDebugLabels.name(ctx, VK10.VK_OBJECT_TYPE_SHADER_MODULE, mGen[g], label + " " + rgen[g]);
+            }
             long[] mMiss = new long[missCount];
             for (int m = 0; m < missCount; m++) {
                 mMiss[m] = loadModule(vk, stack, rmiss[m]);
@@ -284,9 +297,11 @@ public final class RtPipeline {
             }
             ByteBuffer entry = stack.UTF8("main");
             VkPipelineShaderStageCreateInfo.Buffer stages = VkPipelineShaderStageCreateInfo.calloc(stageCount, stack);
-            stages.get(0).sType$Default().stage(VK_SHADER_STAGE_RAYGEN_BIT_KHR).module(mGen).pName(entry);
+            for (int g = 0; g < raygenCount; g++) {
+                stages.get(g).sType$Default().stage(VK_SHADER_STAGE_RAYGEN_BIT_KHR).module(mGen[g]).pName(entry);
+            }
             for (int m = 0; m < missCount; m++) {
-                stages.get(1 + m).sType$Default().stage(VK_SHADER_STAGE_MISS_BIT_KHR).module(mMiss[m]).pName(entry);
+                stages.get(raygenCount + m).sType$Default().stage(VK_SHADER_STAGE_MISS_BIT_KHR).module(mMiss[m]).pName(entry);
             }
             stages.get(chitStage).sType$Default().stage(VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR).module(mHit).pName(entry);
             if (hasAhit) {
@@ -294,11 +309,13 @@ public final class RtPipeline {
             }
 
             VkRayTracingShaderGroupCreateInfoKHR.Buffer groups = VkRayTracingShaderGroupCreateInfoKHR.calloc(groupCount, stack);
-            groups.get(0).sType$Default().type(VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR)
-                    .generalShader(0).closestHitShader(VK_SHADER_UNUSED_KHR).anyHitShader(VK_SHADER_UNUSED_KHR).intersectionShader(VK_SHADER_UNUSED_KHR);
+            for (int g = 0; g < raygenCount; g++) {
+                groups.get(g).sType$Default().type(VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR)
+                        .generalShader(g).closestHitShader(VK_SHADER_UNUSED_KHR).anyHitShader(VK_SHADER_UNUSED_KHR).intersectionShader(VK_SHADER_UNUSED_KHR);
+            }
             for (int m = 0; m < missCount; m++) {
-                groups.get(1 + m).sType$Default().type(VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR)
-                        .generalShader(1 + m).closestHitShader(VK_SHADER_UNUSED_KHR).anyHitShader(VK_SHADER_UNUSED_KHR).intersectionShader(VK_SHADER_UNUSED_KHR);
+                groups.get(raygenCount + m).sType$Default().type(VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR)
+                        .generalShader(raygenCount + m).closestHitShader(VK_SHADER_UNUSED_KHR).anyHitShader(VK_SHADER_UNUSED_KHR).intersectionShader(VK_SHADER_UNUSED_KHR);
             }
             for (int h = 0; h < hitGroupCount; h++) {
                 groups.get(hitGroupIdx + h).sType$Default().type(VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR)
@@ -320,7 +337,9 @@ public final class RtPipeline {
             long pipeline = pPipeline.get(0);
             RtDebugLabels.name(ctx, VK10.VK_OBJECT_TYPE_PIPELINE, pipeline, label);
 
-            VK10.vkDestroyShaderModule(vk, mGen, null);
+            for (int g = 0; g < raygenCount; g++) {
+                VK10.vkDestroyShaderModule(vk, mGen[g], null);
+            }
             for (int m = 0; m < missCount; m++) {
                 VK10.vkDestroyShaderModule(vk, mMiss[m], null);
             }
@@ -347,7 +366,7 @@ public final class RtPipeline {
                 MemoryUtil.memCopy(MemoryUtil.memAddress(handles) + (long) g * handleSize, sbt.mapped + g * stride, handleSize);
             }
             sbt.flush();
-            return new RtPipeline(ctx, dsl, pool, sets, layout, pipeline, sbt, stride, missCount, hitGroupCount, pushConstantSize, pcStages, firstExtraBinding,
+            return new RtPipeline(ctx, dsl, pool, sets, layout, pipeline, sbt, stride, raygenCount, missCount, hitGroupCount, pushConstantSize, pcStages, firstExtraBinding,
                     bindlessLayout, bindlessPool, bindlessSet, skyBinding);
         }
     }
@@ -479,11 +498,22 @@ public final class RtPipeline {
     }
 
     public void trace(VkCommandBuffer cmd, int width, int height) {
-        trace(cmd, width, height, null);
+        trace(cmd, width, height, null, 0);
     }
 
-    /** Record bind (+ optional raygen push constants) + trace into the given command buffer. */
     public void trace(VkCommandBuffer cmd, int width, int height, java.nio.ByteBuffer pushConstants) {
+        trace(cmd, width, height, pushConstants, 0);
+    }
+
+    /**
+     * Record bind (+ optional raygen push constants) + trace into the given command buffer.
+     * {@code raygenIndex} selects which raygen record of the SBT this dispatch launches; the miss and
+     * hit regions are shared, so passes over the same scene differ only in this index.
+     */
+    public void trace(VkCommandBuffer cmd, int width, int height, java.nio.ByteBuffer pushConstants, int raygenIndex) {
+        if (raygenIndex < 0 || raygenIndex >= raygenCount) {
+            throw new IllegalArgumentException("raygen index " + raygenIndex + " out of range [0, " + raygenCount + ")");
+        }
         try (MemoryStack stack = MemoryStack.stackPush(); RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd, "trace rays")) {
             VK10.vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, pipeline);
             java.nio.LongBuffer boundSets = bindlessSet != 0L
@@ -493,12 +523,14 @@ public final class RtPipeline {
             if (pushConstants != null && pushConstantSize > 0) {
                 VK10.vkCmdPushConstants(cmd, pipelineLayout, pushConstantStages, 0, pushConstants);
             }
+            // The raygen region must name exactly one record (size == stride), so selecting a pass is a
+            // matter of which record it points at.
             VkStridedDeviceAddressRegionKHR raygen = VkStridedDeviceAddressRegionKHR.calloc(stack)
-                    .deviceAddress(sbt.deviceAddress).stride(sbtStride).size(sbtStride);
+                    .deviceAddress(sbt.deviceAddress + (long) raygenIndex * sbtStride).stride(sbtStride).size(sbtStride);
             VkStridedDeviceAddressRegionKHR miss = VkStridedDeviceAddressRegionKHR.calloc(stack)
-                    .deviceAddress(sbt.deviceAddress + sbtStride).stride(sbtStride).size((long) missCount * sbtStride);
+                    .deviceAddress(sbt.deviceAddress + (long) raygenCount * sbtStride).stride(sbtStride).size((long) missCount * sbtStride);
             VkStridedDeviceAddressRegionKHR hit = VkStridedDeviceAddressRegionKHR.calloc(stack)
-                    .deviceAddress(sbt.deviceAddress + (1L + missCount) * sbtStride).stride(sbtStride).size((long) hitGroupCount * sbtStride);
+                    .deviceAddress(sbt.deviceAddress + (long) (raygenCount + missCount) * sbtStride).stride(sbtStride).size((long) hitGroupCount * sbtStride);
             VkStridedDeviceAddressRegionKHR callable = VkStridedDeviceAddressRegionKHR.calloc(stack);
             vkCmdTraceRaysKHR(cmd, raygen, miss, hit, callable, width, height, 1);
         }
