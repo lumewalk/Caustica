@@ -1,0 +1,119 @@
+// Ray dispatch: SBT/cull constants, payload construction, and the three ways this renderer casts a
+// ray — reordered radiance, non-reordered guide probe, and shadow visibility. Depends on rt_core.
+
+// receiver billboards only. The first-person camera owner uses 0x01 (secondary only).
+static const uint CULL_SECONDARY = 0x01u;
+static const uint CULL_PRIMARY = 0x02u;
+static const uint TERRAIN_BUCKETS = 4u;
+static const uint SBT_RADIANCE = 0u;
+static const uint SBT_SHADOW = TERRAIN_BUCKETS;
+static const uint SBT_STRIDE_BUCKET = 1u;
+static const uint MISS_RADIANCE = 0u;
+static const uint MISS_GUIDE = 1u;
+
+RayDesc makeRay(float3 origin, float tmin, float3 dir, float tmax) {
+    RayDesc r;
+    r.Origin = origin;
+    r.TMin = tmin;
+    r.Direction = dir;
+    r.TMax = tmax;
+    return r;
+}
+
+float3 offsetSurfaceOrigin(float3 position, float3 surfaceNormal,
+                           float3 outgoingDirection, float bias) {
+    float3 sideNormal = dot(surfaceNormal, outgoingDirection) >= 0.0
+            ? surfaceNormal : -surfaceNormal;
+    return position + sideNormal * bias;
+}
+
+// A radiance payload carrying only the two words the invoked hit/miss shader READS: `flags`
+// (show-celestial gate, consumed by world.rmiss) and the packed ray cone (consumed by world.rchit for
+// texture LOD). Every other member is an OUTPUT that world.rchit/world.rmiss write, so it carries no
+// information into a trace and is initialized to a neutral value here.
+Payload makeRadiancePayload(uint flags, uint rayCone) {
+    Payload p;
+    p.albedo = half3(0.0h, 0.0h, 0.0h);
+    p.normal = half3(0.0h, 0.0h, 0.0h);
+    p.hitT = -1.0; // miss sentinel: world.rmiss writes only albedo, so a miss leaves this negative
+    p.motionPrev = half3(0.0h, 0.0h, 0.0h);
+    p.f0 = half3(0.0h, 0.0h, 0.0h);
+    p.flags = flags;
+    p.roughMetal = 0u;
+    p.emissionSss = 0u;
+    p.iorTransmission = 0u;
+    p.rayCone = rayCone;
+    return p;
+}
+
+// SER radiance trace: trace into a hit object, reorder threads by hit coherence, THEN invoke the
+// hit/miss shader — this is where the divergent Section/Prim shading work (world.rchit/world.rahit)
+// actually happens, so reordering before it is what pays for the reorder's own cost.
+//
+// The payload is built TWICE from the trace state rather than carried across ReorderThread. Traversal
+// runs only world.rahit, which never writes a RADIANCE payload: its terrain tint paths live in the
+// translucent/water buckets, which carry no any-hit record for radiance rays, and its entity paths are
+// gated on RAY_FLAG_SKIP_CLOSEST_HIT_SHADER. So whatever TraceRay leaves in the payload holds no
+// information. Reading it back and carrying it over would pin all ten members — 72 bytes — in registers
+// across the one point where SER must spill every live value, which profiling showed to be the peak
+// live state in this shader. Rebuilding costs a few constant moves and leaves only these two words
+// spanning the reorder.
+void traceRadianceReordered(uint cullMask, float3 ro, float tmin, float3 rd, float tmax,
+                            bool showCelestial, float rayConeWidth, float rayConeSpread) {
+    uint flags = showCelestial ? PAYLOAD_SHOW_CELESTIAL : 0u;
+    uint rayCone = packHalf2(float2(rayConeWidth, rayConeSpread));
+    Payload tracePayload = makeRadiancePayload(flags, rayCone);
+    HitObject hObj = HitObject::TraceRay(topLevelAS, RAY_FLAG_NONE, cullMask,
+            SBT_RADIANCE, SBT_STRIDE_BUCKET, MISS_RADIANCE,
+            makeRay(ro, tmin, rd, tmax), tracePayload);
+    ReorderThread(hObj);
+    payload = makeRadiancePayload(flags, rayCone);
+    HitObject::Invoke(topLevelAS, hObj, payload);
+}
+
+// Auxiliary RR probes deliberately use ordinary TraceRay. They are one-off, incoherent rays whose
+// result is consumed immediately, so paying a reorder barrier and carrying guide state across it only
+// adds latency. The dedicated miss record also avoids the atmosphere march: guides need hit-vs-miss,
+// not sky radiance.
+void traceGuide(uint cullMask, float3 ro, float tmin, float3 rd, float tmax,
+                float rayConeWidth, float rayConeSpread) {
+    payload = makeRadiancePayload(0u, packHalf2(float2(rayConeWidth, rayConeSpread)));
+    TraceRay(topLevelAS, RAY_FLAG_NONE, cullMask, SBT_RADIANCE, SBT_STRIDE_BUCKET,
+            MISS_GUIDE, makeRay(ro, tmin, rd, tmax), payload);
+}
+
+Payload makeShadowPayload() {
+    Payload shadowPayload;
+    shadowPayload.albedo = half3(1.0h, 1.0h, 1.0h);
+    shadowPayload.hitT = -1.0; // water-crossing sentinel, filled by the water any-hit
+    shadowPayload.normal = half3(0.0h, 0.0h, 0.0h);
+    shadowPayload.motionPrev = half3(0.0h, 0.0h, 0.0h);
+    shadowPayload.f0 = half3(0.0h, 0.0h, 0.0h);
+    shadowPayload.flags = 0u;
+    shadowPayload.roughMetal = 0u;
+    shadowPayload.emissionSss = 0u;
+    shadowPayload.iorTransmission = 0u;
+    shadowPayload.rayCone = 0u;
+    return shadowPayload;
+}
+
+VisibilityResult visibility(float3 origin, float3 dir, float tmax) {
+    // Vulkan requires an identical payload structure for every stage reachable by this trace. The shadow
+    // path uses only albedo as accumulated transmittance and hitT as the nearest-water crossing.
+    Payload shadowPayload = makeShadowPayload();
+    // Shadow SBT records run any-hit only for cutout/translucent/water. Cutout alpha-tests; translucent
+    // and water tint shadowPayload.albedo and pass through. Solid blocks terminate traversal. There is no
+    // closest or miss shader worth executing, so use a hit object only as the traversal result.
+    HitObject hObj = HitObject::TraceRay(topLevelAS,
+            RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER,
+            CULL_SECONDARY, SBT_SHADOW, SBT_STRIDE_BUCKET, 0u,
+            makeRay(origin, RAY_TMIN, dir, tmax), shadowPayload);
+    VisibilityResult result;
+    result.transmittance = hObj.IsMiss() ? shadowPayload.albedo : float3(0.0, 0.0, 0.0);
+    result.waterHitT = shadowPayload.hitT;
+    return result;
+}
+
+// `valid` is false when the point projects behind the previous camera, where the perspective divide
+// would otherwise manufacture an arbitrarily large NDC. Mirror images reach that case easily: a virtual
+// image sits as far behind the reflector as the source is in front, so a reflection seen at a grazing
