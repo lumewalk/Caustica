@@ -53,8 +53,6 @@ struct VisibilityResult {
 static float3 gv_normal;
 static float3 gv_albedo;
 static float gv_rough;
-// Linear VIEW-SPACE depth guide inputs; sky resolves to a large far value (no negative sentinel).
-static float gv_depth;
 static float3 gv_hitCamRel;       // primary-surface hit position relative to the current camera
 static float3 gv_motionHitCamRel; // motion-guide hit position; water tracks the refracted hit instead
 static bool gv_motionUseRefracted; // true when the MV tracks the refracted hit (its own reprojection delta)
@@ -92,11 +90,6 @@ SpecSurface makeSpecSurface(float3 camRel, float3 normal, float roughness, float
     return makeSpecSurface(camRel, normal, normal, normal, roughness, albedo);
 }
 
-// Per-call control/results for the primary dielectric estimator. Ordinary pixels still trace once;
-// a primary glass/water hit traces both Fresnel continuations and recombines them exactly.
-static uint pathPrimaryDielectricBranch;
-static bool pathPrimaryDielectricHit;
-static float pathPrimaryDielectricF;
 
 uint payloadMaterial() { return payload.flags & PAYLOAD_MATERIAL_MASK; }
 // Set by world.rchit on any dielectric hit (see PAYLOAD_DIELECTRIC_ENTERING) — whether the ray was
@@ -214,6 +207,49 @@ void mediumPush(inout MediumStack stack, Medium entered) {
 void mediumPop(inout MediumStack stack) {
     stack.current = stack.outer;
     stack.outer = airMedium();
+}
+
+// Everything needed to resume tracing from a point in the scene. The path tracer takes one of these and
+// may hand back another, which is how a dielectric's two Fresnel continuations are traced without
+// instantiating the path tracer twice: the second branch is DATA, not a second inlined copy. `throughput`
+// already carries the branch weight, so segments are simply summed.
+//
+// This is deliberately shaped like a record that could live in a buffer rather than a register: the
+// planned split into a primary/guide pass and an indirect pass hands continuations between dispatches,
+// and this is the payload it would write.
+struct PathSegment {
+    float3 ro;
+    float3 rd;
+    float3 throughput;
+    MediumStack medium;
+    float rayConeWidth;
+    float rayConeSpread;
+    uint seed;
+    int bounce;          // interfaces already consumed, so RR start and the bounce cap stay global
+    int diffuseDepth;    // surfaces already SHADED (see the field of the same name in tracePath)
+    bool showCelestial;
+    bool captureGuides;
+    bool maySplit;       // may still spawn a deterministic Fresnel branch
+};
+
+PathSegment makePathSegment(float3 ro, float3 rd, float3 throughput, MediumStack medium,
+                            float rayConeWidth, float rayConeSpread, uint seed,
+                            int bounce, int diffuseDepth, bool showCelestial,
+                            bool captureGuides, bool maySplit) {
+    PathSegment s;
+    s.ro = ro;
+    s.rd = rd;
+    s.throughput = throughput;
+    s.medium = medium;
+    s.rayConeWidth = rayConeWidth;
+    s.rayConeSpread = rayConeSpread;
+    s.seed = seed;
+    s.bounce = bounce;
+    s.diffuseDepth = diffuseDepth;
+    s.showCelestial = showCelestial;
+    s.captureGuides = captureGuides;
+    s.maySplit = maySplit;
+    return s;
 }
 
 // Water's tint is a biome colour whose absorption is calibrated per block of depth; any other volume
@@ -393,9 +429,9 @@ static const float MIRROR_ALPHA_MAX = 4.0e-4; // LabPBR perceptual smoothness >=
 // reflection MV is left at zero and RR falls back to the ordinary MV.
 static const float SPEC_MOTION_ALPHA_MAX = 0.25; // perceptual smoothness <= 0.5
 static const uint MAX_TRANSMISSION_GUIDE_HITS = 8u;
-static const uint PRIMARY_DIELECTRIC_RANDOM = 0u;
-static const uint PRIMARY_DIELECTRIC_TRANSMISSION = 1u;
-static const uint PRIMARY_DIELECTRIC_REFLECTION = 2u;
+// Continuations one sample may carry: the camera segment, plus the reflection branch a primary
+// dielectric splits off. Raising this needs a real queue, which is what the continuation buffer is for.
+static const uint MAX_PATH_SEGMENTS = 2u;
 
 float luminance(float3 c) { return dot(c, float3(0.2126, 0.7152, 0.0722)); }
 
@@ -1199,14 +1235,19 @@ void resolveTransmissionGuide(float3 surfacePos, float3 transmittedDir,
 }
 
 // One Monte Carlo path from (ro, rd). Returns accumulated radiance along the path.
-float3 tracePath(float3 ro, float3 rd, float primaryConeSpread, uint2 pix, uint sampleIndex,
-                 bool captureGuides, inout uint seed) {
+float3 tracePath(PathSegment seg, uint2 pix, uint sampleIndex,
+                 out PathSegment pending, out bool hasPending) {
     float3 L = float3(0.0, 0.0, 0.0);
-    float3 throughput = float3(1.0, 1.0, 1.0);
-    pathPrimaryDielectricHit = false;
-    pathPrimaryDielectricF = 0.0;
-    float rayConeWidth = 0.0;
-    float rayConeSpread = max(primaryConeSpread, RAY_CONE_MIN_SPREAD);
+    float3 ro = seg.ro;
+    float3 rd = seg.rd;
+    float3 throughput = seg.throughput;
+    uint seed = seg.seed;
+    bool captureGuides = seg.captureGuides;
+    bool maySplit = seg.maySplit;
+    pending = seg;      // `out` must be written on every path; hasPending gates whether it is read
+    hasPending = false;
+    float rayConeWidth = seg.rayConeWidth;
+    float rayConeSpread = max(seg.rayConeSpread, RAY_CONE_MIN_SPREAD);
     int maxBounces = int(worldPush.maxBounces);
     int rrStart = maxBounces <= 3 ? 1 : 2;
     // RIS emitter NEE: direct lighting from block emitters is active when lights are published and the
@@ -1219,24 +1260,22 @@ float3 tracePath(float3 ro, float3 rd, float primaryConeSpread, uint2 pix, uint 
     uint proposalSeed = pix.x * 1973u + pix.y * 9277u + 26699u
             ^ worldPush.frameIndex * 2654435761u ^ sampleIndex * 2246822519u;
     proposalSeed = pcg(proposalSeed);
-    // Start submerged if the camera is in water, so the first segment already carries the right relative
-    // index and absorption when the eye is underwater. The camera-biome tint is the correct extinction
-    // until the first water surface is crossed, after which each hit supplies its own body's tint.
-    MediumStack medium = makeMediumStack((worldPush.flags & 1u) != 0u
-            ? makeDielectricMedium(true, WATER_IOR, worldPush.waterParams.xyz, 1.0)
-            : airMedium());
+    // The medium the segment starts in. For the camera segment that is water when the eye is submerged
+    // (so the first ray already carries the right relative index and absorption); for a segment split off
+    // a dielectric it is whatever the parent was travelling through.
+    MediumStack medium = seg.medium;
     bool waterWaves = (worldPush.flags & 16u) != 0u; // animated wave-normal perturbation
     // Sky-disc gate (see world.rmiss): the sun/moon disc is shown to the primary ray and to rays spawned
     // by a specular/dielectric bounce (mirror reflections + refractions of the sun/moon), but hidden from
     // diffuse-sampled continuation rays — those are already covered by the sun NEE, so the tiny disc
     // would be a double-counted firefly. Reset true on every specular/water bounce, false on a diffuse one.
-    bool showCelestial = true;
+    bool showCelestial = seg.showCelestial;
     // Number of surfaces this path has SHADED so far, as distinct from `bounce`, which also counts
     // dielectric interfaces. Glass and water continue without shading anything, so a wall behind a pane
     // is bounce 1 but diffuseDepth 0 — visually primary, and it must be treated as such. See
     // RIS_MAX_DIFFUSE_DEPTH.
-    int diffuseDepth = 0;
-    for (int bounce = 0; bounce <= maxBounces; bounce++) {
+    int diffuseDepth = seg.diffuseDepth;
+    for (int bounce = seg.bounce; bounce <= maxBounces; bounce++) {
         // Radiance SBT records run any-hit only for true alpha cutout. Translucent/water go straight to
         // closest-hit for dielectric handling. Geometry is double-sided; the chit flips the normal.
         // Primary (bounce 0) is the camera ray (CULL_PRIMARY): sees particles but not the first-person
@@ -1333,10 +1372,6 @@ float3 tracePath(float3 ro, float3 rd, float primaryConeSpread, uint2 pix, uint 
             // comes from the fluid mesher, which applies no inset, so it takes the ordinary bias.
             float transmitBias = isWater ? SURF_BIAS : INSET_TRANSMIT_BIAS;
 
-            if (bounce == 0 && pathPrimaryDielectricBranch != PRIMARY_DIELECTRIC_RANDOM) {
-                pathPrimaryDielectricHit = true;
-                pathPrimaryDielectricF = F;
-            }
             if (bounce == 0 && captureGuides) { // feed RR a smooth dielectric specular surface
                 gv_normal = n;
                 gv_rough = 0.0; // an exact Fresnel interface, not a finite GGX lobe
@@ -1355,10 +1390,23 @@ float3 tracePath(float3 ro, float3 rd, float primaryConeSpread, uint2 pix, uint 
                 }
             }
 
-            bool chooseReflection = bounce == 0
-                    && pathPrimaryDielectricBranch != PRIMARY_DIELECTRIC_RANDOM
-                    ? pathPrimaryDielectricBranch == PRIMARY_DIELECTRIC_REFLECTION
-                    : rndf(seed) < F;
+            // Deterministic split at the first interface a visually-primary path meets: trace BOTH
+            // continuations and weight them by F exactly, instead of picking one and paying the variance.
+            // The reflection leaves as a pending segment rather than a recursive call, so the path tracer
+            // is instantiated once. It stays on the incidence side, so it inherits the medium unchanged.
+            bool split = maySplit && diffuseDepth == 0;
+            if (split) {
+                float3 splitDir = reflect(rd, n);
+                pending = makePathSegment(
+                        offsetSurfaceOrigin(hitPos, geometricNormal, splitDir, SURF_BIAS), splitDir,
+                        throughput * F, medium, rayConeWidth, rayConeSpread, seed ^ 0xa511e9b3u,
+                        bounce + 1, diffuseDepth, true, false, false);
+                hasPending = true;
+                maySplit = false;
+                throughput *= 1.0 - F; // this segment is now the transmitted branch only
+            }
+
+            bool chooseReflection = split ? false : rndf(seed) < F;
             if (chooseReflection) {
                 rd = reflect(rd, n);
                 ro = offsetSurfaceOrigin(hitPos, geometricNormal, rd, SURF_BIAS);
@@ -1617,6 +1665,57 @@ float3 tracePath(float3 ro, float3 rd, float primaryConeSpread, uint2 pix, uint 
     return L;
 }
 
+// Resolve the captured gv_* guide state into the DLSS-RR guide images. Called once, right after the
+// sample that captured them, so the guide state dies there instead of staying live across every
+// remaining sample's traces.
+void writeGuides(int2 pix, float3 primaryDir, float2 jndc, float2 size, float primaryConeSpread) {
+    // Reflection remains owned by the foreground interface even when a dielectric replaced the ordinary
+    // tuple with the transmitted destination.
+    float2 specMotion = specularReflectionMotion(gv_spec, primaryDir, jndc, size, primaryConeSpread);
+
+    // Hardware (non-linear, reversed-Z) depth for DLSS-RR + Frame Generation: project the camera-relative
+    // primary hit through the forward view-projection and take ndc z/w — exactly the value a rasterizer
+    // would write. Reversed-Z (near=1, far=0), so DLSS gets the DepthInverted flag; sky's far hit -> ~0.
+    // Clear transmission uses destination depth so the entire ordinary tuple describes one layer.
+    float4 curClip = mul(worldPush.curViewProj, float4(gv_hitCamRel, 1.0));
+    float depth = curClip.w > 0.0 ? curClip.z / curClip.w : 0.0;
+
+    // Motion vector: reproject this guide point through the previous frame's view-projection.
+    // The primary ray was cast through the JITTERED ndc (jndc), so this hit's current screen position is
+    // jndc, NOT the pixel centre. Subtract jndc so the MV is jitter-free (= 0 when static), which is
+    // what DLSS expects with MVJittered unset. Scaled from NDC into render-pixel space.
+    // For a dynamic surface, previous-frame position is the current point minus its world-space
+    // displacement; subtracting gv_motionObjDisp de-cameras the MV.
+    float4 prevClip = mul(worldPush.prevViewProj,
+            float4(gv_motionHitCamRel + worldPush.camDelta - gv_motionObjDisp, 1.0));
+    float2 curNdc = jndc; // primary hit's current screen position is exactly the jittered ray ndc
+    // Transmitted content is its own feature: compare its previous and current projections rather than
+    // subtracting the primary interface's jittered NDC.
+    float4 curClipMotion = gv_motionUseRefracted
+            ? mul(worldPush.curViewProj, float4(gv_motionHitCamRel, 1.0))
+            : float4(0.0, 0.0, 0.0, 1.0); // unused; keeps the guard below uniform
+    // Guard both perspective divides the way the depth above does. A guide point can land behind either
+    // camera — most easily a transmitted destination seen at a grazing angle, or one that leaves the
+    // frustum as the camera turns — and w at or below zero turns the divide into an arbitrarily large
+    // vector that DLSS-RR reprojects with. No valid previous position exists in that case, so report no
+    // motion and let RR fall back instead of handing it garbage.
+    float2 motion;
+    if (prevClip.w > 0.0 && (!gv_motionUseRefracted || curClipMotion.w > 0.0)) {
+        if (gv_motionUseRefracted) curNdc = curClipMotion.xy / curClipMotion.w;
+        motion = (prevClip.xy / prevClip.w - curNdc) * 0.5 * size;
+    } else {
+        motion = float2(0.0, 0.0);
+    }
+
+    // Guide buffers: first-hit or coherently replaced attributes consumed by the denoiser/DLSS-RR.
+    gNormal[pix] = float4(gv_normal, gv_rough);
+    gAlbedo[pix] = float4(gv_albedo, 1.0);
+    gDepth[pix] = depth;
+    gMotion[pix] = motion;
+    gSpecAlbedo[pix] = float4(gv_spec.albedo, 1.0);
+    gSpecMotion[pix] = specMotion;
+}
+
 [shader("raygeneration")]
 void main() {
     worldPush = ConstPtr<WorldPush>(pc.worldPushAddr)[0]; // load the per-frame push data from the BDA buffer
@@ -1642,105 +1741,74 @@ void main() {
 
     uint seed = (uint(pix.x) * 1973u + uint(pix.y) * 9277u + 26699u) ^ (worldPush.frameIndex * 2654435761u);
 
+    // Camera medium: water when the eye is submerged, so the first ray already carries the right relative
+    // index and absorption. The camera-biome tint is the correct extinction until the first water surface
+    // is crossed, after which each hit supplies its own body's tint.
+    MediumStack cameraMedium = makeMediumStack((worldPush.flags & 1u) != 0u
+            ? makeDielectricMedium(true, WATER_IOR, worldPush.waterParams.xyz, 1.0)
+            : airMedium());
+
     uint spp = max(worldPush.spp, 1u);
     float3 frameRadiance = float3(0.0, 0.0, 0.0);
     for (uint s = 0u; s < spp; s++) {
         seed = pcg(seed); // decorrelate per-sample paths (shared camera ray, no AA jitter yet)
-        uint transmissionSeed = seed;
-        pathPrimaryDielectricBranch = PRIMARY_DIELECTRIC_TRANSMISSION;
-        // Guides describe one deterministic surface, so only the first sample's transmission branch
-        // writes them; the reflection branch and every later sample reuse what it captured.
-        float3 transmissionRadiance = tracePath(origin, dir, rayConeSpread, uint2(pix), s,
-                s == 0u, transmissionSeed);
+        // Guides describe one deterministic surface, so only the first sample's camera segment writes
+        // them; the split-off reflection and every later sample reuse what it captured.
+        PathSegment segment = makePathSegment(origin, dir, float3(1.0, 1.0, 1.0), cameraMedium,
+                0.0, rayConeSpread, seed, 0, 0, true, s == 0u, true);
+        float3 sampleRadiance = float3(0.0, 0.0, 0.0);
+        PathSegment queued = segment;
+        bool hasQueued = false;
 
-        bool primaryDielectricHit = pathPrimaryDielectricHit;
-        float primaryDielectricF = pathPrimaryDielectricF;
-        float3 sampleRadiance = transmissionRadiance;
-
-        if (primaryDielectricHit) {
-            uint reflectionSeed = seed ^ 0xa511e9b3u;
-            reflectionSeed = pcg(reflectionSeed);
-            pathPrimaryDielectricBranch = PRIMARY_DIELECTRIC_REFLECTION;
-            float3 reflectionRadiance = tracePath(origin, dir, rayConeSpread, uint2(pix), s + spp,
-                    false, reflectionSeed);
-
-            float dielectricF = saturate(primaryDielectricF);
-            sampleRadiance =
-                    dielectricF * reflectionRadiance
-                    + (1.0 - dielectricF) * transmissionRadiance;
-            seed = transmissionSeed ^ reflectionSeed;
-            seed = pcg(seed);
-        } else {
-            seed = transmissionSeed;
+        // ONE tracePath call site. A dielectric's second Fresnel branch arrives here as data, so the
+        // compiler instantiates the path tracer once instead of once per branch. [loop] is load-bearing:
+        // unrolling this would duplicate the whole path tracer again and undo the point of the exercise.
+        [loop]
+        for (uint segIndex = 0u; segIndex < MAX_PATH_SEGMENTS; ++segIndex) {
+            if (segIndex > 0u) {
+                if (!hasQueued) break;
+                segment = queued;
+                hasQueued = false;
+            }
+            PathSegment emitted;
+            bool didEmit;
+            sampleRadiance += tracePath(segment, uint2(pix),
+                    s + segIndex * spp, emitted, didEmit);
+            if (didEmit) {
+                queued = emitted;
+                hasQueued = true;
+            }
         }
 
+        // Written as soon as the capturing sample finishes, so none of the gv_* guide state stays live
+        // across the remaining samples — that live range is paid at every trace in between.
+        if (s == 0u) {
+            writeGuides(pix, dir, jndc, size, rayConeSpread);
+        }
         frameRadiance += sampleRadiance;
     }
-    pathPrimaryDielectricBranch = PRIMARY_DIELECTRIC_RANDOM;
     frameRadiance /= float(spp);
 
-    // Reflection remains owned by the foreground interface even when glass/water replaced the ordinary
-    // tuple with the transmitted destination.
-    float2 specMotion = specularReflectionMotion(gv_spec, dir, jndc, size, rayConeSpread);
-
-    // Hardware (non-linear, reversed-Z) depth for DLSS-RR + Frame Generation: project the camera-relative
-    // primary hit through the forward view-projection and take ndc z/w — exactly the value a rasterizer
-    // would write. Reversed-Z (near=1, far=0), so DLSS gets the DepthInverted flag; sky's far hit -> ~0.
-    // Clear transmission uses destination depth so the entire ordinary tuple describes one layer.
-    float4 curClip = mul(worldPush.curViewProj, float4(gv_hitCamRel, 1.0));
-    gv_depth = curClip.w > 0.0 ? curClip.z / curClip.w : 0.0;
-
-    // Motion vector: reproject this guide point through the previous frame's view-projection.
-    // The primary ray was cast through the JITTERED ndc (jndc), so this hit's current screen position is
-    // jndc, NOT the pixel centre. Subtract jndc so the MV is jitter-free (= 0 when static), which is
-    // what DLSS expects with MVJittered unset. Scaled from NDC into render-pixel space.
-    // For a dynamic surface, previous-frame position is the current point minus its world-space
-    // displacement; subtracting gv_motionObjDisp de-cameras the MV.
-    float4 prevClip = mul(worldPush.prevViewProj, float4(gv_motionHitCamRel + worldPush.camDelta - gv_motionObjDisp, 1.0));
-    float2 curNdc = jndc; // primary hit's current screen position is exactly the jittered ray ndc
-    // Transmitted content is its own feature: compare its previous and current projections rather than
-    // subtracting the primary interface's jittered NDC.
-    float4 curClipMotion = gv_motionUseRefracted
-            ? mul(worldPush.curViewProj, float4(gv_motionHitCamRel, 1.0))
-            : float4(0.0, 0.0, 0.0, 1.0); // unused; keeps the guard below uniform
-    // Guard both perspective divides the way the depth above does. A guide point can land behind either
-    // camera — most easily a transmitted destination seen at a grazing angle, or one that leaves the
-    // frustum as the camera turns — and w at or below zero turns the divide into an arbitrarily large
-    // vector that DLSS-RR reprojects with. No valid previous position exists in that case, so report no
-    // motion and let RR fall back instead of handing it garbage.
-    float2 motion;
-    if (prevClip.w > 0.0 && (!gv_motionUseRefracted || curClipMotion.w > 0.0)) {
-        if (gv_motionUseRefracted) curNdc = curClipMotion.xy / curClipMotion.w;
-        motion = (prevClip.xy / prevClip.w - curNdc) * 0.5 * size;
-    } else {
-        motion = float2(0.0, 0.0);
-    }
-
-    // Guide buffers: first-hit or coherently replaced attributes consumed by the denoiser/DLSS-RR.
-    gNormal[pix] = float4(gv_normal, gv_rough);
-    gAlbedo[pix] = float4(gv_albedo, 1.0);
-    gDepth[pix] = gv_depth;
-    gMotion[pix] = motion;
-    gSpecAlbedo[pix] = float4(gv_spec.albedo, 1.0);
-    gSpecMotion[pix] = specMotion;
-
-    // Debug guide-buffer visualization: bypass accumulation and show a guide directly.
+    // Debug guide-buffer visualization: bypass accumulation and show a guide directly. Read back from the
+    // images writeGuides already wrote rather than from gv_*, so no guide state has to stay live to the
+    // end of the shader just to service a branch that is off in every ordinary frame.
     if (pc.debugView != 0u) {
+        float4 normalRough = gNormal[pix];
         float3 dbg;
         if (pc.debugView == 1u) {
-            dbg = gv_normal * 0.5 + 0.5;            // world normal -> [0,1]
+            dbg = normalRough.xyz * 0.5 + 0.5;      // world normal -> [0,1]
         } else if (pc.debugView == 2u) {
-            dbg = gv_albedo;                        // diffuse albedo
+            dbg = gAlbedo[pix].rgb;                 // diffuse albedo
         } else if (pc.debugView == 3u) {
-            dbg = float3(gv_depth, gv_depth, gv_depth); // HW reversed-Z depth (near=white, far/sky=black)
+            dbg = float3(gDepth[pix], gDepth[pix], gDepth[pix]); // HW reversed-Z (near=white, far=black)
         } else if (pc.debugView == 4u) {
-            dbg = float3(gv_rough, gv_rough, gv_rough); // roughness
+            dbg = float3(normalRough.w, normalRough.w, normalRough.w); // roughness
         } else if (pc.debugView == 6u) {
-            dbg = gv_spec.albedo;                   // exact value bound to DLSS-RR
+            dbg = gSpecAlbedo[pix].rgb;             // exact value bound to DLSS-RR
         } else if (pc.debugView == 7u) {
-            dbg = float3(clamp(0.5 + specMotion * 0.05, 0.0, 1.0), 0.5); // reflection motion
+            dbg = float3(clamp(0.5 + gSpecMotion[pix] * 0.05, 0.0, 1.0), 0.5); // reflection motion
         } else {
-            dbg = float3(clamp(0.5 + motion * 0.05, 0.0, 1.0), 0.5); // motion: red=+x, green=+y
+            dbg = float3(clamp(0.5 + gMotion[pix] * 0.05, 0.0, 1.0), 0.5); // motion: red=+x, green=+y
         }
         outImage[pix] = float4(dbg, 1.0);
         return;
