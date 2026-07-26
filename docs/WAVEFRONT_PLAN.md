@@ -16,8 +16,34 @@ Top stall flipped `LGSB` -> **`NOINST`** (instruction fetch), i.e. the shader ou
 
 `b4a0e7b` fixed the duplication half of this: continuations became data (`PathSegment`), `tracePath`
 is instantiated once behind a `[loop]`, and `world.rgen.spv` went **1017692 -> 645972 bytes (-36.5%)**.
-That is a one-time correction, not a trend change. The megakernel still contains two workloads with
-opposite characteristics and it keeps growing:
+
+### 0.1 `b4a0e7b` regressed: 21 ms -> 47 ms (`continuation b4a0e7b.csv`)
+
+It made things **worse**, badly. Contexts did drop 2 -> 1 as designed, but live state at the primary
+trace went **2932 B -> 3347 B**, and LGSB rose sharply. Top contributors:
+
+| B | source | what |
+|---|---|---|
+| 504 | `world.rgen.slang:149` | medium extinction (was 336 B) |
+| 432 | `:1316` | `n = payload.normal` |
+| 324 | `:1516` | `gv_hitCamRel` |
+| **288** | **`:1400`** | **`pending = makePathSegment(...)`** |
+| 156 / 120 | `:1739` / `:1738` | `dir` / `origin`, now loop-carried |
+
+The mechanism: **`pending` is created at the primary dielectric and cannot be consumed until
+`tracePath` returns, so it survives every subsequent trace in registers.** `[loop]` additionally
+blocks specialisation, forcing main's own state to become loop-carried. Halving the instruction
+footprint bought nothing because occupancy — not instruction fetch — is the binding constraint.
+
+**This is `GPU_PERF_PLAN.md` §0's rule confirmed a second time: in this kernel, reducing instructions
+at the cost of live state is a losing trade.** The RIS wave-batching revert was the first instance.
+
+It also converts this plan from a bet into a targeted fix. Pass A **writes the record to memory and
+exits**; pass B **reads it once at entry**, where it becomes ordinary loop state. Neither pass holds a
+continuation live across a trace, which is precisely what `b4a0e7b` got wrong. M1 must preserve that
+property or it will reproduce the same regression through a more expensive mechanism.
+
+The megakernel still contains two workloads with opposite characteristics and it keeps growing:
 
 | | primary / guide | indirect / shading |
 |---|---|---|
@@ -95,8 +121,8 @@ dispatch for the common single-segment case and only spill splits — measure be
 - **M2 — splits back.** Re-enable the deterministic Fresnel split as a second appended record.
   Play-test for energy parity against `b4a0e7b`.
 - **M3 — measure.** Expect: raygen live state well under `main`'s 308 B baseline, NOINST gone,
-  traversal LGSB better hidden via higher occupancy. Compare against `b4a0e7b`, not against
-  `c22ebf3`.
+  traversal LGSB better hidden via higher occupancy. **Baseline to beat is `db6418b` at 21 ms**, not
+  `b4a0e7b` at 47 ms — beating the regression proves nothing.
 - **M4 — later.** ReSTIR spatial reuse becomes a third pass over the G-buffer. This is the reason the
   split is worth doing even if M3 is only neutral: spatial reuse is inherently a screen-space
   multi-pass algorithm and would otherwise be bolted onto a megakernel.
@@ -104,8 +130,12 @@ dispatch for the common single-segment case and only spill splits — measure be
 ## 4. Risks / kill criteria
 
 - **Bandwidth vs occupancy.** The whole bet is that removing live state buys more than the record
-  traffic costs. M1 must show it. If M1 profiles neutral-or-worse with occupancy unchanged, stop and
-  keep `b4a0e7b`.
+  traffic costs. M1 must show it. If M1 does not beat `db6418b`'s 21 ms, revert to `db6418b`'s
+  structure — `b4a0e7b` is not a fallback, it is a regression being carried deliberately while the
+  split lands.
+- **Reproducing the `b4a0e7b` failure through a buffer.** If pass A holds the record live across its
+  own traces instead of writing and exiting, it pays the same 288 B live range *plus* the memory
+  traffic. Check the live-state CSV for pass A, not just the frame time.
 - **Pass B incoherence.** Records start incoherent, but they already are today; SER still applies
   inside pass B, and a dense queue is strictly better than a sparse screen dispatch.
 - **SER interaction is an open question** independent of this work — `GPU_PERF_PLAN.md` §0 flags that
@@ -116,9 +146,10 @@ dispatch for the common single-segment case and only spill splits — measure be
 
 ## 5. Status
 
-- [x] Step 2 (single instantiation + guide hoist) — `b4a0e7b`, NOT GPU-verified
+- [x] Step 2 (single instantiation + guide hoist) — `b4a0e7b`, **GPU-tested: 21 ms -> 47 ms, REGRESSION**
+      (kept deliberately; the split is its fix, see §0.1)
+- [x] M0 plumbing — `d76f450`, multiple raygens per pipeline, no behaviour change
 - [ ] no-reorder A/B (prerequisite, independent)
-- [ ] M0 plumbing
 - [ ] M1 split
 - [ ] M2 splits restored
 - [ ] M3 measure
