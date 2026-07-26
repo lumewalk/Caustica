@@ -1,5 +1,5 @@
 // Direct lighting: the emitter light grid, RIS reservoirs, and reservoir shading.
-// INDIRECT PASS ONLY — the primary pass shades nothing. Depends on rt_trace and rt_math.
+// INDIRECT PASS ONLY — the primary pass shades nothing. Depends on trace and math.
 
 // contribution weight, M the effective sample count. wSum/phat are streaming scratch (not persisted).
 struct Reservoir {

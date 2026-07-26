@@ -1,5 +1,5 @@
 // tracePath: the bounce loop — NEE, RIS, SSS, BSDF continuation and Russian roulette.
-// INDIRECT PASS ONLY. Depends on rt_lighting.
+// INDIRECT PASS ONLY. Depends on lighting.
 
 // Deterministic dielectric splitting is deliberately disabled for M1; M2 will append the second branch.
 float3 tracePath(PathSegment seg, uint2 pix, uint sampleIndex) {

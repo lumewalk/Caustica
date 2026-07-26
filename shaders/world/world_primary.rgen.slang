@@ -2,7 +2,7 @@
 //
 // Traces the camera ray through the dielectric chain to the first surface worth shading, captures the
 // DLSS-RR guide buffers, and writes one resumable continuation per sample to the path queue. It shades
-// nothing: no NEE, no RIS, no BSDF sampling. That is why rt_lighting and rt_indirect are absent below,
+// nothing: no NEE, no RIS, no BSDF sampling. That is why lighting and indirect are absent below,
 // and their absence is the point — the pass separation is enforced by this include list rather than
 // left to dead-code elimination.
 //
@@ -15,14 +15,14 @@
 // SER: the build emits EXT and NV shader-invocation-reorder variants from this source.
 import world_common;
 
-#include "rt_core.slanginc"
-#include "rt_math.slanginc"
-#include "rt_medium.slanginc"
-#include "rt_segment.slanginc"
-#include "rt_water.slanginc"
-#include "rt_trace.slanginc"
-#include "rt_guides.slanginc"
-#include "rt_primary.slanginc"
+#include "core.slang"
+#include "math.slang"
+#include "medium.slang"
+#include "segment.slang"
+#include "water.slang"
+#include "trace.slang"
+#include "guides.slang"
+#include "primary.slang"
 
 [shader("raygeneration")]
 void main() {

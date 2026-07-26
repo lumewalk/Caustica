@@ -1,6 +1,6 @@
 // DLSS-RR guide state and everything that resolves it: the gv_* captures, the foreground specular
 // surface and its reflection motion vector, the transmitted-destination walk, and the image writes.
-// PRIMARY PASS ONLY. Depends on rt_trace, rt_water and rt_segment.
+// PRIMARY PASS ONLY. Depends on trace, water and segment.
 
 // First-hit (primary-visibility) guide attributes, captured at bounce 0 of tracePath. The primary ray
 // is deterministic (no AA jitter yet), so every SPP sample's bounce 0 yields identical values.

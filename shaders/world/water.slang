@@ -1,5 +1,5 @@
 // Water surface: the wave spectrum (with its analytic time derivative), the normal perturbation it
-// drives, and the caustic term that differentiates the same field. Depends on rt_core.
+// drives, and the caustic term that differentiates the same field. Depends on core.
 
 
 // Animated surface waves — a directional wave spectrum, gradient-only (the surface stays geometrically

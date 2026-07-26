@@ -1,5 +1,5 @@
 // Participating media: the tint-to-extinction mappings and the depth-2 medium stack the dielectric
-// interface pushes and pops. Depends on rt_core only.
+// interface pushes and pops. Depends on core only.
 
 // Per-channel Beer–Lambert extinction from a water body's biome tint (carried in payload.albedo for
 // water hits, or worldPush.waterParams.xyz for the camera's own biome when starting submerged). A blue ocean

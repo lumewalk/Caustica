@@ -1,6 +1,6 @@
 // tracePrimary: camera ray through the dielectric chain to the first surface worth shading, capturing
 // guides on the way. Returns the continuation the indirect pass resumes.
-// PRIMARY PASS ONLY. Depends on rt_guides.
+// PRIMARY PASS ONLY. Depends on guides.
 
 // later trace rather than keeping a continuation live across traversal.
 PathSegment tracePrimary(PathSegment seg, bool captureGuides, out bool alive) {

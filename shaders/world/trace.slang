@@ -1,5 +1,5 @@
 // Ray dispatch: SBT/cull constants, payload construction, and the three ways this renderer casts a
-// ray — reordered radiance, non-reordered guide probe, and shadow visibility. Depends on rt_core.
+// ray — reordered radiance, non-reordered guide probe, and shadow visibility. Depends on core.
 
 // receiver billboards only. The first-person camera owner uses 0x01 (secondary only).
 static const uint CULL_SECONDARY = 0x01u;

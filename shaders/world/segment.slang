@@ -1,5 +1,5 @@
 // PathSegment — a resumable continuation — plus its packed 48-byte buffer form. This is the record
-// the primary pass writes and the indirect pass reads. Depends on rt_medium.
+// the primary pass writes and the indirect pass reads. Depends on medium.
 
 
 // Everything needed to resume tracing from a point in the scene. The path tracer takes one of these and

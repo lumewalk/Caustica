@@ -2,7 +2,7 @@
 //
 // Resumes the continuations the primary pass queued and runs the bounce loop: NEE toward the sun, RIS
 // emitter lighting, thin-surface SSS, BSDF continuation and Russian roulette. It captures no guides and
-// owns no motion vectors — rt_guides and rt_primary are deliberately absent from the include list
+// owns no motion vectors — guides and primary are deliberately absent from the include list
 // below, so guide state cannot leak into this pass by accident.
 //
 // Lighting is iterative here rather than recursive from closest-hit, so maxRayRecursionDepth stays 1.
@@ -20,14 +20,14 @@
 // SER: the build emits EXT and NV shader-invocation-reorder variants from this source.
 import world_common;
 
-#include "rt_core.slanginc"
-#include "rt_math.slanginc"
-#include "rt_medium.slanginc"
-#include "rt_segment.slanginc"
-#include "rt_water.slanginc"
-#include "rt_trace.slanginc"
-#include "rt_lighting.slanginc"
-#include "rt_indirect.slanginc"
+#include "core.slang"
+#include "math.slang"
+#include "medium.slang"
+#include "segment.slang"
+#include "water.slang"
+#include "trace.slang"
+#include "lighting.slang"
+#include "indirect.slang"
 
 [shader("raygeneration")]
 void main() {
