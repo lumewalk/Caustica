@@ -53,8 +53,6 @@ struct VisibilityResult {
 static float3 gv_normal;
 static float3 gv_albedo;
 static float gv_rough;
-static float gv_emission;
-static uint gv_emissionSource;
 // Linear VIEW-SPACE depth guide inputs; sky resolves to a large far value (no negative sentinel).
 static float gv_depth;
 static float3 gv_hitCamRel;       // primary-surface hit position relative to the current camera
@@ -101,9 +99,6 @@ static bool pathPrimaryDielectricHit;
 static float pathPrimaryDielectricF;
 
 uint payloadMaterial() { return payload.flags & PAYLOAD_MATERIAL_MASK; }
-uint payloadEmissionSource() {
-    return (payload.flags >> PAYLOAD_EMISSION_SOURCE_SHIFT) & PAYLOAD_EMISSION_SOURCE_MASK;
-}
 // Set by world.rchit on any dielectric hit (see PAYLOAD_DIELECTRIC_ENTERING) — whether the ray was
 // travelling into the volume (vs. out of it) at this hit's face.
 bool payloadDielectricEntering() { return (payload.flags & PAYLOAD_DIELECTRIC_ENTERING) != 0u; }
@@ -1260,8 +1255,6 @@ float3 tracePath(float3 ro, float3 rd, float primaryConeSpread, uint2 pix, uint 
                 // the brightness in the lighting channel where RR resolves it cleanly.
                 gv_albedo = SKY_DIFF_ALBEDO;
                 gv_rough = 1.0;
-                gv_emission = 0.0;
-                gv_emissionSource = EMISSION_SOURCE_NONE;
                 gv_hitCamRel = rd * 1.0e6; // sky at infinity: only rotation parallax (-> large far depth)
                 gv_motionHitCamRel = gv_hitCamRel;
                 gv_motionUseRefracted = false;
@@ -1285,10 +1278,6 @@ float3 tracePath(float3 ro, float3 rd, float primaryConeSpread, uint2 pix, uint 
         float3 hitPos = ro + rd * payload.hitT;
         rayConeWidth = max(rayConeWidth + rayConeSpread * max(payload.hitT, 0.0), RAY_CONE_MIN_WIDTH);
         uint material = payloadMaterial();
-        if (bounce == 0 && captureGuides) {
-            gv_emission = payloadEmission();
-            gv_emissionSource = payloadEmissionSource();
-        }
 
         // ---- Dielectric interface: water, stained glass, ice. ONE handler and one behaviour — every
         // dielectric is a volume. Fresnel from the relative index across the face, then reflect or
@@ -1750,15 +1739,6 @@ void main() {
             dbg = gv_spec.albedo;                   // exact value bound to DLSS-RR
         } else if (pc.debugView == 7u) {
             dbg = float3(clamp(0.5 + specMotion * 0.05, 0.0, 1.0), 0.5); // reflection motion
-        } else if (pc.debugView == 8u) {
-            dbg = float3(gv_emission, gv_emission, gv_emission); // resolved emission mask/strength
-        } else if (pc.debugView == 9u) {
-            float3 sourceColor = gv_emissionSource == EMISSION_SOURCE_LAB_PBR ? float3(0.15, 0.8, 1.0)
-                    : gv_emissionSource == EMISSION_SOURCE_HEURISTIC ? float3(1.0, 0.45, 0.05)
-                    : gv_emissionSource == EMISSION_SOURCE_UNIFORM ? float3(1.0, 1.0, 1.0)
-                    : float3(0.0, 0.0, 0.0);
-            dbg = sourceColor * (gv_emissionSource == EMISSION_SOURCE_NONE
-                    ? 0.0 : max(0.2, clamp(gv_emission, 0.0, 1.0)));
         } else {
             dbg = float3(clamp(0.5 + motion * 0.05, 0.0, 1.0), 0.5); // motion: red=+x, green=+y
         }
