@@ -253,15 +253,3 @@ public uint packHalf2(float2 v) {
 public float2 unpackHalf2(uint p) {
     return float2(f16tof32(p & 0xFFFFu), f16tof32(p >> 16));
 }
-
-// Vanilla's block/entity atlases are ordinary sRGB-encoded PNGs sampled through a plain UNORM view (no
-// hardware sRGB decode), so the raw texel is gamma-encoded. The path tracer's BRDF math (Lambertian/GGX,
-// Beer-Lambert, NEE) is only correct on linear radiance/albedo, so every COLOR texture sample (not the
-// LabPBR _s/_n data maps, which are already linear data channels) must go through this before it's used
-// in any lighting calculation.
-public float3 srgbToLinear(float3 c) {
-    float3 lo = c / 12.92;
-    float3 hi = pow((c + 0.055) / 1.055, float3(2.4, 2.4, 2.4));
-    float3 isHi = step(float3(0.04045, 0.04045, 0.04045), c);
-    return lerp(lo, hi, isHi);
-}

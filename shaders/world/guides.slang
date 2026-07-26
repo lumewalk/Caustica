@@ -4,31 +4,40 @@
 
 // First-hit (primary-visibility) guide attributes, captured at bounce 0 of tracePath. The primary ray
 // is deterministic (no AA jitter yet), so every SPP sample's bounce 0 yields identical values.
-static float3 gv_normal;
-static float3 gv_albedo;
-static float gv_rough;
-static float3 gv_hitCamRel;       // primary-surface hit position relative to the current camera
-static float3 gv_motionHitCamRel; // motion-guide hit position; water tracks the refracted hit instead
-static bool gv_motionUseRefracted; // true when the MV tracks the refracted hit (its own reprojection delta)
+
+import world_common;
+import world_core;
+import math;
+import medium;
+import segment;
+import water;
+import trace;
+
+public static float3 gv_normal = float3(0.0, 0.0, 0.0);
+public static float3 gv_albedo = float3(0.0, 0.0, 0.0);
+public static float gv_rough = 0.0;
+public static float3 gv_hitCamRel = float3(0.0, 0.0, 0.0);       // primary-surface hit position relative to the current camera
+public static float3 gv_motionHitCamRel = float3(0.0, 0.0, 0.0); // motion-guide hit position; water tracks the refracted hit instead
+public static bool gv_motionUseRefracted = false; // true when the MV tracks the refracted hit (its own reprojection delta)
 // World-space displacement of the motion-guide surface since the previous frame (0 for static
 // terrain/sky, an entity's per-vertex/object motion for a dynamic hit).
-static float3 gv_motionObjDisp;
+public static float3 gv_motionObjDisp = float3(0.0, 0.0, 0.0);
 // Transmission replaces the ordinary guide tuple with the visible destination, so RR's specular inputs
 // (specular albedo + reflection MV) need the foreground glass/water interface kept separately. This is
 // the surface the reflection physically lives on; for an opaque primary hit it is that hit itself.
-struct SpecSurface {
-    float3 camRel;         // interface position relative to the current camera
-    float3 normal;         // shading normal (wave-perturbed for water)
-    float3 previousNormal; // the same normal one frame ago; equal to `normal` unless the surface animates
-    float3 biasNormal;     // geometric normal, used only to offset a ray origin off the surface
-    float roughness;
-    float3 albedo;         // specular albedo fed to DLSS-RR for demodulation (0 = pure diffuse)
+public struct SpecSurface {
+    public float3 camRel;         // interface position relative to the current camera
+    public float3 normal;         // shading normal (wave-perturbed for water)
+    public float3 previousNormal; // the same normal one frame ago; equal to `normal` unless the surface animates
+    public float3 biasNormal;     // geometric normal, used only to offset a ray origin off the surface
+    public float roughness;
+    public float3 albedo;         // specular albedo fed to DLSS-RR for demodulation (0 = pure diffuse)
 };
-static SpecSurface gv_spec;
+public static SpecSurface gv_spec = {};
 
 // Static surfaces reuse one normal for all three roles. Water overrides them (wave-displaced shading
 // normal now and last frame, flat geometric normal for the bias) via the six-argument form.
-SpecSurface makeSpecSurface(float3 camRel, float3 normal, float3 previousNormal, float3 biasNormal,
+public SpecSurface makeSpecSurface(float3 camRel, float3 normal, float3 previousNormal, float3 biasNormal,
                             float roughness, float3 albedo) {
     SpecSurface s;
     s.camRel = camRel;
@@ -40,11 +49,11 @@ SpecSurface makeSpecSurface(float3 camRel, float3 normal, float3 previousNormal,
     return s;
 }
 
-SpecSurface makeSpecSurface(float3 camRel, float3 normal, float roughness, float3 albedo) {
+public SpecSurface makeSpecSurface(float3 camRel, float3 normal, float roughness, float3 albedo) {
     return makeSpecSurface(camRel, normal, normal, normal, roughness, albedo);
 }
 // angle can land behind the eye even though the reflector itself is comfortably in view.
-float2 projectPrevNdc(float3 worldPos, out bool valid) {
+public float2 projectPrevNdc(float3 worldPos, out bool valid) {
     float4 clip = mul(worldPush.prevViewProj, float4(worldPos - worldPush.camOffset + worldPush.camDelta, 1.0));
     valid = clip.w > 0.0;
     return valid ? clip.xy / clip.w : float2(0.0, 0.0);
@@ -57,7 +66,7 @@ float2 projectPrevNdc(float3 worldPos, out bool valid) {
 // explodes at grazing angles and produces non-zero MV in a static scene. Mirroring is division-free, so
 // static MV is bit-exact zero at any incidence. The reflector is assumed static (terrain / water);
 // reflectedMotionPrev carries the reflected content's own displacement.
-float2 previousReflectionNdc(float3 surfacePos, float3 surfaceNormal, float3 reflectedWorldPos,
+public float2 previousReflectionNdc(float3 surfacePos, float3 surfaceNormal, float3 reflectedWorldPos,
                              float3 reflectedMotionPrev, out bool valid) {
     float3 n = normalize(surfaceNormal); // mirror(P) is orientation-independent, so no viewer flip needed
     float3 prevHit = reflectedWorldPos - reflectedMotionPrev;
@@ -67,7 +76,7 @@ float2 previousReflectionNdc(float3 surfacePos, float3 surfaceNormal, float3 ref
 
 // Reflection motion remains owned by the physical foreground interface even when transmission later
 // replaces the ordinary guide tuple. Guide tracing is intentionally non-SER (traceGuide above).
-float2 specularReflectionMotion(SpecSurface surface, float3 primaryDir,
+public float2 specularReflectionMotion(SpecSurface surface, float3 primaryDir,
                                 float2 currentNdc, float2 size, float primaryConeSpread) {
     if (length(surface.normal) < 0.5
             || max(surface.albedo.r, max(surface.albedo.g, surface.albedo.b)) <= 0.001
@@ -106,7 +115,7 @@ float2 specularReflectionMotion(SpecSurface surface, float3 primaryDir,
 // Deterministic transmitted destination for clear-interface RR guides. The first interface has already
 // been crossed. Continue through every crossed dielectric until opaque/particle content or sky is reached;
 // TIR changes the walk into a reflected secondary ray instead of producing a false foreground guide.
-void setTransmissionGuide(float3 hitCamRel, float3 motionPrev, float3 normal,
+public void setTransmissionGuide(float3 hitCamRel, float3 motionPrev, float3 normal,
                           float roughness, float3 diffuseAlbedo) {
     gv_hitCamRel = hitCamRel;
     gv_motionHitCamRel = hitCamRel;
@@ -117,7 +126,7 @@ void setTransmissionGuide(float3 hitCamRel, float3 motionPrev, float3 normal,
     gv_albedo = diffuseAlbedo;
 }
 
-void resolveTransmissionGuide(float3 surfacePos, float3 transmittedDir,
+public void resolveTransmissionGuide(float3 surfacePos, float3 transmittedDir,
                               float3 surfaceBiasNormal,
                               float currentIor, float rayBias,
                               float rayConeWidth, float rayConeSpread) {
@@ -194,7 +203,7 @@ void resolveTransmissionGuide(float3 surfacePos, float3 transmittedDir,
 // Resolve the captured gv_* guide state into the DLSS-RR guide images. Called once, right after the
 // sample that captured them, so the guide state dies there instead of staying live across every
 // remaining sample's traces.
-void writeGuides(int2 pix, float3 primaryDir, float2 jndc, float2 size, float primaryConeSpread) {
+public void writeGuides(int2 pix, float3 primaryDir, float2 jndc, float2 size, float primaryConeSpread) {
     // Reflection remains owned by the foreground interface even when a dielectric replaced the ordinary
     // tuple with the transmitted destination.
     float2 specMotion = specularReflectionMotion(gv_spec, primaryDir, jndc, size, primaryConeSpread);
@@ -244,7 +253,7 @@ void writeGuides(int2 pix, float3 primaryDir, float2 jndc, float2 size, float pr
 
 // 48-byte queue record. float3 + uint intentionally share the first 16-byte lane; every remaining
 
-void writeDebugView(int2 pix) {
+public void writeDebugView(int2 pix) {
     float4 normalRough = gNormal[pix];
     float3 dbg;
     if (pc.debugView == 1u) {

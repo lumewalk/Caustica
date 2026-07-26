@@ -2,16 +2,20 @@
 // ray — reordered radiance, non-reordered guide probe, and shadow visibility. Depends on core.
 
 // receiver billboards only. The first-person camera owner uses 0x01 (secondary only).
-static const uint CULL_SECONDARY = 0x01u;
-static const uint CULL_PRIMARY = 0x02u;
-static const uint TERRAIN_BUCKETS = 4u;
-static const uint SBT_RADIANCE = 0u;
-static const uint SBT_SHADOW = TERRAIN_BUCKETS;
-static const uint SBT_STRIDE_BUCKET = 1u;
-static const uint MISS_RADIANCE = 0u;
-static const uint MISS_GUIDE = 1u;
 
-RayDesc makeRay(float3 origin, float tmin, float3 dir, float tmax) {
+import world_common;
+import world_core;
+
+public static const uint CULL_SECONDARY = 0x01u;
+public static const uint CULL_PRIMARY = 0x02u;
+public static const uint TERRAIN_BUCKETS = 4u;
+public static const uint SBT_RADIANCE = 0u;
+public static const uint SBT_SHADOW = TERRAIN_BUCKETS;
+public static const uint SBT_STRIDE_BUCKET = 1u;
+public static const uint MISS_RADIANCE = 0u;
+public static const uint MISS_GUIDE = 1u;
+
+public RayDesc makeRay(float3 origin, float tmin, float3 dir, float tmax) {
     RayDesc r;
     r.Origin = origin;
     r.TMin = tmin;
@@ -20,7 +24,7 @@ RayDesc makeRay(float3 origin, float tmin, float3 dir, float tmax) {
     return r;
 }
 
-float3 offsetSurfaceOrigin(float3 position, float3 surfaceNormal,
+public float3 offsetSurfaceOrigin(float3 position, float3 surfaceNormal,
                            float3 outgoingDirection, float bias) {
     float3 sideNormal = dot(surfaceNormal, outgoingDirection) >= 0.0
             ? surfaceNormal : -surfaceNormal;
@@ -31,7 +35,7 @@ float3 offsetSurfaceOrigin(float3 position, float3 surfaceNormal,
 // (show-celestial gate, consumed by world.rmiss) and the packed ray cone (consumed by world.rchit for
 // texture LOD). Every other member is an OUTPUT that world.rchit/world.rmiss write, so it carries no
 // information into a trace and is initialized to a neutral value here.
-Payload makeRadiancePayload(uint flags, uint rayCone) {
+public Payload makeRadiancePayload(uint flags, uint rayCone) {
     Payload p;
     p.albedo = half3(0.0h, 0.0h, 0.0h);
     p.normal = half3(0.0h, 0.0h, 0.0h);
@@ -58,7 +62,7 @@ Payload makeRadiancePayload(uint flags, uint rayCone) {
 // across the one point where SER must spill every live value, which profiling showed to be the peak
 // live state in this shader. Rebuilding costs a few constant moves and leaves only these two words
 // spanning the reorder.
-void traceRadianceReordered(uint cullMask, float3 ro, float tmin, float3 rd, float tmax,
+public void traceRadianceReordered(uint cullMask, float3 ro, float tmin, float3 rd, float tmax,
                             bool showCelestial, float rayConeWidth, float rayConeSpread) {
     uint flags = showCelestial ? PAYLOAD_SHOW_CELESTIAL : 0u;
     uint rayCone = packHalf2(float2(rayConeWidth, rayConeSpread));
@@ -75,14 +79,14 @@ void traceRadianceReordered(uint cullMask, float3 ro, float tmin, float3 rd, flo
 // result is consumed immediately, so paying a reorder barrier and carrying guide state across it only
 // adds latency. The dedicated miss record also avoids the atmosphere march: guides need hit-vs-miss,
 // not sky radiance.
-void traceGuide(uint cullMask, float3 ro, float tmin, float3 rd, float tmax,
+public void traceGuide(uint cullMask, float3 ro, float tmin, float3 rd, float tmax,
                 float rayConeWidth, float rayConeSpread) {
     payload = makeRadiancePayload(0u, packHalf2(float2(rayConeWidth, rayConeSpread)));
     TraceRay(topLevelAS, RAY_FLAG_NONE, cullMask, SBT_RADIANCE, SBT_STRIDE_BUCKET,
             MISS_GUIDE, makeRay(ro, tmin, rd, tmax), payload);
 }
 
-Payload makeShadowPayload() {
+public Payload makeShadowPayload() {
     Payload shadowPayload;
     shadowPayload.albedo = half3(1.0h, 1.0h, 1.0h);
     shadowPayload.hitT = -1.0; // water-crossing sentinel, filled by the water any-hit
@@ -97,7 +101,7 @@ Payload makeShadowPayload() {
     return shadowPayload;
 }
 
-VisibilityResult visibility(float3 origin, float3 dir, float tmax) {
+public VisibilityResult visibility(float3 origin, float3 dir, float tmax) {
     // Vulkan requires an identical payload structure for every stage reachable by this trace. The shadow
     // path uses only albedo as accumulated transmittance and hitT as the nearest-water crossing.
     Payload shadowPayload = makeShadowPayload();

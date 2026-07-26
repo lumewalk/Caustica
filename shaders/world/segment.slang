@@ -10,22 +10,27 @@
 // This is deliberately shaped like a record that could live in a buffer rather than a register: the
 // planned split into a primary/guide pass and an indirect pass hands continuations between dispatches,
 // and this is the payload it would write.
-struct PathSegment {
-    float3 ro;
-    float3 rd;
-    float3 throughput;
-    MediumStack medium;
-    float rayConeWidth;
-    float rayConeSpread;
-    uint seed;
-    int bounce;          // interfaces already consumed, so RR start and the bounce cap stay global
-    int diffuseDepth;    // surfaces already SHADED (see the field of the same name in tracePath)
-    bool showCelestial;
-    bool captureGuides;
-    bool maySplit;       // may still spawn a deterministic Fresnel branch
+
+import world_common;
+import world_core;
+import medium;
+
+public struct PathSegment {
+    public float3 ro;
+    public float3 rd;
+    public float3 throughput;
+    public MediumStack medium;
+    public float rayConeWidth;
+    public float rayConeSpread;
+    public uint seed;
+    public int bounce;          // interfaces already consumed, so RR start and the bounce cap stay global
+    public int diffuseDepth;    // surfaces already SHADED (see the field of the same name in tracePath)
+    public bool showCelestial;
+    public bool captureGuides;
+    public bool maySplit;       // may still spawn a deterministic Fresnel branch
 };
 
-PathSegment makePathSegment(float3 ro, float3 rd, float3 throughput, MediumStack medium,
+public PathSegment makePathSegment(float3 ro, float3 rd, float3 throughput, MediumStack medium,
                             float rayConeWidth, float rayConeSpread, uint seed,
                             int bounce, int diffuseDepth, bool showCelestial,
                             bool captureGuides, bool maySplit) {
@@ -45,29 +50,29 @@ PathSegment makePathSegment(float3 ro, float3 rd, float3 throughput, MediumStack
     return s;
 }
 // field is a uint, so Std430DataLayout gives this an exact 48-byte stride.
-struct PackedPathSegment {
-    float3 ro;
-    uint rd;
-    uint throughput;
-    uint currentExtinction;
-    uint outerExtinction;
-    uint mediumIors;
-    uint rayCone;
-    uint seed;
-    uint pathFlags;
-    uint pixelSample;
+public struct PackedPathSegment {
+    public float3 ro;
+    public uint rd;
+    public uint throughput;
+    public uint currentExtinction;
+    public uint outerExtinction;
+    public uint mediumIors;
+    public uint rayCone;
+    public uint seed;
+    public uint pathFlags;
+    public uint pixelSample;
 };
 
-static const uint PATH_VALID = 1u << 11u;
+public static const uint PATH_VALID = 1u << 11u;
 
-float2 octEncode(float3 direction) {
+public float2 octEncode(float3 direction) {
     float3 n = direction / max(abs(direction.x) + abs(direction.y) + abs(direction.z), 1.0e-20);
     float2 signNotZero = float2(n.x >= 0.0 ? 1.0 : -1.0, n.y >= 0.0 ? 1.0 : -1.0);
     float2 oct = n.z >= 0.0 ? n.xy : (1.0 - abs(n.yx)) * signNotZero;
     return oct * 0.5 + 0.5;
 }
 
-float3 octDecode(float2 encoded) {
+public float3 octDecode(float2 encoded) {
     float2 oct = encoded * 2.0 - 1.0;
     float3 n = float3(oct, 1.0 - abs(oct.x) - abs(oct.y));
     if (n.z < 0.0) {
@@ -77,17 +82,17 @@ float3 octDecode(float2 encoded) {
     return normalize(n);
 }
 
-uint packUnorm16x2(float2 v) {
+public uint packUnorm16x2(float2 v) {
     uint2 q = uint2(round(clamp(v, 0.0, 1.0) * 65535.0));
     return q.x | (q.y << 16u);
 }
 
-float2 unpackUnorm16x2(uint p) {
+public float2 unpackUnorm16x2(uint p) {
     return float2(p & 0xffffu, p >> 16u) / 65535.0;
 }
 
 // DXGI_FORMAT_R9G9B9E5_SHAREDEXP, implemented locally because Slang exposes no packing intrinsic.
-uint packRgb9e5(float3 value) {
+public uint packRgb9e5(float3 value) {
     float3 v = clamp(value, 0.0, 65408.0);
     float maxChannel = max(v.x, max(v.y, v.z));
     uint exponent = maxChannel < exp2(-16.0)
@@ -103,12 +108,12 @@ uint packRgb9e5(float3 value) {
     return mantissa.x | (mantissa.y << 9u) | (mantissa.z << 18u) | (exponent << 27u);
 }
 
-float3 unpackRgb9e5(uint p) {
+public float3 unpackRgb9e5(uint p) {
     float scale = exp2(float(int(p >> 27u) - 24));
     return float3(p & 0x1ffu, (p >> 9u) & 0x1ffu, (p >> 18u) & 0x1ffu) * scale;
 }
 
-PackedPathSegment packPathSegment(PathSegment seg, uint pixelIndex, uint sampleIndex, bool valid) {
+public PackedPathSegment packPathSegment(PathSegment seg, uint pixelIndex, uint sampleIndex, bool valid) {
     PackedPathSegment p;
     p.ro = seg.ro;
     p.rd = packUnorm16x2(octEncode(seg.rd));
@@ -128,7 +133,7 @@ PackedPathSegment packPathSegment(PathSegment seg, uint pixelIndex, uint sampleI
     return p;
 }
 
-PathSegment unpackPathSegment(PackedPathSegment p, out bool valid) {
+public PathSegment unpackPathSegment(PackedPathSegment p, out bool valid) {
     float2 iors = unpackHalf2(p.mediumIors);
     Medium current;
     current.ior = iors.x;

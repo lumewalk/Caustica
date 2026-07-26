@@ -5,9 +5,13 @@
 // water hits, or worldPush.waterParams.xyz for the camera's own biome when starting submerged). A blue ocean
 // tint (low red) absorbs red fastest → bluer with depth; swamp green-brown shifts the hue. The floor
 // keeps even a white-tinted body very slightly absorbing so deep water never reads as clear vacuum.
-static const float WATER_DENSITY = 0.05;
-static const float3 WATER_ABSORB_FLOOR = float3(0.015, 0.010, 0.008);
-float3 waterExtinction(float3 tint) {
+
+import world_common;
+import world_core;
+
+public static const float WATER_DENSITY = 0.05;
+public static const float3 WATER_ABSORB_FLOOR = float3(0.015, 0.010, 0.008);
+public float3 waterExtinction(float3 tint) {
     return WATER_ABSORB_FLOOR + WATER_DENSITY * (float3(1.0, 1.0, 1.0) - clamp(tint, 0.0, 1.0));
 }
 
@@ -16,8 +20,8 @@ float3 waterExtinction(float3 tint) {
 // block means sigma = -ln(t). `transmission` scales that transmittance, so it keeps the sense the
 // material's authored factor has everywhere else — 1 passes the tint through unchanged, 0 is opaque.
 // Clamped away from zero so a fully saturated texel stays finite instead of producing an infinite sigma.
-static const float VOLUME_TINT_REFERENCE_DISTANCE = 1.0; // blocks
-float3 volumeExtinction(float3 tint, float transmission) {
+public static const float VOLUME_TINT_REFERENCE_DISTANCE = 1.0; // blocks
+public float3 volumeExtinction(float3 tint, float transmission) {
     float3 blockTransmittance = clamp(clamp(tint, 0.0, 1.0) * clamp(transmission, 0.0, 1.0),
             1.0e-3, 1.0);
     return -log(blockTransmittance) / VOLUME_TINT_REFERENCE_DISTANCE;
@@ -35,18 +39,18 @@ float3 volumeExtinction(float3 tint, float transmission) {
 // covers air->water->glass and air->glass->water, which is the realistic worst case; anything deeper
 // degrades to air on the way out, and because `entering` is re-derived per face from geometry rather
 // than toggled, the path re-synchronises at the next crossing instead of staying corrupted.
-struct Medium {
-    float ior;
-    float3 extinction;
-    bool water; // drives the wave-refraction caustic on submerged receivers; nothing else is water-specific
+public struct Medium {
+    public float ior;
+    public float3 extinction;
+    public bool water; // drives the wave-refraction caustic on submerged receivers; nothing else is water-specific
 };
 
-struct MediumStack {
-    Medium current;
-    Medium outer;
+public struct MediumStack {
+    public Medium current;
+    public Medium outer;
 };
 
-Medium airMedium() {
+public Medium airMedium() {
     Medium m;
     m.ior = 1.0;
     m.extinction = float3(0.0, 0.0, 0.0);
@@ -54,26 +58,26 @@ Medium airMedium() {
     return m;
 }
 
-MediumStack makeMediumStack(Medium start) {
+public MediumStack makeMediumStack(Medium start) {
     MediumStack s;
     s.current = start;
     s.outer = airMedium();
     return s;
 }
 
-void mediumPush(inout MediumStack stack, Medium entered) {
+public void mediumPush(inout MediumStack stack, Medium entered) {
     stack.outer = stack.current;
     stack.current = entered;
 }
 
-void mediumPop(inout MediumStack stack) {
+public void mediumPop(inout MediumStack stack) {
     stack.current = stack.outer;
     stack.outer = airMedium();
 }
 
 // Water's tint is a biome colour whose absorption is calibrated per block of depth; any other volume
 // dielectric's tint is a filter over a reference block of travel. Both end up as per-channel extinction.
-Medium makeDielectricMedium(bool isWater, float ior, float3 tint, float transmission) {
+public Medium makeDielectricMedium(bool isWater, float ior, float3 tint, float transmission) {
     Medium m;
     m.ior = ior;
     m.extinction = isWater ? waterExtinction(tint) : volumeExtinction(tint, transmission);

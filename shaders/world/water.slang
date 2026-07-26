@@ -13,13 +13,17 @@
 //    gradient) so wavefronts wander instead of ruling straight periodic lines across the sea.
 // The domain is world-anchored (see applyWaterWaves) so the pattern is pinned in world space, and the
 // caustics (waterCaustic) differentiate this same field, so they stay in sync with the visible ripples.
-static const float WATER_WAVE_STRENGTH = 0.3;  // slope scale (higher = choppier glints / more broken reflections)
-static const float WAVE_SPEED = 0.8;           // global time scale; dispersion keeps relative speeds physical
-static const int   WAVE_COUNT = 10;            // λ = 14 m … 0.38 m (each octave 1.5× shorter)
-static const float WAVE_G = 9.81;
-static const float2 WAVE_WIND = normalize(float2(1.0, 0.35)); // dominant travel direction
-static const float WAVE_MEANDER = 1.1;         // crest phase-wobble amplitude (rad) on the long components
-float waterWaveLodWeight(float wavelength, float footprint) {
+
+import world_common;
+import world_core;
+
+public static const float WATER_WAVE_STRENGTH = 0.3;  // slope scale (higher = choppier glints / more broken reflections)
+public static const float WAVE_SPEED = 0.8;           // global time scale; dispersion keeps relative speeds physical
+public static const int   WAVE_COUNT = 10;            // λ = 14 m … 0.38 m (each octave 1.5× shorter)
+public static const float WAVE_G = 9.81;
+public static const float2 WAVE_WIND = normalize(float2(1.0, 0.35)); // dominant travel direction
+public static const float WAVE_MEANDER = 1.1;         // crest phase-wobble amplitude (rad) on the long components
+public float waterWaveLodWeight(float wavelength, float footprint) {
     float cyclesPerPixel = max(footprint, 0.0) / max(wavelength, 1.0e-4);
     return 1.0 - smoothstep(0.25, 0.5, cyclesPerPixel);
 }
@@ -27,7 +31,7 @@ float waterWaveLodWeight(float wavelength, float footprint) {
 // One walk of the wave spectrum, shared by every consumer so the spectrum constants exist once. WITH_DT
 // is a generic so the derivative terms are compiled out entirely for callers that only want the
 // gradient — the trigonometry is shared, but the chain-rule work is not free.
-void waterWaveSpectrum<let WITH_DT : int>(float2 p, float t, float footprint,
+public void waterWaveSpectrum<let WITH_DT : int>(float2 p, float t, float footprint,
                                           out float2 grad, out float2 gradDt) {
     // Per-wave steepness a·k: gentle in the long swell, concentrated in the mid/short chop.
     const float Q[WAVE_COUNT] = { 0.030, 0.035, 0.042, 0.050, 0.060, 0.065, 0.065, 0.058, 0.048, 0.038 };
@@ -77,20 +81,20 @@ void waterWaveSpectrum<let WITH_DT : int>(float2 p, float t, float footprint,
     gradDt *= WATER_WAVE_STRENGTH;
 }
 
-float2 waterWaveGrad(float2 p, float t, float footprint) {
+public float2 waterWaveGrad(float2 p, float t, float footprint) {
     float2 grad, gradDt;
     waterWaveSpectrum<0>(p, t, footprint, grad, gradDt);
     return grad;
 }
 
-float2 waterWaveGrad(float2 p, float t) {
+public float2 waterWaveGrad(float2 p, float t) {
     return waterWaveGrad(p, t, 0.0);
 }
 
 // Evaluate the current gradient and linearly rewind it to the previous phase in one spectrum walk.
 // Frame deltas are bounded on the CPU, so this avoids a second set of trigonometric/exponential work
 // while remaining accurate over the sub-frame interval used by reflection reprojection.
-void waterWaveGradTemporal(float2 p, float currentT, float previousT, float footprint,
+public void waterWaveGradTemporal(float2 p, float currentT, float previousT, float footprint,
                            out float2 currentGrad, out float2 previousGrad) {
     float2 gradDt;
     waterWaveSpectrum<1>(p, currentT, footprint, currentGrad, gradDt);
@@ -101,7 +105,7 @@ void waterWaveGradTemporal(float2 p, float currentT, float previousT, float foot
 // keep their flat geometric normal. `worldXZ` must be a world-stable coordinate (rebased hit + the pushed
 // anchor) so the ripples stay pinned in the world. `nGeo` is already oriented toward the viewer, so the
 // down-viewed underside (n.y < 0) takes the mirrored slope (-up).
-float3 applyWaterWaves(float3 nGeo, float2 worldXZ, float t, float footprint) {
+public float3 applyWaterWaves(float3 nGeo, float2 worldXZ, float t, float footprint) {
     if (abs(nGeo.y) < 0.5) return nGeo;
     float2 grad = waterWaveGrad(worldXZ, t, footprint);
     float3 up = normalize(float3(-grad.x, 1.0, -grad.y));
@@ -117,19 +121,19 @@ float3 applyWaterWaves(float3 nGeo, float2 worldXZ, float t, float footprint) {
 // fold caustics where det → 0). Because this uses the SAME wave field as the visible surface normals,
 // the caustic pattern stays in sync with the ripples, and the per-sample sun-quad jitter (sampleSquare)
 // shifts the pattern per sample → caustics physically blur with depth under DLSS-RR accumulation.
-static const float CAUSTIC_EPS = 0.25; // finite-difference step (m); also low-passes sub-step wave detail
-static const float CAUSTIC_MAX = 6.0;  // focusing clamp: keeps fold-line singularities from becoming fireflies
+public static const float CAUSTIC_EPS = 0.25; // finite-difference step (m); also low-passes sub-step wave detail
+public static const float CAUSTIC_MAX = 6.0;  // focusing clamp: keeps fold-line singularities from becoming fireflies
 
 // Horizontal landing offset of a refracted sun ray entering the surface at world-stable xz, intersected
 // with the receiver plane h metres below. inc = sunlight travel direction (downward, unit).
-float2 causticLanding(float2 xz, float t, float3 inc, float h) {
+public float2 causticLanding(float2 xz, float t, float3 inc, float h) {
     float2 g = waterWaveGrad(xz, t);
     float3 nw = normalize(float3(-g.x, 1.0, -g.y));
     float3 rdw = refract(inc, nw, 1.0 / WATER_IOR); // air→water: never TIR
     return xz + rdw.xz * (h / max(-rdw.y, 0.05));
 }
 
-float waterCaustic(float3 exitPos, float3 lightDir, float waterDist) {
+public float waterCaustic(float3 exitPos, float3 lightDir, float waterDist) {
     // Grazing light: the receiver-plane intersection degenerates and caustics vanish in reality anyway
     // (long slant paths absorb + the pattern smears out) — fade the effect to neutral 1.0.
     float fade = smoothstep(0.06, 0.18, lightDir.y);
@@ -147,19 +151,3 @@ float waterCaustic(float3 exitPos, float3 lightDir, float waterDist) {
     float focus = (CAUSTIC_EPS * CAUSTIC_EPS) / max(det, 1.0e-5);
     return lerp(1.0, min(focus, CAUSTIC_MAX), fade);
 }
-
-// Below this GGX alpha the lobe is treated as a delta mirror. The threshold is not about detecting an
-// authored zero — it is about the point where a finite lobe stops being distinguishable from a mirror.
-// A GGX lobe's half-angle is ~alpha, and the sun's angular radius is ~0.0047 rad, so alpha = 4e-4 is
-// ~12x tighter than the sun disc and far under a pixel footprint at any reflection distance. Nothing
-// below it can be resolved, and the delta path is both sharper and better conditioned there.
-//
-// Two things follow from taking the delta path, and both are why the threshold is set here rather than
-// at the 8-bit quantum:
-//   * ggxD(_, 0) is exactly 0, so the NEE specular term vanishes by construction and the sun arrives
-//     solely via the mirror ray hitting the disc (showCelestial). That is the correct, unbiased
-//     accounting — see the double-count note on ggxD below.
-//   * There is no floor to apply above the threshold: alpha > 4e-4 is well conditioned for both the
-//     VNDF sample and the NDF, so authored roughness passes through unmodified and the mapping stays
-//     continuous. A separate MIN_ROUGH would only reintroduce a cliff.
-//

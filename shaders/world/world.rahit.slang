@@ -12,6 +12,7 @@
 // a trace. Shadow traversal uses albedo.rgb as accumulated transmittance and hitT as the nearest-water
 // crossing; radiance cutout paths do not touch either field.
 import world_common;
+import math;
 
 [[vk::push_constant]] WorldPushConstants pc;
 

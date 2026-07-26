@@ -7,6 +7,7 @@
 // through worldPushAddr first would cost an extra global-memory load just to find the address of the
 // load we actually want. The cold WorldPush struct is dereferenced only for the breaking overlay.
 import world_common;
+import math;
 
 [[vk::push_constant]] WorldPushConstants pc;
 

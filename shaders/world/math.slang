@@ -1,7 +1,10 @@
 // Stateless math: luminance, GGX (D/G/VNDF), Fresnel, Henyey-Greenstein, the RR specular-albedo
 // fit, the PCG stream, and direction sampling. No bindings, no globals, no rays.
 
-float luminance(float3 c) { return dot(c, float3(0.2126, 0.7152, 0.0722)); }
+import world_common;
+import world_core;
+
+public float luminance(float3 c) { return dot(c, float3(0.2126, 0.7152, 0.0722)); }
 
 // GGX normal distribution.
 // NOTE: the 1e-7 denominator guard is not merely a divide-by-zero epsilon, and it is load-bearing. At
@@ -12,19 +15,19 @@ float luminance(float3 c) { return dot(c, float3(0.2126, 0.7152, 0.0722)); }
 // between them. Removing the guard restores the physical peak AND the double count, and makes the
 // single-sample sun estimator explode wherever the lobe is tighter than the disc (~0.0047 rad). The
 // real fix is MIS (or a disc-aware specular light sample), not an epsilon edit — left as-is.
-float ggxD(float ndh, float alpha) {
+public float ggxD(float ndh, float alpha) {
     float a2 = alpha * alpha;
     float d = ndh * ndh * (a2 - 1.0) + 1.0;
     return a2 / (PI * d * d + 1.0e-7);
 }
 
 // Smith GGX masking term for one direction (separable form; G2 = G1(v) * G1(l)).
-float ggxG1(float ndx, float alpha) {
+public float ggxG1(float ndx, float alpha) {
     float a2 = alpha * alpha;
     return 2.0 * ndx / (ndx + sqrt(a2 + (1.0 - a2) * ndx * ndx) + 1.0e-7);
 }
 
-float3 fresnelSchlick(float cosT, float3 f0) {
+public float3 fresnelSchlick(float cosT, float3 f0) {
     float m = clamp(1.0 - cosT, 0.0, 1.0);
     float m2 = m * m;
     return f0 + (1.0 - f0) * (m2 * m2 * m);
@@ -32,21 +35,21 @@ float3 fresnelSchlick(float cosT, float3 f0) {
 
 // Henyey–Greenstein phase function (with 4π normalisation so it integrates to 1 over the sphere).
 // g=0 → isotropic; g>0 → forward-scatter peak at cosT=1 (light and view aligned through a thin slab).
-static const float SSS_G        = 0.6; // forward-scatter anisotropy; leaves/grass are quite directional
-static const float SSS_STRENGTH = 1.0; // 1.0 ≈ 2.5× the Lambertian at peak (sss=1, cosT=1, backNdl=1)
+public static const float SSS_G        = 0.6; // forward-scatter anisotropy; leaves/grass are quite directional
+public static const float SSS_STRENGTH = 1.0; // 1.0 ≈ 2.5× the Lambertian at peak (sss=1, cosT=1, backNdl=1)
 // Deepest SHADED surface at which the SSS transmission shadow ray fires. diffuseDepth, not `bounce`: the
 // glass/water continue branches don't shade a surface, so foliage seen through a window is still
 // diffuseDepth 0 and should backlight like any other primary leaf — see RIS_MAX_DIFFUSE_DEPTH for the
 // same distinction and why it matters.
-static const int   MAX_SSS_DIFFUSE_DEPTH = 1; // fire on the first-shaded surface + one indirect hit
-float hg(float cosT, float g) {
+public static const int   MAX_SSS_DIFFUSE_DEPTH = 1; // fire on the first-shaded surface + one indirect hit
+public float hg(float cosT, float g) {
     float g2 = g * g;
     return (1.0 - g2) / (4.0 * PI * pow(max(0.0, 1.0 + g2 - 2.0 * g * cosT), 1.5));
 }
 
 // NVIDIA RR guide-buffer helper: integrated/view-dependent specular reflectivity, not raw F0.
 // alpha is GGX alpha (== the linear roughness materials store), NoV is the first-hit view cosine.
-float3 rrSpecularAlbedo(float3 specularColor, float alpha, float NoV) {
+public float3 rrSpecularAlbedo(float3 specularColor, float alpha, float NoV) {
     NoV = abs(NoV);
     float NoV2 = NoV * NoV;
     float alpha2 = alpha * alpha;
@@ -81,7 +84,7 @@ float3 rrSpecularAlbedo(float3 specularColor, float alpha, float NoV) {
 // the incoming side; etaI/etaT are the IORs the ray travels from / into. Returns 1.0 on total internal
 // reflection (sin of the transmitted angle >= 1), which matches refract() returning the zero vector —
 // so reflect/refract selection and TIR stay consistent.
-float fresnelDielectric(float cosI, float etaI, float etaT) {
+public float fresnelDielectric(float cosI, float etaI, float etaT) {
     float sinT2 = (etaI * etaI) / (etaT * etaT) * max(0.0, 1.0 - cosI * cosI);
     if (sinT2 >= 1.0) {
         return 1.0;
@@ -93,19 +96,19 @@ float fresnelDielectric(float cosI, float etaI, float etaT) {
 }
 
 // PCG hash RNG.
-uint pcg(inout uint s) {
+public uint pcg(inout uint s) {
     s = s * 747796405u + 2891336453u;
     uint w = ((s >> ((s >> 28u) + 4u)) ^ s) * 277803737u;
     return (w >> 22u) ^ w;
 }
-float rndf(inout uint s) {
+public float rndf(inout uint s) {
     // Convert the high 24 bits, which are exactly representable as float. Converting all 32 bits first
     // lets the top 128 uint values round to 2^32, incorrectly returning 1.0 and breaking `< probability`
     // tests (most seriously the F == 1 total-internal-reflection branch).
     return float(pcg(s) >> 8u) * (1.0 / 16777216.0);
 }
 
-float3 primaryRayDir(float2 ndc) {
+public float3 primaryRayDir(float2 ndc) {
     float4 nearH = mul(worldPush.invViewProj, float4(ndc.x, ndc.y, 1.0, 1.0));
     float4 farH = mul(worldPush.invViewProj, float4(ndc.x, ndc.y, 0.0, 1.0));
     float3 nearP = nearH.xyz / nearH.w;
@@ -113,7 +116,7 @@ float3 primaryRayDir(float2 ndc) {
     return normalize(farP - nearP);
 }
 
-float primaryRayConeSpread(float2 ndc, float2 size, float3 dir) {
+public float primaryRayConeSpread(float2 ndc, float2 size, float3 dir) {
     float2 onePixelNdc = 2.0 / size;
     float3 dx = primaryRayDir(ndc + float2(onePixelNdc.x, 0.0));
     float3 dy = primaryRayDir(ndc + float2(0.0, onePixelNdc.y));
@@ -123,7 +126,7 @@ float primaryRayConeSpread(float2 ndc, float2 size, float3 dir) {
 // Cosine-weighted hemisphere sample about n (Malley's method). For a Lambertian BRDF this is the
 // importance-sampling match: BRDF*cos/pdf = (albedo/PI)*cos / (cos/PI) = albedo, so the continuation
 // throughput is just *= albedo with no PI/cos bookkeeping left over.
-float3 cosineDir(float3 n, inout uint s) {
+public float3 cosineDir(float3 n, inout uint s) {
     float u1 = rndf(s);
     float u2 = rndf(s);
     float r = sqrt(u1);
@@ -140,7 +143,7 @@ float3 cosineDir(float3 n, inout uint s) {
 // visible disc in world.rmiss uses, built from the same celestial tangent frame (right = arc-travel
 // direction, from worldPush.celestial.xyz). Averaged over frames by DLSS-RR this yields soft penumbrae that
 // widen with occluder distance (contact-hardening) for free. halfAngle <= 0 ⇒ exact direction (hard).
-float3 sampleSquare(float3 axis, float halfAngle, inout uint s) {
+public float3 sampleSquare(float3 axis, float halfAngle, inout uint s) {
     float3 right = normalize(cross(axis, worldPush.celestial.xyz));
     float3 up = cross(right, axis);
     float t = tan(halfAngle);
@@ -152,7 +155,7 @@ float3 sampleSquare(float3 axis, float halfAngle, inout uint s) {
 // Sample a GGX visible-normal (VNDF, Heitz 2018) about geometric normal n for view ve, returning the
 // sampled microfacet normal (half-vector) in world space. Paired with the separable Smith term, the
 // importance-sampling weight reduces to F * G1(NdotL) (applied by the caller).
-float3 sampleGGXVNDF(float3 n, float3 ve, float alpha, inout uint s) {
+public float3 sampleGGXVNDF(float3 n, float3 ve, float alpha, inout uint s) {
     float3 t = normalize(abs(n.x) > 0.9 ? float3(0.0, 1.0, 0.0) : float3(1.0, 0.0, 0.0));
     float3 b = normalize(cross(n, t));
     t = cross(b, n);
@@ -175,16 +178,9 @@ float3 sampleGGXVNDF(float3 n, float3 ve, float alpha, inout uint s) {
     return normalize(Ne.x * t + Ne.y * b + Ne.z * n);                 // -> world space
 }
 
-// ===== RIS emitter NEE =================================================================
-// Block emitters (torches, glowstone, lava, ...) get explicit NEE: per diffuse vertex, stream M uniform
-// candidates from the global light buffer through a weighted reservoir keyed by the UNSHADOWED target
-// p-hat = luminance(f * Le * G * area), then spend ONE shadow ray on the survivor. Sun/moon NEE stays
-// separate and additive. Lights are footprint bounding RECTANGLES (RtLightCollector): sampling a point
-// uniformly over the rectangle has pdf 1/area, so `area` rides the contribution like any area light.
-// Single-frame RIS only (no temporal reservoir reuse): DLSS-RR's own history already denoises this well
-// enough that a persistent per-pixel reservoir wasn't worth the added complexity and VRAM.
-// One resample serves three mutually exclusive receiver terms (see evalSampleContrib): front BRDF,
-// two-sided particle billboards, and LabPBR SSS backscatter from lights BEHIND the surface — all share
-// the reservoir and its single shadow ray, whose origin follows the survivor's side of the surface.
-
-// A reservoir in registers. pos/lnrm/le/area describe the chosen emitter sample; W is its unbiased
+public float3 srgbToLinear(float3 c) {
+    float3 lo = c / 12.92;
+    float3 hi = pow((c + 0.055) / 1.055, float3(2.4, 2.4, 2.4));
+    float3 isHi = step(float3(0.04045, 0.04045, 0.04045), c);
+    return lerp(lo, hi, isHi);
+}

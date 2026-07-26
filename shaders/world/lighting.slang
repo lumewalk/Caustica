@@ -2,18 +2,24 @@
 // INDIRECT PASS ONLY — the primary pass shades nothing. Depends on trace and math.
 
 // contribution weight, M the effective sample count. wSum/phat are streaming scratch (not persisted).
-struct Reservoir {
-    float3 pos;  // light sample point (rebased world space)
-    float3 lnrm; // emitter outward normal
-    float3 le;   // emitter radiance
-    float area;  // emitter rectangle area (the area-light pdf factor)
-    float M;
-    float W;
-    float wSum;
-    float phat;
+
+import world_common;
+import world_core;
+import math;
+import trace;
+
+public struct Reservoir {
+    public float3 pos;  // light sample point (rebased world space)
+    public float3 lnrm; // emitter outward normal
+    public float3 le;   // emitter radiance
+    public float area;  // emitter rectangle area (the area-light pdf factor)
+    public float M;
+    public float W;
+    public float wSum;
+    public float phat;
 };
 
-Reservoir resEmpty() {
+public Reservoir resEmpty() {
     Reservoir r;
     r.pos = float3(0.0, 0.0, 0.0);
     r.lnrm = float3(0.0, 0.0, 0.0);
@@ -34,7 +40,7 @@ Reservoir resEmpty() {
 //   - twoSided (particles): billboards have no back face, ndl=abs(ndl) folds both sides into the front;
 //   - back hemisphere with sss>0 (LabPBR leaves/grass): HG transmission phase — cosT = dot(wi,rd) peaks
 //     when the ray points from the light through the slab toward the camera (same as the sun SSS term).
-float3 evalSampleContrib(float3 sp, float3 lnrm, float3 le, float area, float3 hitPos, float3 n,
+public float3 evalSampleContrib(float3 sp, float3 lnrm, float3 le, float area, float3 hitPos, float3 n,
                          float3 v, float3 rd, float3 diffAlb, float3 F0, float rough,
                          bool twoSided, float sss, out float phat) {
     phat = 0.0;
@@ -83,7 +89,7 @@ float3 evalSampleContrib(float3 sp, float3 lnrm, float3 le, float area, float3 h
 }
 
 // Select one light from the emitted-power distribution in O(1).
-void selectGlobalLight(inout uint proposalSeed, out uint lightIndex) {
+public void selectGlobalLight(inout uint proposalSeed, out uint lightIndex) {
     float aliasSample = rndf(proposalSeed) * float(worldPush.lightCount);
     uint column = min(uint(aliasSample), worldPush.lightCount - 1u);
     if (pc.lightAliasAddr != 0) {
@@ -95,7 +101,7 @@ void selectGlobalLight(inout uint proposalSeed, out uint lightIndex) {
     }
 }
 
-bool findLightGridCell(float3 p, out LightGridCell cell, out int3 cellCoord) {
+public bool findLightGridCell(float3 p, out LightGridCell cell, out int3 cellCoord) {
     cell.spanOffset = 0u;
     cell.spanCount = 0u;
     cell.invWeightSum = 0.0;
@@ -113,7 +119,7 @@ bool findLightGridCell(float3 p, out LightGridCell cell, out int3 cellCoord) {
     return cell.spanCount > 0u;
 }
 
-void selectSectionLight(uint firstLight, uint lightCount, inout uint proposalSeed,
+public void selectSectionLight(uint firstLight, uint lightCount, inout uint proposalSeed,
                         out uint lightIndex) {
     float aliasSample = rndf(proposalSeed) * float(lightCount);
     uint column = min(uint(aliasSample), lightCount - 1u);
@@ -123,7 +129,7 @@ void selectSectionLight(uint firstLight, uint lightCount, inout uint proposalSee
     lightIndex = firstLight + localIndex;
 }
 
-float unpackUnsignedFloat(uint bits, uint mantissaBits) {
+public float unpackUnsignedFloat(uint bits, uint mantissaBits) {
     uint mantissaMask = (1u << mantissaBits) - 1u;
     uint mantissa = bits & mantissaMask;
     uint exponent = (bits >> mantissaBits) & 31u;
@@ -134,44 +140,44 @@ float unpackUnsignedFloat(uint bits, uint mantissaBits) {
             * exp2(float(int(exponent) - 15));
 }
 
-float3 lightRadiance(Light light) {
+public float3 lightRadiance(Light light) {
     uint packed = light.le;
     return float3(unpackUnsignedFloat(packed & 0x7ffu, 6u),
             unpackUnsignedFloat((packed >> 11u) & 0x7ffu, 6u),
             unpackUnsignedFloat((packed >> 22u) & 0x3ffu, 5u));
 }
 
-int3 lightSectionCoord(Light light) {
+public int3 lightSectionCoord(Light light) {
     uint packed = light.section;
     return int3(int(packed & 0x3ffu), int((packed >> 10u) & 0x3ffu),
             int((packed >> 20u) & 0x3ffu));
 }
 
 // The half axes share three lanes two-at-a-time; see the Light record in world_common.
-float3 lightHalfU(Light light) {
+public float3 lightHalfU(Light light) {
     return float3(unpackHalf2(light.halfUxy), unpackHalf2(light.halfUzVx).x);
 }
 
-float3 lightHalfV(Light light) {
+public float3 lightHalfV(Light light) {
     return float3(unpackHalf2(light.halfUzVx).y, unpackHalf2(light.halfVyz));
 }
 
 // U x V drives both the emitter normal and the rectangle area, so it is computed once and shared.
-float3 lightCrossUV(Light light) {
+public float3 lightCrossUV(Light light) {
     return cross(lightHalfU(light), lightHalfV(light));
 }
 
 // The rect spans 2U x 2V, so its area is 4|U x V| — exactly the rectArea the collector used to store.
-float lightArea(Light light) {
+public float lightArea(Light light) {
     return 4.0 * length(lightCrossUV(light));
 }
 
-float3 lightGeometricNormal(Light light) {
+public float3 lightGeometricNormal(Light light) {
     float3 normal = normalize(lightCrossUV(light));
     return (light.section & 0x40000000u) != 0u ? -normal : normal;
 }
 
-float proposalPdf(Light light, float3 le, LightGridCell cell, int3 cellCoord,
+public float proposalPdf(Light light, float3 le, LightGridCell cell, int3 cellCoord,
                   float localProbability) {
     float power = max(0.0, lightArea(light) * luminance(le));
     float globalPdf = pc.lightAliasAddr != 0
@@ -187,7 +193,7 @@ float proposalPdf(Light light, float3 le, LightGridCell cell, int3 cellCoord,
     return localProbability * localPdf + (1.0 - localProbability) * globalPdf;
 }
 
-void selectLightGridSpanLight(LightGridCell cell, inout uint proposalSeed,
+public void selectLightGridSpanLight(LightGridCell cell, inout uint proposalSeed,
                               out uint lightIndex) {
     ConstPtr<LightGridSpan> spans = ConstPtr<LightGridSpan>(pc.lightGridSpanAddr);
     float aliasSample = rndf(proposalSeed) * float(cell.spanCount);
@@ -205,7 +211,7 @@ void selectLightGridSpanLight(LightGridCell cell, inout uint proposalSeed,
 // the neighborhood is represented without a fixed cap; qGlobal gives distant lights full support.
 // Alias spans make weighted local selection O(1). The mixture PDF is reconstructed after the single
 // Light48 load: section power cancels with the section-local light PDF.
-void selectLightGridLight(LightGridCell cell, bool useLocal, inout uint proposalSeed,
+public void selectLightGridLight(LightGridCell cell, bool useLocal, inout uint proposalSeed,
                           out uint lightIndex) {
     if (useLocal) {
         selectLightGridSpanLight(cell, proposalSeed, lightIndex);
@@ -233,7 +239,7 @@ void selectLightGridLight(LightGridCell cell, bool useLocal, inout uint proposal
 // global candidate, so M=2 is the smallest count that still schedules one local AND one global; at M=1
 // localProbability collapses to 0 and the light-grid proposal that makes nearby emitters sample well is
 // gone entirely.
-static const uint SECONDARY_RIS_DIVISOR = 4u;
+public static const uint SECONDARY_RIS_DIVISOR = 4u;
 
 // Deepest SHADED surface at which RIS emitter NEE runs. Past it, emitters are gathered only when a path
 // hits one directly — the pre-RIS behaviour, still unbiased because gateEmitter lifts in lockstep, so the
@@ -251,11 +257,11 @@ static const uint SECONDARY_RIS_DIVISOR = 4u;
 // Caveat this does not solve: a smooth specular bounce IS a shaded surface, so a wall seen in a metal
 // block counts as depth 1. Accumulated roughness rather than a vertex count is the principled fix, and
 // is what a radiance cache would need anyway to decide cache-vs-trace.
-static const uint RIS_MAX_DIFFUSE_DEPTH = 2u;
+public static const uint RIS_MAX_DIFFUSE_DEPTH = 2u;
 
 // Initial RIS over M power-weighted candidates -> one resampled sample, no shadow ray yet. The chosen
 // sample's W = wSum / (M * p-hat); M counts every candidate, including zero-weight ones.
-Reservoir risInitial(float3 hitPos, float3 n, float3 v, float3 rd, float3 diffAlb, float3 F0,
+public Reservoir risInitial(float3 hitPos, float3 n, float3 v, float3 rd, float3 diffAlb, float3 F0,
                      float rough, bool twoSided, float sss, uint shadedDepth,
                      inout uint seed, inout uint proposalSeed) {
     Reservoir r = resEmpty();
@@ -323,7 +329,7 @@ Reservoir risInitial(float3 hitPos, float3 n, float3 v, float3 rd, float3 diffAl
 // ray, and return throughput-free radiance contrib*vis*W. The one ray serves whichever term fired for
 // the survivor (front BRDF, twoSided billboard, or SSS backscatter) — the origin is biased toward the
 // sample's side of the surface.
-float3 shadeReservoir(Reservoir s, float3 hitPos, float3 n, float3 v, float3 rd, float3 diffAlb,
+public float3 shadeReservoir(Reservoir s, float3 hitPos, float3 n, float3 v, float3 rd, float3 diffAlb,
                       float3 F0, float rough, bool twoSided, float sss, out float3 vis) {
     vis = float3(0.0, 0.0, 0.0);
     if (s.W <= 0.0 || s.phat <= 0.0) {
