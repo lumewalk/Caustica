@@ -126,6 +126,39 @@ function Get-DirectoryByteSize {
 	return [long]$measurement.Sum
 }
 
+function Find-CodexToolchainRoot {
+	$currentDirectory = Get-Item -LiteralPath $PSScriptRoot
+	while ($null -ne $currentDirectory) {
+		if ($currentDirectory.Name -ieq "Codex") {
+			$repositoryRelativeToolchains = Join-Path $currentDirectory.FullName "Toolchains"
+			if (Test-Path -LiteralPath $repositoryRelativeToolchains -PathType Container) {
+				return $repositoryRelativeToolchains
+			}
+		}
+		$currentDirectory = $currentDirectory.Parent
+	}
+
+	$candidates = @()
+	if (-not [string]::IsNullOrWhiteSpace($env:USERPROFILE)) {
+		$candidates += Join-Path $env:USERPROFILE "Documents\Codex\Toolchains"
+	}
+	$documentsPath = [Environment]::GetFolderPath("MyDocuments")
+	if (-not [string]::IsNullOrWhiteSpace($documentsPath)) {
+		$candidates += Join-Path $documentsPath "Codex\Toolchains"
+	}
+
+	foreach ($candidate in $candidates) {
+		if (Test-Path -LiteralPath $candidate -PathType Container) {
+			return $candidate
+		}
+	}
+
+	if ($candidates.Count -gt 0) {
+		return $candidates[0]
+	}
+	return $null
+}
+
 Write-Host ""
 Write-Host "Caustica development environment" -ForegroundColor White
 Write-Host "Repository: $PSScriptRoot"
@@ -170,10 +203,17 @@ try {
 Write-Host ""
 Write-Host "Required build tools" -ForegroundColor White
 
-$documentsPath = [Environment]::GetFolderPath("MyDocuments")
-$toolchainRoot = Join-Path $documentsPath "Codex\Toolchains"
-$defaultVulkanSdk = Join-Path $toolchainRoot "VulkanSDK\1.4.350.0"
-$defaultDlssSdk = Join-Path $toolchainRoot "DLSS"
+$toolchainRoot = Find-CodexToolchainRoot
+$defaultVulkanSdk = if ($null -ne $toolchainRoot) {
+	Join-Path $toolchainRoot "VulkanSDK\1.4.350.0"
+} else {
+	$null
+}
+$defaultDlssSdk = if ($null -ne $toolchainRoot) {
+	Join-Path $toolchainRoot "DLSS"
+} else {
+	$null
+}
 
 $javaPath = Find-Tool "java"
 if ($null -eq $javaPath) {
