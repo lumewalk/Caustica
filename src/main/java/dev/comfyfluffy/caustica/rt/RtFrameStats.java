@@ -70,6 +70,7 @@ public final class RtFrameStats {
                     "frame.tracePrimary",
                     "frame.traceIndirect",
                     "frame.temporalValidation",
+                    "frame.reservoirInit",
                     "frame.historyCapture",
                     "frame.exposure",
                     "frame.dlssRr",

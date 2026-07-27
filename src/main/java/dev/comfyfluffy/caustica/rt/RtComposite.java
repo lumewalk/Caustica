@@ -185,6 +185,7 @@ public final class RtComposite {
     private final RtHistoryState historyState = new RtHistoryState();
     private final RtSurfaceHistory surfaceHistory = new RtSurfaceHistory();
     private final RtTemporalValidation temporalValidation = new RtTemporalValidation();
+    private final RtDirectReservoirHistory directReservoirs = new RtDirectReservoirHistory();
     private RtDisplayPipeline displayPipeline;
     private RtImage output;
     // Packed primary -> indirect continuations. Pass A is fixed at one sample and owns two records per
@@ -516,10 +517,12 @@ public final class RtComposite {
                         historyFrame.generation(), historyFrame.resetReasons());
             }
             RtSurfaceHistory.Frame surfaceHistoryFrame = surfaceHistory.beginFrame(historyFrame);
+            RtDirectReservoirHistory.Frame reservoirFrame = directReservoirs.beginFrame(historyFrame);
             updateMotion();
-            recordFrame(ctx, active, nativeColor, surfaceHistoryFrame);
+            recordFrame(ctx, active, nativeColor, surfaceHistoryFrame, reservoirFrame);
             if (historyState.markProduced(historyFrame.generation())) {
                 surfaceHistory.commit(surfaceHistoryFrame);
+                directReservoirs.commit(reservoirFrame);
             }
             if (!loggedActive) {
                 loggedActive = true;
@@ -733,7 +736,7 @@ public final class RtComposite {
     private void ensureOutput(RtContext ctx, int width, int height) {
         boolean rrEnabled = RtDlssRr.enabled();
         int rrQuality = rrEnabled ? RtDlssRr.quality() : Integer.MIN_VALUE;
-        if (output != null && continuationQueue != null && temporalValidation.ready()
+        if (output != null && continuationQueue != null && temporalValidation.ready() && directReservoirs.ready()
                 && displayImage != null && hdrDisplayImage != null && rrOutput != null && exposure.ready()
                 && displayW == width && displayH == height
                 && renderSizeRrEnabled == rrEnabled && renderSizeRrQuality == rrQuality) {
@@ -756,6 +759,7 @@ public final class RtComposite {
         temporalValidation.destroy();
         destroyGuideImages();
         surfaceHistory.destroy();
+        directReservoirs.destroy();
 
         displayW = width;
         displayH = height;
@@ -808,6 +812,13 @@ public final class RtComposite {
                 "RT temporal validation: render={}x{}, bytesPerPixel={}, bytes={}, gpuMiB={}",
                 renderW, renderH, RtTemporalValidation.BYTES_PER_PIXEL, validationBytes,
                 String.format(Locale.ROOT, "%.2f", validationBytes / (1024.0 * 1024.0)));
+        directReservoirs.ensure(ctx, renderW, renderH);
+        long reservoirBytes = directReservoirs.allocatedBytes();
+        CausticaMod.LOGGER.info(
+                "RT direct reservoirs: render={}x{}, slots={}, stride={} B, bytes={}, gpuMiB={}",
+                renderW, renderH, RtDirectReservoirHistory.SLOT_COUNT,
+                RtDirectReservoirHistory.BYTES_PER_RESERVOIR, reservoirBytes,
+                String.format(Locale.ROOT, "%.2f", reservoirBytes / (1024.0 * 1024.0)));
         // Display-res RT image the display mapper reads. Always present (DLSS-RR target, or blit-upscale fallback).
         rrOutput = ctx.createStorageImage(width, height, VK10.VK_FORMAT_R16G16B16A16_SFLOAT, "DLSS-RR output " + width + "x" + height);
         exposure.ensureResources(ctx);
@@ -863,7 +874,8 @@ public final class RtComposite {
     }
 
     private void recordFrame(RtContext ctx, RtPipeline active, GpuTexture nativeColor,
-                             RtSurfaceHistory.Frame surfaceHistoryFrame) {
+                             RtSurfaceHistory.Frame surfaceHistoryFrame,
+                             RtDirectReservoirHistory.Frame reservoirFrame) {
         long dstImage = vkImage(nativeColor);
         var encoder = (VulkanCommandEncoder) ((CommandEncoderAccessor) RenderSystem.getDevice().createCommandEncoder()).caustica$getBackend();
         RtGpuExecutor gpuExecutor = ctx.gpuExecutor();
@@ -1055,6 +1067,12 @@ public final class RtComposite {
             }
             gpuFrameStats.markTemporalValidation(gpuStats, cmd);
             VulkanCommandEncoder.memoryBarrier(cmd, stack); // validation writes visible; guide reads complete
+            try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd, "direct reservoir initialize");
+                 RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage("frame.reservoirInit")) {
+                directReservoirs.recordInitialize(cmd, reservoirFrame);
+            }
+            gpuFrameStats.markReservoirInit(gpuStats, cmd);
+            VulkanCommandEncoder.memoryBarrier(cmd, stack); // initialized reservoir storage visible to later passes
             try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd, "surface history capture");
                  RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage("frame.historyCapture")) {
                 surfaceHistory.recordCapture(cmd, stack, gNormal, gDepth, surfaceHistoryFrame);
@@ -1360,6 +1378,7 @@ public final class RtComposite {
         temporalValidation.destroy();
         destroyGuideImages();
         surfaceHistory.destroy();
+        directReservoirs.destroy();
         exposure.destroy();
         if (displayPipeline != null) {
             displayPipeline.destroy();

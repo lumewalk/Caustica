@@ -111,6 +111,20 @@ public struct LightGridSpan {
     public float accept;
 };
 
+// Clarity-first persistent ReSTIR DI record. This deliberately stays unpacked until captures prove
+// reservoir bandwidth or residency is a real bottleneck. Five aligned lanes make the semantic contract
+// explicit and give later GRIS work a stable seam without reusing the transient megakernel Reservoir.
+//
+// weights = {accumulated weight, effective candidate count M, final selected-sample W, confidence}
+// metadata = {stable light id, light/content epoch, source frame, low16 age | high16 flags}
+public struct DirectReservoir {
+    public float4 samplePositionArea;   // xyz sampled point in rebased world, w emitter area
+    public float4 lightNormalTargetPdf; // xyz emitter normal, w selected target density
+    public float4 radianceProposalPdf;  // xyz emitted radiance, w source proposal density
+    public float4 weights;
+    public uint4 metadata;
+};
+
 // TerrainPrim.flags bit 0: this emissive quad is in the light buffer (RtLightCollector membership).
 public static const uint TERRAIN_PRIM_IN_LIGHT_BUFFER = 1u;
 

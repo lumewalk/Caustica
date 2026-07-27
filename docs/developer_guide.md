@@ -72,6 +72,7 @@ Its `frame.traceMs` column remains the combined command-recording time, with
 `frame.temporalValidationMs` measures motion-vector reprojection and conservative
 surface-history acceptance; debug view `Temporal Validation` visualizes accepted pixels in green
 and rejection classes in red, magenta, yellow, blue, or black.
+`frame.reservoirInitMs` measures initialization of the current direct-light reservoir slot.
 `frame.historyCaptureMs` measures the deterministic surface-history copy boundary.
 The same switch also writes non-blocking Vulkan timestamp results to
 `run\rt-frame-stats\gpu.csv`, split into entity BLAS, TLAS, primary trace,
@@ -95,6 +96,12 @@ created. Useful reference points:
 | 1920x1080 native | 189.84 MiB |
 | 2560x1440 native | 337.50 MiB |
 | 3840x2160 native | 759.38 MiB |
+
+The clarity-first direct-light reservoir ABI is generated from Slang reflection
+and occupies 80 bytes per pixel per slot. Two history slots use about 131.4 MiB
+at 1280x673 and 295.6 MiB at 1920x1009. This intentionally favors inspectable
+ReSTIR/GRIS semantics over packing until profiling identifies real bandwidth
+or residency pressure.
 
 ## Linux
 

@@ -230,6 +230,15 @@ abstract class GenerateShaderRecords extends DefaultTask {
         Map materialHeaderType = materialProbeArray.type.elementType as Map
         int materialHeaderByteSize = materialProbeArray.type.uniformStride as int
 
+        def reservoirParameter = reflection.parameters.find { it.name == "directReservoirLayoutProbe" }
+        def reservoirProbeArray = reservoirParameter?.type?.resultType?.fields?.find { it.name == "values" }
+        if (reservoirProbeArray?.type?.kind != "array"
+                || reservoirProbeArray.type.elementType?.name != "DirectReservoir") {
+            throw new GradleException("unexpected DirectReservoir reflection probe shape")
+        }
+        Map directReservoirType = reservoirProbeArray.type.elementType as Map
+        int directReservoirByteSize = reservoirProbeArray.type.uniformStride as int
+
         def pushParameter = reflection.parameters.find { it.name == "pushConstantsLayoutProbe" }
         if (pushParameter?.type?.elementType?.name != "WorldPushConstants") {
             throw new GradleException("Slang reflection omitted pushConstantsLayoutProbe")
@@ -249,5 +258,7 @@ abstract class GenerateShaderRecords extends DefaultTask {
                 generateJava(pushConstantsType, pushConstantsByteSize, "WorldPushConstantsData"), "UTF-8")
         new File(packageDir, "MaterialHeaderData.java").setText(
                 generateJava(materialHeaderType, materialHeaderByteSize, "MaterialHeaderData"), "UTF-8")
+        new File(packageDir, "DirectReservoirData.java").setText(
+                generateJava(directReservoirType, directReservoirByteSize, "DirectReservoirData"), "UTF-8")
     }
 }

@@ -11,8 +11,13 @@ struct MaterialHeaderLayoutProbe {
     MaterialHeader values[2]; // array stride is the complete, tail-padded MaterialHeader byte size
 };
 
+struct DirectReservoirLayoutProbe {
+    DirectReservoir values[2]; // clarity-first persistent reservoir stride
+};
+
 [[vk::binding(0, 0)]] StructuredBuffer<WorldPushLayoutProbe, Std430DataLayout> worldPushLayoutProbe;
 [[vk::binding(1, 0)]] StructuredBuffer<MaterialHeaderLayoutProbe, Std430DataLayout> materialHeaderLayoutProbe;
+[[vk::binding(2, 0)]] StructuredBuffer<DirectReservoirLayoutProbe, Std430DataLayout> directReservoirLayoutProbe;
 [[vk::push_constant]] WorldPushConstants pushConstantsLayoutProbe;
 
 [shader("compute")]
@@ -22,6 +27,7 @@ void main(uint3 id : SV_DispatchThreadID) {
     if (id.x == 0xFFFFFFFFu) {
         float sink = worldPushLayoutProbe[0].values[0].invViewProj[0][0]
                 + materialHeaderLayoutProbe[0].values[0].params.x
+                + directReservoirLayoutProbe[0].values[0].weights.x
                 + float(pushConstantsLayoutProbe.frameIndex);
     }
 }
