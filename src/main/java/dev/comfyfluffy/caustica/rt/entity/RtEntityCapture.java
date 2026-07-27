@@ -236,23 +236,28 @@ public final class RtEntityCapture implements VertexConsumer {
         packedPrim.ensureCapacity(prim.size());
         int[] indices = idx.elements();
         float[] primitives = prim.elements();
+        packedIdx.size(idx.size());
+        packedPrim.size(prim.size());
+        int[] packedIndices = packedIdx.elements();
+        float[] packedPrimitives = packedPrim.elements();
+        int packedIndexPos = 0;
+        int packedPrimPos = 0;
         for (int bucket = 0; bucket < RtAccel.ENTITY_BUCKETS; bucket++) {
             for (int tri = 0; tri < triangleCount; tri++) {
                 if (alphaBuckets.getInt(tri) != bucket) {
                     continue;
                 }
                 int indexBase = tri * 3;
-                packedIdx.add(indices[indexBase]);
-                packedIdx.add(indices[indexBase + 1]);
-                packedIdx.add(indices[indexBase + 2]);
+                packedIndices[packedIndexPos++] = indices[indexBase];
+                packedIndices[packedIndexPos++] = indices[indexBase + 1];
+                packedIndices[packedIndexPos++] = indices[indexBase + 2];
                 int primBase = tri * 12;
-                for (int lane = 0; lane < 12; lane++) {
-                    packedPrim.add(primitives[primBase + lane]);
-                }
+                System.arraycopy(primitives, primBase, packedPrimitives, packedPrimPos, 12);
+                packedPrimPos += 12;
                 packedBucketTris[bucket]++;
             }
         }
-        if (packedIdx.size() != idx.size() || packedPrim.size() != prim.size()) {
+        if (packedIndexPos != idx.size() || packedPrimPos != prim.size()) {
             throw new IllegalStateException("Entity capture contains an invalid alpha bucket");
         }
         return new PackedGeometry(packedIdx, packedPrim, packedBucketTris);
@@ -371,39 +376,57 @@ public final class RtEntityCapture implements VertexConsumer {
         float off = offset ? ORDER_OFFSET * currentOrder : 0f;
 
         int base = verts.size() / 3;
+        int vertexFloatBase = verts.size();
+        int uvBase = uvList.size();
+        verts.size(vertexFloatBase + 12);
+        uvList.size(uvBase + 8);
+        float[] vertexData = verts.elements();
+        float[] uvData = uvList.elements();
         for (int i = 0; i < 4; i++) {
             int p = positionIndex(corners, i);
-            verts.add(offset ? x[p] + nx * off : x[p]);
-            verts.add(offset ? y[p] + ny * off : y[p]);
-            verts.add(offset ? z[p] + nz * off : z[p]);
-            uvList.add(remapUv ? uvU0 + u[i] * uvDU : u[i]);
-            uvList.add(remapUv ? uvV0 + v[i] * uvDV : v[i]);
+            int vertexOffset = vertexFloatBase + i * 3;
+            vertexData[vertexOffset] = offset ? x[p] + nx * off : x[p];
+            vertexData[vertexOffset + 1] = offset ? y[p] + ny * off : y[p];
+            vertexData[vertexOffset + 2] = offset ? z[p] + nz * off : z[p];
+            int uvOffset = uvBase + i * 2;
+            uvData[uvOffset] = remapUv ? uvU0 + u[i] * uvDU : u[i];
+            uvData[uvOffset + 1] = remapUv ? uvV0 + v[i] * uvDV : v[i];
         }
-        idx.add(base);
-        idx.add(base + 1);
-        idx.add(base + 2);
-        idx.add(base);
-        idx.add(base + 2);
-        idx.add(base + 3);
+        int indexBase = idx.size();
+        idx.size(indexBase + 6);
+        int[] indexData = idx.elements();
+        indexData[indexBase] = base;
+        indexData[indexBase + 1] = base + 1;
+        indexData[indexBase + 2] = base + 2;
+        indexData[indexBase + 3] = base;
+        indexData[indexBase + 4] = base + 2;
+        indexData[indexBase + 5] = base + 3;
         // Vertex colour as a flat per-prim tint (ARGB → rgb). White (-1) for most models → grey when lit.
         int c = color;
         float tr = ((c >> 16) & 0xFF) * (1f / 255f);
         float tg = ((c >> 8) & 0xFF) * (1f / 255f);
         float tb = (c & 0xFF) * (1f / 255f);
+        int primBase = prim.size();
+        prim.size(primBase + 24);
+        float[] primData = prim.elements();
+        int bucketBase = alphaBuckets.size();
+        alphaBuckets.size(bucketBase + 2);
+        int[] bucketData = alphaBuckets.elements();
         for (int t = 0; t < 2; t++) { // one {normal+emission, tint, mat} record per triangle
-            prim.add(nx);
-            prim.add(ny);
-            prim.add(nz);
-            prim.add(emission);
-            prim.add(tr);
-            prim.add(tg);
-            prim.add(tb);
-            prim.add((float) currentTexSlot); // tint.w = bindless texture slot
-            prim.add(Float.intBitsToFloat(currentMaterialId));
-            prim.add(0f); // flags
-            prim.add(0f); // aux0
-            prim.add(0f); // aux1
-            alphaBuckets.add(currentAlphaBucket);
+            int p = primBase + t * 12;
+            primData[p] = nx;
+            primData[p + 1] = ny;
+            primData[p + 2] = nz;
+            primData[p + 3] = emission;
+            primData[p + 4] = tr;
+            primData[p + 5] = tg;
+            primData[p + 6] = tb;
+            primData[p + 7] = (float) currentTexSlot; // tint.w = bindless texture slot
+            primData[p + 8] = Float.intBitsToFloat(currentMaterialId);
+            primData[p + 9] = 0f; // flags
+            primData[p + 10] = 0f; // aux0
+            primData[p + 11] = 0f; // aux1
+            bucketData[bucketBase + t] = currentAlphaBucket;
         }
     }
 
