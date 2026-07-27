@@ -177,11 +177,7 @@ public float3 sampleGGXVNDF(float3 n, float3 ve, float alpha, inout uint s) {
 
 public float3 srgbToLinear(float3 c) {
     float3 lo = c / 12.92;
-    // Vanilla's color atlases are sampled through a plain UNORM view, so decode their sRGB texels
-    // before they enter lighting. A cubic approximation replaces three transcendental pow operations
-    // with FMAs. For UNORM inputs its maximum absolute error is 0.001671; retain the exact linear toe
-    // where the cubic's relative error is largest.
-    float3 hi = c * (c * (c * 0.305306011 + 0.682171111) + 0.012522878);
+    float3 hi = pow((c + 0.055) / 1.055, float3(2.4, 2.4, 2.4));
     float3 isHi = step(float3(0.04045, 0.04045, 0.04045), c);
     return lerp(lo, hi, isHi);
 }
