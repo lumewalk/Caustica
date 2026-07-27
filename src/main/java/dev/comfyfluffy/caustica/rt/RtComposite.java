@@ -84,6 +84,8 @@ import java.util.Locale;
  */
 public final class RtComposite {
     public static final RtComposite INSTANCE = new RtComposite();
+    private static final double CAMERA_CUT_DISTANCE = 32.0;
+    private static final double CAMERA_CUT_DISTANCE_SQ = CAMERA_CUT_DISTANCE * CAMERA_CUT_DISTANCE;
 
     public static boolean enabled() {
         return CausticaConfig.Rt.ENABLED.value();
@@ -180,6 +182,7 @@ public final class RtComposite {
     private PushSlot[] pushRing;
     private int pushSlot;
     private final RtGpuFrameStats gpuFrameStats = new RtGpuFrameStats();
+    private final RtHistoryState historyState = new RtHistoryState();
     private RtDisplayPipeline displayPipeline;
     private RtImage output;
     // Packed primary -> indirect continuations. Pass A is fixed at one sample and owns two records per
@@ -368,8 +371,22 @@ public final class RtComposite {
         }
     }
 
+    /** Drop every temporal consumer after Minecraft invalidates world render state. */
+    public void onRenderStateInvalidated() {
+        invalidateHistory(RtHistoryState.Reason.WORLD_RENDER_STATE);
+        resetFailureLatch();
+    }
+
     /** Capture the frame's camera for the next composite. Called from GameRendererMixin. */
     public void captureFrame(Matrix4f projection, Matrix4fc viewRotation, double cameraX, double cameraY, double cameraZ) {
+        if (mvHasPrev) {
+            double dx = cameraX - mvPrevCamX;
+            double dy = cameraY - mvPrevCamY;
+            double dz = cameraZ - mvPrevCamZ;
+            if (dx * dx + dy * dy + dz * dz > CAMERA_CUT_DISTANCE_SQ) {
+                invalidateHistory(RtHistoryState.Reason.CAMERA_CUT);
+            }
+        }
         frameProjection.set(projection);
         frameViewRotation.set(viewRotation);
         camX = cameraX;
@@ -486,8 +503,17 @@ public final class RtComposite {
                 return false;
             }
             refreshMaterialBindingsIfNeeded(ctx);
+            RtHistoryState.Frame historyFrame = historyState.beginFrame();
+            if (!historyFrame.reuseAllowed()) {
+                resetTemporalConsumers();
+            }
+            if (historyFrame.resetRequired()) {
+                CausticaMod.LOGGER.info("RT history reset: generation={}, reasons={}",
+                        historyFrame.generation(), historyFrame.resetReasons());
+            }
             updateMotion();
             recordFrame(ctx, active, nativeColor);
+            historyState.markProduced(historyFrame.generation());
             if (!loggedActive) {
                 loggedActive = true;
                 CausticaMod.LOGGER.info("RT composite active (terrain): {}x{}, RT output replaces the world target", width, height);
@@ -589,6 +615,7 @@ public final class RtComposite {
         worldPipeline.setEntityAlbedoTexture(0, atlasView, sampler);
         RtBlockMaterials.INSTANCE.bindPages(worldPipeline, sampler);
         RtMaterialRegistry.INSTANCE.rebuild(ctx, RtBlockMaterials.INSTANCE, materialOverrides);
+        invalidateHistory(RtHistoryState.Reason.MATERIAL_EPOCH);
         materialBindingsReady = true;
         // Sky rewrite: bind the vanilla celestials atlas (sun + moon phases) for world.rmiss. The view
         // handle is stable across frames; the shader only samples it inside the sun/moon discs (sky
@@ -635,6 +662,7 @@ public final class RtComposite {
      * atlas is ready (gated in {@link #composite}). The new material epoch clears terrain before trace.
      */
     public void onResourceReloadStart() {
+        invalidateHistory(RtHistoryState.Reason.RESOURCE_RELOAD);
         reloadRebindRequested = true;
         materialBindingsReady = false;
         setCelestialUvAtlas(0L);
@@ -761,8 +789,7 @@ public final class RtComposite {
         rrOutput = ctx.createStorageImage(width, height, VK10.VK_FORMAT_R16G16B16A16_SFLOAT, "DLSS-RR output " + width + "x" + height);
         exposure.ensureResources(ctx);
 
-        mvHasPrev = false; // recreated images -> first MV frame is zero
-        waterWaveTimeValid = false;
+        invalidateHistory(RtHistoryState.Reason.RENDER_TARGET_RECREATED);
         if (worldPipeline != null) {
             worldPipeline.setStorageImage(output.view);
             bindGuideImages();
@@ -793,6 +820,17 @@ public final class RtComposite {
         mvPrevCamY = camY;
         mvPrevCamZ = camZ;
         mvHasPrev = true;
+    }
+
+    private void invalidateHistory(RtHistoryState.Reason reason) {
+        historyState.invalidate(reason);
+        resetTemporalConsumers();
+    }
+
+    private void resetTemporalConsumers() {
+        mvHasPrev = false;
+        waterWaveTimeValid = false;
+        fgReset = true;
     }
 
     private void recordFrame(RtContext ctx, RtPipeline active, GpuTexture nativeColor) {
@@ -966,17 +1004,19 @@ public final class RtComposite {
                     terrain.lightLocalAliasBufferAddress(), terrain.lightGridCellBufferAddress(),
                     terrain.lightGridSpanBufferAddress(), continuationQueue.deviceAddress,
                     (int) frameCounter, debugView).write(pushConstants);
-            try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd, "world primary trace");
-                 RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage("frame.tracePrimary")) {
-                active.trace(cmd, renderW, renderH, pushConstants, 0);
+            try (RtFrameStats.Scope ignoredTrace = RtFrameStats.FRAME.stage("frame.trace")) {
+                try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd, "world primary trace");
+                     RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage("frame.tracePrimary")) {
+                    active.trace(cmd, renderW, renderH, pushConstants, 0);
+                }
+                gpuFrameStats.markTracePrimary(gpuStats, cmd);
+                VulkanCommandEncoder.memoryBarrier(cmd, stack); // continuation/guide writes visible to pass B
+                try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd, "world indirect trace");
+                     RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage("frame.traceIndirect")) {
+                    active.trace(cmd, renderW, renderH, pushConstants, 1);
+                }
+                gpuFrameStats.markTraceIndirect(gpuStats, cmd);
             }
-            gpuFrameStats.markTracePrimary(gpuStats, cmd);
-            VulkanCommandEncoder.memoryBarrier(cmd, stack); // continuation/guide writes visible to pass B
-            try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd, "world indirect trace");
-                 RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage("frame.traceIndirect")) {
-                active.trace(cmd, renderW, renderH, pushConstants, 1);
-            }
-            gpuFrameStats.markTraceIndirect(gpuStats, cmd);
             VulkanCommandEncoder.memoryBarrier(cmd, stack); // RT writes visible to DLSS reads
             // DLSS-RR denoise + upscale. The RT pass wrote noisy color (render res) + guides;
             // RR reads them and writes the display-res denoised result straight into rrOutput.
@@ -1340,6 +1380,7 @@ public final class RtComposite {
      * and failure latches that must not cross the device-session boundary.
      */
     private void resetSessionState() {
+        historyState.resetForSession();
         reloadRebindRequested = false;
         boundBlockAlbedoAtlasHandle = 0L;
         pushSlot = 0;
@@ -1358,6 +1399,8 @@ public final class RtComposite {
         mvCamDeltaY = 0.0f;
         mvCamDeltaZ = 0.0f;
         mvHasPrev = false;
+        previousWaterWaveTime = 0.0f;
+        waterWaveTimeValid = false;
         failed = false;
         loggedActive = false;
         camX = 0.0;

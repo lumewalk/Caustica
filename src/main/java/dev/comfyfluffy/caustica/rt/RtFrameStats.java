@@ -67,6 +67,8 @@ public final class RtFrameStats {
                     "frame.prepareTlas",
                     "frame.recordTlas",
                     "frame.trace",
+                    "frame.tracePrimary",
+                    "frame.traceIndirect",
                     "frame.exposure",
                     "frame.dlssRr",
                     "frame.upscale",
