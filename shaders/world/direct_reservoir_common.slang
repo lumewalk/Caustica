@@ -8,8 +8,14 @@ public static const uint RESERVOIR_FLAG_DIFFUSE_TARGET = 2u;
 public static const uint RESERVOIR_FLAG_SSS_TARGET = 4u;
 public static const uint RESERVOIR_FLAG_TEMPORAL_MERGED = 8u;
 public static const uint RESERVOIR_FLAG_TEMPORAL_SELECTED = 16u;
+public static const uint RESERVOIR_FLAG_SPATIAL_MERGED = 32u;
+public static const uint RESERVOIR_FLAG_SPATIAL_SELECTED = 64u;
 public static const uint RESERVOIR_MAX_AGE = 30u;
 public static const float RESERVOIR_HISTORY_M_MULTIPLIER = 20.0;
+public static const uint RESERVOIR_SPATIAL_SAMPLE_COUNT = 4u;
+public static const float RESERVOIR_SPATIAL_RADIUS = 16.0;
+public static const float RESERVOIR_SPATIAL_NORMAL_COS = 0.85;
+public static const float RESERVOIR_SPATIAL_RELATIVE_DEPTH = 0.10;
 
 static const float DIRECT_INV_PI = 0.31830988618;
 static const float DIRECT_SSS_G = 0.6;

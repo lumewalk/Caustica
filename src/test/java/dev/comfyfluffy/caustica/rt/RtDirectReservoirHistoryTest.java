@@ -15,19 +15,21 @@ final class RtDirectReservoirHistoryTest {
     }
 
     @Test
-    void alternatesSlotsWithinOneHistoryGeneration() {
+    void reusesConsumedHistorySlotAsRaceFreeSpatialOutput() {
         RtHistoryState history = new RtHistoryState();
         RtDirectReservoirHistory.State reservoirs = new RtDirectReservoirHistory.State();
 
         RtDirectReservoirHistory.Frame first = reservoirs.begin(history.beginFrame());
         assertEquals(0, first.writeSlot());
+        assertEquals(1, first.spatialWriteSlot());
         assertFalse(first.previousAvailable());
         reservoirs.commit(first);
         history.markProduced(first.generation());
 
         RtDirectReservoirHistory.Frame second = reservoirs.begin(history.beginFrame());
-        assertEquals(1, second.writeSlot());
-        assertEquals(0, second.previousSlot());
+        assertEquals(0, second.writeSlot());
+        assertEquals(1, second.spatialWriteSlot());
+        assertEquals(1, second.previousSlot());
         assertTrue(second.previousAvailable());
     }
 

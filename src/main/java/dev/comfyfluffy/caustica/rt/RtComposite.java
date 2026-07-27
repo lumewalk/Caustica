@@ -1118,7 +1118,13 @@ public final class RtComposite {
                 directReservoirs.recordTemporalReuse(cmd, reservoirFrame, pushConstants);
             }
             gpuFrameStats.markReservoirTemporal(gpuStats, cmd);
-            VulkanCommandEncoder.memoryBarrier(cmd, stack); // finalized reservoir visible to later reuse passes
+            VulkanCommandEncoder.memoryBarrier(cmd, stack); // temporal output visible to immutable spatial reads
+            try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd, "direct reservoir spatial reuse");
+                 RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage("frame.reservoirSpatial")) {
+                directReservoirs.recordSpatialReuse(cmd, reservoirFrame, pushConstants);
+            }
+            gpuFrameStats.markReservoirSpatial(gpuStats, cmd);
+            VulkanCommandEncoder.memoryBarrier(cmd, stack); // finalized reservoir visible to later consumers
             try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd, "surface history capture");
                  RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage("frame.historyCapture")) {
                 surfaceHistory.recordCapture(cmd, stack, gNormal, gDepth, surfaceHistoryFrame);

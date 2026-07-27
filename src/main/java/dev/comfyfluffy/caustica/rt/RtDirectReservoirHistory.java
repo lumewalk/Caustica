@@ -4,6 +4,7 @@ import dev.comfyfluffy.caustica.rt.accel.RtBuffer;
 import dev.comfyfluffy.caustica.rt.accel.RtImage;
 import dev.comfyfluffy.caustica.rt.gen.DirectReservoirData;
 import dev.comfyfluffy.caustica.rt.pipeline.RtDirectCandidatePipeline;
+import dev.comfyfluffy.caustica.rt.pipeline.RtDirectSpatialPipeline;
 import dev.comfyfluffy.caustica.rt.pipeline.RtDirectTemporalPipeline;
 import java.nio.ByteBuffer;
 import org.lwjgl.vulkan.VK10;
@@ -12,15 +13,20 @@ import org.lwjgl.vulkan.VkCommandBuffer;
 /**
  * Double-buffered per-pixel direct-light reservoirs.
  *
- * <p>The current write slot is cleared at an explicit render-graph boundary before future candidate
- * generation. The other slot remains immutable history for the frame. Generation matching prevents an
- * old world/resource epoch from becoming visible after a reset.</p>
+ * <p>The candidate slot is cleared at an explicit render-graph boundary, then temporal reuse reads the
+ * other slot as immutable history. After that read completes, spatial reuse writes its complete result
+ * into the consumed history slot, so two buffers provide race-free same-frame ping-pong without a third
+ * full-resolution allocation. Generation matching prevents an old world/resource epoch from becoming
+ * visible after a reset.</p>
  */
 final class RtDirectReservoirHistory {
     static final int SLOT_COUNT = 2;
     static final int BYTES_PER_RESERVOIR = DirectReservoirData.BYTE_SIZE;
 
     record Frame(long generation, int writeSlot, int previousSlot, boolean previousAvailable) {
+        int spatialWriteSlot() {
+            return 1 - writeSlot;
+        }
     }
 
     static final class State {
@@ -37,7 +43,7 @@ final class RtDirectReservoirHistory {
         }
 
         void commit(Frame frame) {
-            latestSlot = frame.writeSlot();
+            latestSlot = frame.spatialWriteSlot();
             latestGeneration = frame.generation();
         }
 
@@ -51,6 +57,7 @@ final class RtDirectReservoirHistory {
     private final RtBuffer[] slots = new RtBuffer[SLOT_COUNT];
     private RtDirectCandidatePipeline candidatePipeline;
     private RtDirectTemporalPipeline temporalPipeline;
+    private RtDirectSpatialPipeline spatialPipeline;
     private int width = -1;
     private int height = -1;
 
@@ -77,6 +84,9 @@ final class RtDirectReservoirHistory {
                 receiverPositionMaterial.view, receiverNormalRoughness.view,
                 receiverAlbedoSss.view, receiverMotion.view, validationMetadata.view,
                 debugColor.view, slots);
+        spatialPipeline = RtDirectSpatialPipeline.create(ctx,
+                receiverPositionMaterial.view, receiverNormalRoughness.view,
+                receiverAlbedoSss.view, debugColor.view, slots);
         state.reset();
     }
 
@@ -106,12 +116,23 @@ final class RtDirectReservoirHistory {
         temporalPipeline.dispatch(cmd, frame.writeSlot(), width, height, pushConstants);
     }
 
+    void recordSpatialReuse(VkCommandBuffer cmd, Frame frame, ByteBuffer pushConstants) {
+        if (spatialPipeline == null) {
+            throw new IllegalStateException("Direct spatial pipeline used before allocation");
+        }
+        spatialPipeline.dispatch(cmd, frame.writeSlot(), width, height, pushConstants);
+    }
+
     void commit(Frame frame) {
         state.commit(frame);
     }
 
     RtBuffer writeBuffer(Frame frame) {
         return slot(frame.writeSlot());
+    }
+
+    RtBuffer finalBuffer(Frame frame) {
+        return slot(frame.spatialWriteSlot());
     }
 
     RtBuffer previousBuffer(Frame frame) {
@@ -133,11 +154,15 @@ final class RtDirectReservoirHistory {
 
     boolean ready() {
         return slots[0] != null && slots[1] != null
-                && candidatePipeline != null && temporalPipeline != null;
+                && candidatePipeline != null && temporalPipeline != null && spatialPipeline != null;
     }
 
     void destroy() {
         // Drop immutable descriptor references before freeing their reservoir buffers.
+        if (spatialPipeline != null) {
+            spatialPipeline.destroy();
+            spatialPipeline = null;
+        }
         if (temporalPipeline != null) {
             temporalPipeline.destroy();
             temporalPipeline = null;

@@ -83,6 +83,22 @@ final class RtReservoirReferenceTest {
     }
 
     @Test
+    void spatialMergeClampsNeighborAndPreservesSameFrameAge() {
+        RtReservoirReference.Reservoir source = new RtReservoirReference.Reservoir();
+        for (int candidate = 0; candidate < 32; candidate++) {
+            source.update(new RtReservoirReference.Candidate(candidate, 2.0, 1.0), 0.99);
+        }
+        RtReservoirReference.Reservoir receiver = new RtReservoirReference.Reservoir();
+        receiver.update(new RtReservoirReference.Candidate(1000L, 1.0, 1.0), 0.0);
+        receiver.mergeSpatial(source, 1.0, 0.0, 1.0);
+
+        RtReservoirReference.Snapshot result = receiver.snapshot();
+        assertEquals(2.0, result.effectiveCount());
+        assertEquals(0, result.age());
+        assertTrue(Double.isFinite(result.finalWeight()));
+    }
+
+    @Test
     void extremeFiniteWeightsRemainFinite() {
         RtReservoirReference.Reservoir reservoir = new RtReservoirReference.Reservoir();
         reservoir.update(new RtReservoirReference.Candidate(1L, 1.0e250, 1.0), 0.0);

@@ -66,6 +66,16 @@ final class RtReservoirReference {
 
         void merge(Reservoir source, double targetDensityAtReceiver, double random01,
                    double maxSourceCount) {
+            merge(source, targetDensityAtReceiver, random01, maxSourceCount, true);
+        }
+
+        void mergeSpatial(Reservoir source, double targetDensityAtReceiver, double random01,
+                          double maxSourceCount) {
+            merge(source, targetDensityAtReceiver, random01, maxSourceCount, false);
+        }
+
+        private void merge(Reservoir source, double targetDensityAtReceiver, double random01,
+                           double maxSourceCount, boolean advanceAge) {
             if (source == this) {
                 throw new IllegalArgumentException("reservoir cannot merge itself");
             }
@@ -84,7 +94,8 @@ final class RtReservoirReference {
                 selected = new Candidate(source.selected.sampleId(), targetDensityAtReceiver,
                         source.selected.proposalDensity());
                 selectedTargetDensity = targetDensityAtReceiver;
-                age = source.age == Integer.MAX_VALUE ? Integer.MAX_VALUE : source.age + 1;
+                age = !advanceAge || source.age == Integer.MAX_VALUE
+                        ? source.age : source.age + 1;
             }
         }
 

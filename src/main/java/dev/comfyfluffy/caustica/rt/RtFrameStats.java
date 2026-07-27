@@ -73,6 +73,7 @@ public final class RtFrameStats {
                     "frame.reservoirInit",
                     "frame.reservoirCandidates",
                     "frame.reservoirTemporal",
+                    "frame.reservoirSpatial",
                     "frame.historyCapture",
                     "frame.exposure",
                     "frame.dlssRr",
