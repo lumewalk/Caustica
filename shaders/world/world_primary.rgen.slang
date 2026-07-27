@@ -84,7 +84,7 @@ public PathSegment tracePrimary(PathSegment seg,
                     float3 v = -rd;
                     gv_albedo = diffAlb;
                     gv_rough = rough;
-                    gv_spec = makeSpecSurface(gv_hitCamRel, n, rough,
+                    gv_spec = makeSpecSurface(gv_hitCamRel, n, float3(payload.motionPrev), rough,
                                               rrSpecularAlbedo(payload.f0, rough, dot(n, v)));
                 }
             }
@@ -139,6 +139,7 @@ public PathSegment tracePrimary(PathSegment seg,
             gv_motionUseRefracted = false;
             gv_motionObjDisp = isWater ? float3(0.0, 0.0, 0.0) : payload.motionPrev;
             gv_spec = makeSpecSurface(gv_hitCamRel, n, previousNormal, geometricNormal,
+                                      isWater ? float3(0.0, 0.0, 0.0) : float3(payload.motionPrev),
                                       gv_rough, float3(F, F, F));
             if (dot(transmittedDir, transmittedDir) > 0.0) {
                 MediumStack guideMedium = medium;

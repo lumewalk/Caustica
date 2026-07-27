@@ -86,7 +86,7 @@ reflection and transmission records immediately and stop radiance traversal. Onl
 reflection/refraction guide probes may trace farther. Pass A uses ordinary `TraceRay`, with no
 invocation-reorder capability or barrier.
 
-**Pass B — `world.rgen`.** One invocation per pixel. Load each valid leaf and resample its terminal
+**Pass B — `world.rgen`.** One invocation per pixel. Load each linked leaf and resample its terminal
 continuation `worldPush.spp` times with decorrelated seeds, run NEE / RIS / SSS / GGX continuation,
 sum the leaves, divide by SPP, and write the pixel once. It never touches `gv_*`.
 
@@ -154,6 +154,9 @@ supply the endpoints without affecting queued radiance:
   metals (`diffAlb=0`), and another dielectric/mirror fall back to the foreground material reflectance
   to avoid an unstable zero or recursively defined demodulation signal. Rougher surfaces retain their
   conventional material-reflectance guide.
+- Reflection reprojection uses both the foreground reflector's and reflected endpoint's
+  current-minus-previous displacement. The previous endpoint is mirrored around the previous reflector
+  position, so translating opaque or dielectric entities do not leave their specular motion behind.
 - `resolveTransmissionGuide` deterministically refracts through later interfaces and never follows a
   reflected branch into ordinary albedo/depth. TIR freezes the ordinary tuple on that interface.
   Reflection motion uses its own one-ray guide probe. These are the only traces Pass A performs after
@@ -174,7 +177,7 @@ Target 48 B. Unpacked `PathSegment` is ~100 B; the packing below is lossless whe
 | `medium.outer` | ior half + extinction rgb9e5 | 6 |
 | `rayConeWidth` / `rayConeSpread` | half x2 | 4 |
 | `seed` | uint | 4 |
-| `bounce`, `showCelestial`, medium/valid flags, next-record link | packed uint x2 | 8 |
+| `bounce`, `showCelestial`, medium flags, next-record link | packed uint x2 | 8 |
 
 M1 allocated one fixed record per render pixel **per SPP sample**:
 

@@ -28,6 +28,7 @@ public struct SpecSurface {
     public float3 normal;         // FP32: reflection reprojection amplifies normal quantization at distance
     public float3 previousNormal; // the same normal one frame ago; equal to `normal` unless the surface animates
     public float3 biasNormal;     // geometric normal, used only to offset a ray origin off the surface
+    public float3 motionPrev;     // current-minus-previous displacement of the reflecting surface
     public float roughness;
     public float3 albedo;         // specular albedo fed to DLSS-RR for demodulation (0 = pure diffuse)
 };
@@ -35,20 +36,27 @@ public static SpecSurface gv_spec = {};
 
 // Static surfaces reuse one normal for all three roles. Water overrides them (wave-displaced shading
 // normal now and last frame, flat geometric normal for the bias) via the six-argument form.
-public SpecSurface makeSpecSurface(float3 camRel, float3 normal, float3 previousNormal, float3 biasNormal,
-                            float roughness, float3 albedo) {
+public SpecSurface makeSpecSurface(float3 camRel, float3 normal, float3 previousNormal,
+                            float3 biasNormal, float3 motionPrev, float roughness, float3 albedo) {
     SpecSurface s;
     s.camRel = camRel;
     s.normal = normal;
     s.previousNormal = previousNormal;
     s.biasNormal = biasNormal;
+    s.motionPrev = motionPrev;
     s.roughness = roughness;
     s.albedo = albedo;
     return s;
 }
 
 public SpecSurface makeSpecSurface(float3 camRel, float3 normal, float roughness, float3 albedo) {
-    return makeSpecSurface(camRel, normal, normal, normal, roughness, albedo);
+    return makeSpecSurface(camRel, normal, normal, normal,
+            float3(0.0, 0.0, 0.0), roughness, albedo);
+}
+
+public SpecSurface makeSpecSurface(float3 camRel, float3 normal, float3 motionPrev,
+                            float roughness, float3 albedo) {
+    return makeSpecSurface(camRel, normal, normal, normal, motionPrev, roughness, albedo);
 }
 // angle can land behind the eye even though the reflector itself is comfortably in view.
 public float2 projectPrevNdc(float3 worldPos, out bool valid) {
@@ -64,11 +72,12 @@ public float2 projectPrevNdc(float3 worldPos, out bool valid) {
 // explodes at grazing angles and produces non-zero MV in a static scene. Mirroring is division-free, so
 // static MV is bit-exact zero at any incidence. The reflector is assumed static (terrain / water);
 // reflectedMotionPrev carries the reflected content's own displacement.
-public float2 previousReflectionNdc(float3 surfacePos, float3 surfaceNormal, float3 reflectedWorldPos,
-                             float3 reflectedMotionPrev, out bool valid) {
+public float2 previousReflectionNdc(float3 surfacePos, float3 surfaceNormal, float3 surfaceMotionPrev,
+                             float3 reflectedWorldPos, float3 reflectedMotionPrev, out bool valid) {
     float3 n = normalize(surfaceNormal); // mirror(P) is orientation-independent, so no viewer flip needed
+    float3 previousSurfacePos = surfacePos - surfaceMotionPrev;
     float3 prevHit = reflectedWorldPos - reflectedMotionPrev;
-    float3 mirroredHit = prevHit - 2.0 * n * dot(prevHit - surfacePos, n);
+    float3 mirroredHit = prevHit - 2.0 * n * dot(prevHit - previousSurfacePos, n);
     return projectPrevNdc(mirroredHit, valid);
 }
 
@@ -103,8 +112,9 @@ public float2 resolveSpecularGuides(SpecSurface surface, float3 primaryDir,
     if (payload.hitT > 0.0) {
         reflectedHit = surfacePos + specDir * payload.hitT;
         uint reflectedMaterial = payloadMaterial();
-        reflectedMotionPrev = reflectedMaterial == MATERIAL_OPAQUE
-                ? payload.motionPrev : float3(0.0, 0.0, 0.0);
+        // Closest-hit writes motionPrev for every material. Terrain/water are zero; dynamic opaque and
+        // dielectric entities carry their per-vertex/object displacement.
+        reflectedMotionPrev = payload.motionPrev;
         if (surface.roughness <= MIRROR_ALPHA_MAX
                 && (reflectedMaterial == MATERIAL_OPAQUE
                     || reflectedMaterial == MATERIAL_PARTICLE)
@@ -124,7 +134,8 @@ public float2 resolveSpecularGuides(SpecSurface surface, float3 primaryDir,
             ? normalize(surface.previousNormal) : n;
     bool prevValid;
     float2 prevNdc = previousReflectionNdc(
-            surfacePos, previousN, reflectedHit, reflectedMotionPrev, prevValid);
+            surfacePos, previousN, surface.motionPrev,
+            reflectedHit, reflectedMotionPrev, prevValid);
     return prevValid ? (prevNdc - currentNdc) * 0.5 * size : float2(0.0, 0.0);
 }
 
