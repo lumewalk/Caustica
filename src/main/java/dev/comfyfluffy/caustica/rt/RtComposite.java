@@ -180,10 +180,9 @@ public final class RtComposite {
     private int pushSlot;
     private RtDisplayPipeline displayPipeline;
     private RtImage output;
-    // Packed primary -> indirect continuations. M1 stores one record per render pixel per configured
-    // sample; the indirect dispatch keeps one invocation per pixel and consumes that pixel's records.
+    // Packed primary -> indirect continuations. Pass A is fixed at one sample and owns two records per
+    // render pixel (base + optional transmission); Pass B resamples them at the configured SPP.
     private RtBuffer continuationQueue;
-    private int continuationQueueSpp = -1;
     private RtImage displayImage;
     // Parallel PQ-encoded ([0,1], ST.2084) HDR display image. Written alongside displayImage when HDR is
     // enabled. When the PQ swapchain is active, the combined UI overlay is composited over this image, then
@@ -697,11 +696,9 @@ public final class RtComposite {
     private void ensureOutput(RtContext ctx, int width, int height) {
         boolean rrEnabled = RtDlssRr.enabled();
         int rrQuality = rrEnabled ? RtDlssRr.quality() : Integer.MIN_VALUE;
-        int desiredSpp = Math.max(spp(), 1);
         if (output != null && continuationQueue != null
                 && displayImage != null && hdrDisplayImage != null && rrOutput != null && exposure.ready()
                 && displayW == width && displayH == height
-                && continuationQueueSpp == desiredSpp
                 && renderSizeRrEnabled == rrEnabled && renderSizeRrQuality == rrQuality) {
             return;
         }
@@ -738,17 +735,12 @@ public final class RtComposite {
         // mapping seam. displayImage stays R8G8B8A8 to match the main target it is copied into
         // (vkCmdCopyImage requires texel-size-compatible formats).
         output = ctx.createStorageImage(renderW, renderH, VK10.VK_FORMAT_R16G16B16A16_SFLOAT, "trace color " + renderW + "x" + renderH);
-        continuationQueueSpp = desiredSpp;
-        long baseRecords = Math.multiplyExact(
-                Math.multiplyExact((long) renderW, (long) renderH),
-                (long) continuationQueueSpp);
-        long splitRecords = Math.multiplyExact((long) renderW, (long) renderH);
+        long pixelRecords = Math.multiplyExact((long) renderW, (long) renderH);
         long continuationBytes = Math.multiplyExact(
-                Math.addExact(baseRecords, splitRecords), PATH_RECORD_BYTES);
+                Math.multiplyExact(pixelRecords, 2L), PATH_RECORD_BYTES);
         continuationQueue = ctx.createBuffer(continuationBytes,
                 VK10.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, false,
-                "path continuation queue " + renderW + "x" + renderH + "x" + continuationQueueSpp
-                        + " + one split slot per pixel");
+                "path continuation queue " + renderW + "x" + renderH + "x2");
         displayImage = ctx.createStorageImage(width, height, VK10.VK_FORMAT_R8G8B8A8_UNORM, "RT display image " + width + "x" + height);
         // PQ-encoded ([0,1], ST.2084) HDR display image, written in parallel by display.comp when HDR mode is active.
         hdrDisplayImage = ctx.createStorageImage(width, height, VK10.VK_FORMAT_R16G16B16A16_SFLOAT, "RT HDR display image " + width + "x" + height);
@@ -1256,7 +1248,6 @@ public final class RtComposite {
         if (continuationQueue != null) {
             continuationQueue.destroy();
             continuationQueue = null;
-            continuationQueueSpp = -1;
         }
         destroyGuideImages();
         exposure.destroy();

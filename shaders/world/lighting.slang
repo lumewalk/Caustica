@@ -229,32 +229,10 @@ public void selectLightGridLight(LightGridCell cell, bool useLocal, inout uint p
 // finding; a presampled candidate pool would attack the same 5.9ms structurally, but see the note on
 // proposalSeed in tracePath for why it should share the pool rather than the seed.
 
-// Candidate-count divisor for RIS at secondary vertices (bounce > 0). Secondary vertices carried ~78% of
-// the cost while being much the more forgiving place to spend variance: that radiance is already
-// integrated over a diffuse lobe before the denoiser sees it. 18.0 -> 16.1ms, and indistinguishable from
-// 1 by eye — whereas reducing M globally to 2 was clearly worse, because that also degraded the primary
-// hit. The primary hit always keeps the full worldPush.risCandidates.
-//
-// 4 is the floor worth using rather than a tuning accident. The stratification below keeps at least one
-// global candidate, so M=2 is the smallest count that still schedules one local AND one global; at M=1
-// localProbability collapses to 0 and the light-grid proposal that makes nearby emitters sample well is
-// gone entirely.
-public static const uint SECONDARY_RIS_DIVISOR = 4u;
-
-// Deepest SHADED surface at which RIS emitter NEE runs. Past it, emitters are gathered only when a path
-// hits one directly — the pre-RIS behaviour, still unbiased because gateEmitter lifts in lockstep, so the
-// failure mode is noisier emitter light at depth rather than missing light. Unlike the divisor this also
-// drops shadeReservoir's per-vertex shadow ray, which never scaled with M. Gating at all: 16.1 -> 15.7ms.
-//
-// This counts hits observed by Pass B. The primary/interface prefix consumed by Pass A is outside the
-// budget, while every material and lobe encountered after the handoff advances it uniformly.
-public static const uint RIS_MAX_INDIRECT_DEPTH = 2u;
-
 // Initial RIS over M power-weighted candidates -> one resampled sample, no shadow ray yet. The chosen
 // sample's W = wSum / (M * p-hat); M counts every candidate, including zero-weight ones.
 public Reservoir risInitial(float3 hitPos, float3 n, float3 v, float3 rd, float3 diffAlb, float3 F0,
-                     float rough, bool twoSided, float sss, uint indirectDepth,
-                     inout uint seed, inout uint proposalSeed) {
+                     float rough, bool twoSided, float sss, inout uint seed, inout uint proposalSeed) {
     Reservoir r = resEmpty();
     LightGridCell gridCell;
     int3 gridCellCoord;
@@ -266,9 +244,7 @@ public Reservoir risInitial(float3 hitPos, float3 n, float3 v, float3 rd, float3
                 * worldPush.lightGridOrigin.w;
     }
     bool hasGridCell = findLightGridCell(gridLookup, gridCell, gridCellCoord);
-    uint candidateCount = indirectDepth == 0u
-            ? worldPush.risCandidates
-            : max(1u, worldPush.risCandidates / SECONDARY_RIS_DIVISOR);
+    uint candidateCount = worldPush.risCandidates;
     // Deterministically stratify the proposal mixture. At the default M=8 this schedules exactly six
     // local and two global candidates, with every lane taking the same branch for a given candidate.
     // Counts that are not divisible by four use the nearest practical split with at least one global

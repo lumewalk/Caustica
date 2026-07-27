@@ -160,14 +160,13 @@ abstract class CompileShaders extends DefaultTask {
 			def base = outBase(src)
 			def spv = new File(scratchDir, "${base}.spv")
 			if (src.name.endsWith(".slang")) {
-				// Build both SER encodings for the two world raygens; RtDeviceBringup selects the
-				// supported variant for both passes.
-				def worldRaygen = base == "world.rgen" || base == "world_primary.rgen"
-				compileOneSlang(src, spv, worldRaygen
+				// Pass B uses SER and needs both encodings. Pass A intentionally compiles without an
+				// invocation-reorder capability and uses ordinary TraceRay.
+				def worldIndirectRaygen = base == "world.rgen"
+				compileOneSlang(src, spv, worldIndirectRaygen
 						? ["-capability", "spvShaderInvocationReorderEXT"] : [])
-				if (worldRaygen) {
-					def nvBase = base == "world.rgen" ? "world_nv.rgen.spv" : "world_primary_nv.rgen.spv"
-					compileOneSlang(src, new File(scratchDir, nvBase),
+				if (worldIndirectRaygen) {
+					compileOneSlang(src, new File(scratchDir, "world_nv.rgen.spv"),
 							["-capability", "spvShaderInvocationReorderNV"])
 				}
 			} else {

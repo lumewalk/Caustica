@@ -37,9 +37,8 @@ public float3 fresnelSchlick(float cosT, float3 f0) {
 // g=0 → isotropic; g>0 → forward-scatter peak at cosT=1 (light and view aligned through a thin slab).
 public static const float SSS_G        = 0.6; // forward-scatter anisotropy; leaves/grass are quite directional
 public static const float SSS_STRENGTH = 1.0; // 1.0 ≈ 2.5× the Lambertian at peak (sss=1, cosT=1, backNdl=1)
-// SSS is primary-terminal lighting only. The handoff surface is Pass B hit 0; any surface reached by a
-// continuation is indirect and must not schedule an SSS shadow ray.
-public static const int   MAX_SSS_INDIRECT_DEPTH = 0;
+// Keep SSS on the first two Pass B hits. Pass A's primary/interface prefix is outside this local depth.
+public static const int   MAX_SSS_INDIRECT_DEPTH = 1;
 public float hg(float cosT, float g) {
     float g2 = g * g;
     return (1.0 - g2) / (4.0 * PI * pow(max(0.0, 1.0 + g2 - 2.0 * g * cosT), 1.5));

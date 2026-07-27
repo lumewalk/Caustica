@@ -32,7 +32,10 @@ public float3 tracePath(PathSegment seg, uint2 pix, uint sampleIndex) {
     float3 ro = seg.ro;
     float3 rd = seg.rd;
     float3 throughput = seg.throughput;
-    uint seed = seg.seed;
+    // Pass A is fixed at one sample per pixel. Decorrelate each Pass B resample here so configured SPP
+    // produces independent lighting/BSDF paths from the shared terminal continuation.
+    uint seed = seg.seed ^ sampleIndex * 2246822519u;
+    seed = pcg(seed);
     float rayConeWidth = seg.rayConeWidth;
     float rayConeSpread = max(seg.rayConeSpread, RAY_CONE_MIN_SPREAD);
     int maxBounces = int(worldPush.maxBounces);
@@ -58,7 +61,10 @@ public float3 tracePath(PathSegment seg, uint2 pix, uint sampleIndex) {
     // would be a double-counted firefly. Reset true on every specular/water bounce, false on a diffuse one.
     bool showCelestial = seg.showCelestial;
     // Pass B treats every hit it sees as one indirect-depth step, regardless of material or selected
-    // continuation lobe. Pass A's primary/interface prefix is outside this budget.
+    // continuation lobe. Deliberately start at zero instead of seg.bounce: the first hit of either
+    // queued split branch is still the primary-terminal shading point. Hits 0 and 1 retain SSS; RIS
+    // remains active with its full configured candidate count at every hit. Pass A's primary/interface
+    // prefix is outside this SSS quality budget.
     int indirectDepth = 0;
     for (int bounce = seg.bounce; bounce <= maxBounces; bounce++) {
         // Radiance SBT records run any-hit only for true alpha cutout. Translucent/water go straight to
@@ -186,10 +192,10 @@ public float3 tracePath(PathSegment seg, uint2 pix, uint sampleIndex) {
             // RIS direct lighting from block emitters (lava, glowstone, torches, ...) — same reservoir
             // sampler as terrain/entities, but two-sided: a billboard has no back face, so light
             // striking either side of the quad should still land (matches the sun/moon NEE above).
-            if (risOn && hitDepth <= int(RIS_MAX_INDIRECT_DEPTH)) {
+            if (risOn) {
                 float3 v = -rd;
                 Reservoir r = risInitial(hitPos, n, v, rd, albedo, float3(0.0, 0.0, 0.0), 1.0,
-                                         true, 0.0, uint(hitDepth), seed, proposalSeed);
+                                         true, 0.0, seed, proposalSeed);
                 float3 risVis;
                 L += throughput * shadeReservoir(r, hitPos, n, v, rd, albedo, float3(0.0, 0.0, 0.0), 1.0,
                                                  true, 0.0, risVis);
@@ -236,7 +242,7 @@ public float3 tracePath(PathSegment seg, uint2 pix, uint sampleIndex) {
         // One gate drives both the RIS call below and the direct-hit emission suppression here. They must
         // agree: gateEmitter exists only because RIS already accounted for this emitter, so a bounce where
         // RIS is skipped must also gather emission directly or that light is lost outright.
-        bool risActive = risOn && hitDepth <= int(RIS_MAX_INDIRECT_DEPTH);
+        bool risActive = risOn;
         bool gateEmitter = risActive && payloadEmitterInList();
         if (emission > 0.0 && (!gateEmitter || showCelestial)) {
             L += throughput * albedo * emission;
@@ -284,7 +290,7 @@ public float3 tracePath(PathSegment seg, uint2 pix, uint sampleIndex) {
         if (risActive) {
             float activeSss = hitDepth <= MAX_SSS_INDIRECT_DEPTH ? sss : 0.0;
             Reservoir r = risInitial(hitPos, n, v, rd, diffAlb, F0, rough, false, activeSss,
-                                     uint(hitDepth), seed, proposalSeed);
+                                     seed, proposalSeed);
             float3 risVis;
             L += throughput * shadeReservoir(r, hitPos, n, v, rd, diffAlb, F0, rough, false,
                                              activeSss, risVis);
@@ -373,21 +379,20 @@ void main() {
     uint pixelIndex = dispatchIndex.y * dimensions.x + dispatchIndex.x;
     ConstPtr<PackedPathSegment> queue = ConstPtr<PackedPathSegment>(pc.pathQueueAddr);
     float3 frameRadiance = float3(0.0, 0.0, 0.0);
-    for (uint s = 0u; s < spp; ++s) {
-        uint recordIndex = pixelIndex * spp + s;
-        // [loop]
-        for (uint leaf = 0u; leaf < 2u; ++leaf) {
-            PackedPathSegment packed = queue[recordIndex];
-            bool valid;
-            PathSegment segment = unpackPathSegment(packed, valid);
-            if (valid) {
+    uint recordIndex = pixelIndex;
+    for (uint leaf = 0u; leaf < 2u; ++leaf) {
+        PackedPathSegment packed = queue[recordIndex];
+        bool valid;
+        PathSegment segment = unpackPathSegment(packed, valid);
+        if (valid) {
+            for (uint s = 0u; s < spp; ++s) {
                 frameRadiance += tracePath(segment, uint2(pix), s + leaf * spp);
             }
-            if (packed.nextRecord == PATH_NO_NEXT) {
-                break;
-            }
-            recordIndex = packed.nextRecord;
         }
+        if (packed.nextRecord == PATH_NO_NEXT) {
+            break;
+        }
+        recordIndex = packed.nextRecord;
     }
     outImage[pix] = float4(frameRadiance / float(spp), 1.0);
 }

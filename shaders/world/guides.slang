@@ -1,15 +1,14 @@
 // DLSS-RR guide state and everything that resolves it: the gv_* captures, the foreground specular
-// surface and its reflection motion vector, the transmitted-destination walk, and the image writes.
+// surface and its reflection motion vector, and the image writes.
 // PRIMARY PASS ONLY. Depends on trace, water and segment.
 
-// First-hit (primary-visibility) guide attributes, captured at bounce 0 of tracePath. The primary ray
-// is deterministic (no AA jitter yet), so every SPP sample's bounce 0 yields identical values.
+// Primary-visibility guide attributes. Pass A traces exactly one sample per pixel; a split reflection
+// leaf supplies the spec endpoint and its transmission leaf may replace the ordinary tuple.
 
 import world_common;
 import world_core;
 import math;
 import medium;
-import segment;
 import water;
 import trace;
 
@@ -22,18 +21,12 @@ public static bool gv_motionUseRefracted = false; // true when the MV tracks the
 // World-space displacement of the motion-guide surface since the previous frame (0 for static
 // terrain/sky, an entity's per-vertex/object motion for a dynamic hit).
 public static float3 gv_motionObjDisp = float3(0.0, 0.0, 0.0);
-// M2 fast path: when the deterministic reflection leaf reaches opaque content/sky in exactly one ray,
-// Pass A already owns the endpoint that specularReflectionMotion would trace again. More complex leaves
-// leave this false and retain the deterministic auxiliary guide trace.
-public static bool gv_directReflectionEndpointValid = false;
-public static float3 gv_directReflectionEndpoint = float3(0.0, 0.0, 0.0);
-public static float3 gv_directReflectionMotionPrev = float3(0.0, 0.0, 0.0);
 // Transmission replaces the ordinary guide tuple with the visible destination, so RR's specular inputs
 // (specular albedo + reflection MV) need the foreground glass/water interface kept separately. This is
 // the surface the reflection physically lives on; for an opaque primary hit it is that hit itself.
 public struct SpecSurface {
     public float3 camRel;         // interface position relative to the current camera
-    public float3 normal;         // shading normal (wave-perturbed for water)
+    public float3 normal;         // FP32: reflection reprojection amplifies normal quantization at distance
     public float3 previousNormal; // the same normal one frame ago; equal to `normal` unless the surface animates
     public float3 biasNormal;     // geometric normal, used only to offset a ray origin off the surface
     public float roughness;
@@ -94,26 +87,22 @@ public float2 specularReflectionMotion(SpecSurface surface, float3 primaryDir,
     float3 n = normalize(surface.normal);
     float3 specDir = reflect(primaryDir, n);
 
+    // Pass A stops radiance traversal at the first split, so reflection motion keeps one dedicated,
+    // deterministic guide probe.
+    traceGuide(CULL_SECONDARY,
+            offsetSurfaceOrigin(surfacePos, surface.biasNormal, specDir, SURF_BIAS),
+            RAY_TMIN, specDir, 10000.0,
+            max(length(surface.camRel) * primaryConeSpread, RAY_CONE_MIN_WIDTH),
+            max(primaryConeSpread, RAY_CONE_MIN_SPREAD));
     float3 reflectedHit;
     float3 reflectedMotionPrev;
-    if (gv_directReflectionEndpointValid) {
-        reflectedHit = gv_directReflectionEndpoint;
-        reflectedMotionPrev = gv_directReflectionMotionPrev;
+    if (payload.hitT > 0.0) {
+        reflectedHit = surfacePos + specDir * payload.hitT;
+        reflectedMotionPrev = payloadMaterial() == MATERIAL_OPAQUE
+                ? payload.motionPrev : float3(0.0, 0.0, 0.0);
     } else {
-        // biasNormal is a closest-hit normal, already unit length, and only its sign matters here.
-        traceGuide(CULL_SECONDARY,
-                offsetSurfaceOrigin(surfacePos, surface.biasNormal, specDir, SURF_BIAS),
-                RAY_TMIN, specDir, 10000.0,
-                max(length(surface.camRel) * primaryConeSpread, RAY_CONE_MIN_WIDTH),
-                max(primaryConeSpread, RAY_CONE_MIN_SPREAD));
-        if (payload.hitT > 0.0) {
-            reflectedHit = surfacePos + specDir * payload.hitT;
-            reflectedMotionPrev = payloadMaterial() == MATERIAL_OPAQUE
-                    ? payload.motionPrev : float3(0.0, 0.0, 0.0);
-        } else {
-            reflectedHit = surfacePos + specDir * 1.0e6;
-            reflectedMotionPrev = float3(0.0, 0.0, 0.0);
-        }
+        reflectedHit = surfacePos + specDir * 1.0e6;
+        reflectedMotionPrev = float3(0.0, 0.0, 0.0);
     }
     float3 previousN = length(surface.previousNormal) >= 0.5
             ? normalize(surface.previousNormal) : n;
@@ -123,9 +112,6 @@ public float2 specularReflectionMotion(SpecSurface surface, float3 primaryDir,
     return prevValid ? (prevNdc - currentNdc) * 0.5 * size : float2(0.0, 0.0);
 }
 
-// Deterministic transmitted destination for clear-interface RR guides. The first interface has already
-// been crossed. Continue through every crossed dielectric until opaque/particle content or sky is reached;
-// TIR changes the walk into a reflected secondary ray instead of producing a false foreground guide.
 public void setTransmissionGuide(float3 hitCamRel, float3 motionPrev, float3 normal,
                           float roughness, float3 diffuseAlbedo) {
     gv_hitCamRel = hitCamRel;
@@ -137,19 +123,19 @@ public void setTransmissionGuide(float3 hitCamRel, float3 motionPrev, float3 nor
     gv_albedo = diffuseAlbedo;
 }
 
+// Deterministic ordinary guide behind the first transmitted interface. This is guide-only work:
+// radiance reflection/transmission continuations are queued at the first split and traced by Pass B.
 public void resolveTransmissionGuide(float3 surfacePos, float3 transmittedDir,
-                              float3 surfaceBiasNormal,
-                              float currentIor, float rayBias,
-                              float rayConeWidth, float rayConeSpread,
-                              float3 guideFilter) {
+                              float3 surfaceBiasNormal, MediumStack medium, float rayBias,
+                              float rayConeWidth, float rayConeSpread, float3 guideFilter) {
     if (dot(transmittedDir, transmittedDir) <= 0.0) return;
 
     float3 direction = normalize(transmittedDir);
-    // surfaceBiasNormal is a closest-hit normal, already unit length, and only its sign matters here.
     float3 ro = offsetSurfaceOrigin(surfacePos, surfaceBiasNormal, direction, rayBias);
-    currentIor = max(currentIor, 1.0);
 
-    for (uint crossing = 0u; crossing < MAX_TRANSMISSION_GUIDE_HITS; ++crossing) {
+    // The camera interface consumed bounce 0; the remaining configured bounce budget is the natural
+    // cap for deterministic guide crossings too.
+    for (uint crossing = 0u; crossing < worldPush.maxBounces; ++crossing) {
         traceGuide(CULL_PRIMARY, ro, RAY_TMIN, direction, 10000.0,
                 rayConeWidth, rayConeSpread);
         if (payload.hitT <= 0.0) {
@@ -171,58 +157,47 @@ public void resolveTransmissionGuide(float3 surfacePos, float3 transmittedDir,
                     payload.normal, endpointRoughness, guideFilter * endpointAlbedo);
             return;
         }
-
         if (material != MATERIAL_WATER && material != MATERIAL_DIELECTRIC) return;
 
-        // The closest-hit shader has already alpha-blended stained-glass texture/tint toward white.
-        // Count each dielectric volume once on entry; applying it again at the exit face would square a
-        // single block's filter. Water uses payload.albedo to parameterize Beer extinction instead.
-        if (material == MATERIAL_DIELECTRIC && payloadDielectricEntering()) {
-            guideFilter *= payload.albedo;
-        }
-
-        // Mirror the radiance path's refraction. Absorption inside the crossed media is deliberately NOT
-        // folded into the albedo guide: RR demodulates by albedo, and a distance-dependent attenuation
-        // baked into it would disagree with the colour, which is where the extinction actually lands.
-        float3 interfaceNormal = normalize(payload.normal);
-        float3 interfaceBiasNormal = interfaceNormal;
-        if (material == MATERIAL_WATER && (worldPush.flags & 16u) != 0u) {
+        bool isWater = material == MATERIAL_WATER;
+        bool entering = payloadDielectricEntering();
+        float3 geometricNormal = normalize(payload.normal);
+        float3 interfaceNormal = geometricNormal;
+        if (isWater && (worldPush.flags & 16u) != 0u) {
             float waterFootprint = rayConeWidth
-                    / max(abs(dot(-direction, interfaceBiasNormal)), 0.2);
-            interfaceNormal = applyWaterWaves(interfaceNormal,
+                    / max(abs(dot(-direction, geometricNormal)), 0.2);
+            interfaceNormal = applyWaterWaves(geometricNormal,
                     interfacePos.xz + worldPush.waterAnchor.xy,
                     worldPush.waterParams.w, waterFootprint);
         }
-        // Exiting returns to air: the walk keeps only the current index, which is the same depth-1
-        // approximation the guide already made and is exact for a single enclosing volume.
-        float targetIor = payloadDielectricEntering() ? max(payloadIor(), 1.0) : 1.0;
-        float3 nextDirection = refract(direction, interfaceNormal, currentIor / targetIor);
+
+        float transmission = clamp(payloadTransmission(), 0.0, 1.0);
+        Medium entered = makeDielectricMedium(isWater, max(payloadIor(), 1.0),
+                                              payload.albedo, transmission);
+        float etaT = entering ? entered.ior : medium.outer.ior;
+        float3 nextDirection = refract(direction, interfaceNormal, medium.current.ior / etaT);
         if (dot(nextDirection, nextDirection) <= 0.0) {
-            // Total internal reflection: there is no transmitted destination to describe, and following
-            // the reflection instead would be actively harmful. setTransmissionGuide marks its endpoint
-            // as its own feature, whose MV is that point's own reprojection delta — valid for a
-            // refracted point (the near-constant refraction offset cancels between frames) but WRONG for
-            // a mirror image, which sweeps at roughly twice the camera's rate and in the opposite sense.
-            // That produced motion vectors that grew with camera motion.
-            //
-            // Bailing leaves the foreground interface tuple the caller already wrote, which is what TIR
-            // physically deserves: F is 1, so specular albedo is 1 and diffuse albedo is 0, the pixel is
-            // pure reflection, and gSpecMotion already describes it with a proper mirror-image
-            // reprojection. Depth stays on the interface, which is the only real surface here.
+            // Never let a TIR reflection become ordinary diffuse/depth.
+            setTransmissionGuide(interfacePos - worldPush.camOffset,
+                    isWater ? float3(0.0, 0.0, 0.0) : float3(payload.motionPrev),
+                    interfaceNormal, 0.0, float3(0.0, 0.0, 0.0));
             return;
         }
+        if (!isWater && entering) {
+            guideFilter *= payload.albedo;
+        }
+        if (entering) {
+            mediumPush(medium, entered);
+        } else {
+            mediumPop(medium);
+        }
         direction = normalize(nextDirection);
-        currentIor = targetIor;
-        ro = offsetSurfaceOrigin(
-                interfacePos, interfaceBiasNormal, direction, SURF_BIAS);
+        ro = offsetSurfaceOrigin(interfacePos, geometricNormal, direction,
+                isWater ? SURF_BIAS : INSET_TRANSMIT_BIAS);
     }
 }
 
-// One Monte Carlo path from the continuation produced by the primary pass.
-
-// Resolve the captured gv_* guide state into the DLSS-RR guide images. Called once, right after the
-// sample that captured them, so the guide state dies there instead of staying live across every
-// remaining sample's traces.
+// Resolve the captured gv_* guide state into the DLSS-RR guide images after Pass A queues continuations.
 public void writeGuides(int2 pix, float3 primaryDir, float2 jndc, float2 size, float primaryConeSpread) {
     // Reflection remains owned by the foreground interface even when a dielectric replaced the ordinary
     // tuple with the transmitted destination.

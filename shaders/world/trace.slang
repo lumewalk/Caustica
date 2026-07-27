@@ -50,6 +50,17 @@ public Payload makeRadiancePayload(uint flags, uint rayCone) {
     return p;
 }
 
+// Ordinary radiance trace for latency-sensitive, coherent work such as Pass A. It invokes hit/miss
+// shaders directly and therefore requires no invocation-reorder capability.
+public void traceRadiance(uint cullMask, float3 ro, float tmin, float3 rd, float tmax,
+                    bool showCelestial, float rayConeWidth, float rayConeSpread) {
+    payload = makeRadiancePayload(showCelestial ? PAYLOAD_SHOW_CELESTIAL : 0u,
+            packHalf2(float2(rayConeWidth, rayConeSpread)));
+    TraceRay(topLevelAS, RAY_FLAG_NONE, cullMask,
+            SBT_RADIANCE, SBT_STRIDE_BUCKET, MISS_RADIANCE,
+            makeRay(ro, tmin, rd, tmax), payload);
+}
+
 // SER radiance trace: trace into a hit object, reorder threads by hit coherence, THEN invoke the
 // hit/miss shader — this is where the divergent Section/Prim shading work (world.rchit/world.rahit)
 // actually happens, so reordering before it is what pays for the reorder's own cost.

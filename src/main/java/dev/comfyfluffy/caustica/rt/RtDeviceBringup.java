@@ -218,7 +218,7 @@ public final class RtDeviceBringup {
     private enum SerBackend {
         NONE("none", null, "world_primary.rgen.spv", "world.rgen.spv"),
         NV("NV", VK_NV_RAY_TRACING_INVOCATION_REORDER_EXTENSION_NAME,
-                "world_primary_nv.rgen.spv", "world_nv.rgen.spv"),
+                "world_primary.rgen.spv", "world_nv.rgen.spv"),
         EXT("EXT", VK_EXT_RAY_TRACING_INVOCATION_REORDER_EXTENSION_NAME,
                 "world_primary.rgen.spv", "world.rgen.spv");
 
