@@ -4,6 +4,7 @@ import dev.comfyfluffy.caustica.rt.accel.RtBuffer;
 import dev.comfyfluffy.caustica.rt.accel.RtImage;
 import dev.comfyfluffy.caustica.rt.gen.DirectReservoirData;
 import dev.comfyfluffy.caustica.rt.pipeline.RtDirectCandidatePipeline;
+import dev.comfyfluffy.caustica.rt.pipeline.RtDirectTemporalPipeline;
 import java.nio.ByteBuffer;
 import org.lwjgl.vulkan.VK10;
 import org.lwjgl.vulkan.VkCommandBuffer;
@@ -49,12 +50,14 @@ final class RtDirectReservoirHistory {
     private final State state = new State();
     private final RtBuffer[] slots = new RtBuffer[SLOT_COUNT];
     private RtDirectCandidatePipeline candidatePipeline;
+    private RtDirectTemporalPipeline temporalPipeline;
     private int width = -1;
     private int height = -1;
 
     void ensure(RtContext ctx, int requestedWidth, int requestedHeight,
                 RtImage receiverPositionMaterial, RtImage receiverNormalRoughness,
-                RtImage receiverAlbedoSss, RtImage debugColor) {
+                RtImage receiverAlbedoSss, RtImage receiverMotion,
+                RtImage validationMetadata, RtImage debugColor) {
         if (ready() && width == requestedWidth && height == requestedHeight) {
             return;
         }
@@ -70,6 +73,10 @@ final class RtDirectReservoirHistory {
         candidatePipeline = RtDirectCandidatePipeline.create(ctx,
                 receiverPositionMaterial.view, receiverNormalRoughness.view,
                 receiverAlbedoSss.view, debugColor.view, slots);
+        temporalPipeline = RtDirectTemporalPipeline.create(ctx,
+                receiverPositionMaterial.view, receiverNormalRoughness.view,
+                receiverAlbedoSss.view, receiverMotion.view, validationMetadata.view,
+                debugColor.view, slots);
         state.reset();
     }
 
@@ -90,6 +97,13 @@ final class RtDirectReservoirHistory {
             throw new IllegalStateException("Direct candidate pipeline used before allocation");
         }
         candidatePipeline.dispatch(cmd, frame.writeSlot(), width, height, pushConstants);
+    }
+
+    void recordTemporalReuse(VkCommandBuffer cmd, Frame frame, ByteBuffer pushConstants) {
+        if (temporalPipeline == null) {
+            throw new IllegalStateException("Direct temporal pipeline used before allocation");
+        }
+        temporalPipeline.dispatch(cmd, frame.writeSlot(), width, height, pushConstants);
     }
 
     void commit(Frame frame) {
@@ -118,11 +132,16 @@ final class RtDirectReservoirHistory {
     }
 
     boolean ready() {
-        return slots[0] != null && slots[1] != null && candidatePipeline != null;
+        return slots[0] != null && slots[1] != null
+                && candidatePipeline != null && temporalPipeline != null;
     }
 
     void destroy() {
         // Drop immutable descriptor references before freeing their reservoir buffers.
+        if (temporalPipeline != null) {
+            temporalPipeline.destroy();
+            temporalPipeline = null;
+        }
         if (candidatePipeline != null) {
             candidatePipeline.destroy();
             candidatePipeline = null;

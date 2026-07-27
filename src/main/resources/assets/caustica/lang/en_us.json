@@ -58,5 +58,6 @@
 	"caustica.options.rt.debugView.6": "Specular",
 	"caustica.options.rt.debugView.7": "Specular Motion",
 	"caustica.options.rt.debugView.8": "Temporal Validation",
-	"caustica.options.rt.debugView.9": "ReSTIR Candidates"
+	"caustica.options.rt.debugView.9": "ReSTIR Candidates",
+	"caustica.options.rt.debugView.10": "ReSTIR Temporal Reuse"
 }

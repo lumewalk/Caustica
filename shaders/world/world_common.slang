@@ -29,6 +29,7 @@ public struct WorldPushConstants {
     public uint64_t pathQueueAddr;       // packed primary -> indirect continuation records
     public uint frameIndex;
     public uint debugView;
+    public uint historyFlags;            // bit0: a generation-matched previous reservoir slot exists
 };
 
 // Block-breaking overlay entry: xyz = breaking block position (rebased, same space as gl_WorldRay*),
@@ -66,6 +67,7 @@ public struct WorldPush {
     public int4     lightGridDims;       // xyz dense grid dimensions, w reserved
     public uint     lightCount;       // packed Light records in pc.lightBufAddr
     public uint     risCandidates;    // RIS candidate count M per diffuse vertex (0 = emitter NEE off)
+    public uint     lightEpoch;       // low 32 bits of the atomically published light hierarchy generation
 };
 
 // 32-byte hot area-light record. Radiance uses packed R11G11B10 and the grid-relative owner section
@@ -118,7 +120,7 @@ public struct LightGridSpan {
 // weights = {accumulated weight, effective candidate count M, final selected-sample W, confidence}
 // metadata = {stable light id, light/content epoch, source frame, low16 age | high16 flags}
 public struct DirectReservoir {
-    public float4 samplePositionArea;   // xyz sampled point in rebased world, w emitter area
+    public float4 samplePositionArea;   // xyz sample in light-hierarchy-local space, w emitter area
     public float4 lightNormalTargetPdf; // xyz emitter normal, w selected target density
     public float4 radianceProposalPdf;  // xyz emitted radiance, w source proposal density
     public float4 weights;

@@ -58,5 +58,6 @@
 	"caustica.options.rt.debugView.6": "Зеркальность",
 	"caustica.options.rt.debugView.7": "Зеркальное движение",
 	"caustica.options.rt.debugView.8": "Валидация истории",
-	"caustica.options.rt.debugView.9": "Кандидаты ReSTIR"
+	"caustica.options.rt.debugView.9": "Кандидаты ReSTIR",
+	"caustica.options.rt.debugView.10": "Временное переиспользование ReSTIR"
 }

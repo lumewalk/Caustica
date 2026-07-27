@@ -68,6 +68,21 @@ final class RtReservoirReferenceTest {
     }
 
     @Test
+    void temporalMergeClampsHistoricalEffectiveCount() {
+        RtReservoirReference.Reservoir source = new RtReservoirReference.Reservoir();
+        for (int candidate = 0; candidate < 100; candidate++) {
+            source.update(new RtReservoirReference.Candidate(candidate, 2.0, 1.0), 0.99);
+        }
+        RtReservoirReference.Reservoir receiver = new RtReservoirReference.Reservoir();
+        receiver.update(new RtReservoirReference.Candidate(1000L, 1.0, 1.0), 0.0);
+        receiver.merge(source, 1.0, 0.0, 20.0);
+
+        RtReservoirReference.Snapshot result = receiver.snapshot();
+        assertEquals(21.0, result.effectiveCount());
+        assertTrue(Double.isFinite(result.finalWeight()));
+    }
+
+    @Test
     void extremeFiniteWeightsRemainFinite() {
         RtReservoirReference.Reservoir reservoir = new RtReservoirReference.Reservoir();
         reservoir.update(new RtReservoirReference.Candidate(1L, 1.0e250, 1.0), 0.0);
@@ -88,5 +103,7 @@ final class RtReservoirReferenceTest {
                 () -> reservoir.update(new RtReservoirReference.Candidate(1L, 1.0, 1.0), 1.0));
         assertThrows(IllegalArgumentException.class,
                 () -> reservoir.merge(reservoir, 1.0, 0.5));
+        assertThrows(IllegalArgumentException.class,
+                () -> reservoir.merge(new RtReservoirReference.Reservoir(), 1.0, 0.5, 0.0));
     }
 }

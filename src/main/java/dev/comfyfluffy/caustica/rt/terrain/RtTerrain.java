@@ -305,6 +305,11 @@ public final class RtTerrain {
         return lightGrid.published().lightCount();
     }
 
+    /** Low 32 bits of the atomically published light hierarchy generation. */
+    public int lightEpoch() {
+        return (int) lightGrid.published().generation();
+    }
+
     /** Per-tick residency update: window sync + dirty drain (plus the streaming fallback, see {@link #frame}). */
     public static void update(RtContext ctx) {
         INSTANCE.tick(ctx);

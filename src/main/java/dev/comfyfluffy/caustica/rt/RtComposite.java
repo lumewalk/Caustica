@@ -843,7 +843,8 @@ public final class RtComposite {
                 renderW, renderH, RtTemporalValidation.BYTES_PER_PIXEL, validationBytes,
                 String.format(Locale.ROOT, "%.2f", validationBytes / (1024.0 * 1024.0)));
         directReservoirs.ensure(ctx, renderW, renderH,
-                gRestirPositionMaterial, gRestirNormalRoughness, gRestirAlbedoSss, output);
+                gRestirPositionMaterial, gRestirNormalRoughness, gRestirAlbedoSss,
+                gMotion, temporalValidation.metadata(), output);
         long reservoirBytes = directReservoirs.allocatedBytes();
         CausticaMod.LOGGER.info(
                 "RT direct reservoirs: render={}x{}, slots={}, stride={} B, bytes={}, gpuMiB={}",
@@ -1038,7 +1039,8 @@ public final class RtComposite {
                     new Float4(terrain.lightGridOriginX(), terrain.lightGridOriginY(), terrain.lightGridOriginZ(), 16f),
                     new Int4(terrain.lightGridDimX(), terrain.lightGridDimY(), terrain.lightGridDimZ(), 0),
                     terrain.lightCount(),
-                    CausticaConfig.Rt.Lights.RIS_CANDIDATES.value()
+                    CausticaConfig.Rt.Lights.RIS_CANDIDATES.value(),
+                    terrain.lightEpoch()
             ).write(push);
             pushBuf.flush(0L, WORLD_PUSH_SIZE);
             // Upload any entity textures registered this frame into the bindless set before the trace.
@@ -1076,7 +1078,8 @@ public final class RtComposite {
                     terrain.lightBufferAddress(), terrain.lightAliasBufferAddress(),
                     terrain.lightLocalAliasBufferAddress(), terrain.lightGridCellBufferAddress(),
                     terrain.lightGridSpanBufferAddress(), continuationQueue.deviceAddress,
-                    (int) frameCounter, debugView).write(pushConstants);
+                    (int) frameCounter, debugView,
+                    reservoirFrame.previousAvailable() ? 1 : 0).write(pushConstants);
             try (RtFrameStats.Scope ignoredTrace = RtFrameStats.FRAME.stage("frame.trace")) {
                 try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd, "world primary trace");
                      RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage("frame.tracePrimary")) {
@@ -1109,7 +1112,13 @@ public final class RtComposite {
                 directReservoirs.recordCandidates(cmd, reservoirFrame, pushConstants);
             }
             gpuFrameStats.markReservoirCandidates(gpuStats, cmd);
-            VulkanCommandEncoder.memoryBarrier(cmd, stack); // candidate writes visible to later reuse passes
+            VulkanCommandEncoder.memoryBarrier(cmd, stack); // candidate writes visible to temporal reuse
+            try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd, "direct reservoir temporal reuse");
+                 RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage("frame.reservoirTemporal")) {
+                directReservoirs.recordTemporalReuse(cmd, reservoirFrame, pushConstants);
+            }
+            gpuFrameStats.markReservoirTemporal(gpuStats, cmd);
+            VulkanCommandEncoder.memoryBarrier(cmd, stack); // finalized reservoir visible to later reuse passes
             try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd, "surface history capture");
                  RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage("frame.historyCapture")) {
                 surfaceHistory.recordCapture(cmd, stack, gNormal, gDepth, surfaceHistoryFrame);

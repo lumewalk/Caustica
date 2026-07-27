@@ -61,12 +61,20 @@ final class RtReservoirReference {
         }
 
         void merge(Reservoir source, double targetDensityAtReceiver, double random01) {
+            merge(source, targetDensityAtReceiver, random01, Double.MAX_VALUE);
+        }
+
+        void merge(Reservoir source, double targetDensityAtReceiver, double random01,
+                   double maxSourceCount) {
             if (source == this) {
                 throw new IllegalArgumentException("reservoir cannot merge itself");
             }
             requireFiniteNonNegative(targetDensityAtReceiver, "receiver target density");
             requireRandom(random01);
-            double sourceCount = source.effectiveCount;
+            if (!Double.isFinite(maxSourceCount) || maxSourceCount <= 0.0) {
+                throw new IllegalArgumentException("maximum source count must be finite and positive");
+            }
+            double sourceCount = Math.min(source.effectiveCount, maxSourceCount);
             effectiveCount = saturatedAdd(effectiveCount, sourceCount);
             if (source.selected == null || sourceCount <= 0.0) {
                 return;
