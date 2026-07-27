@@ -77,6 +77,19 @@ existing graphics timeline reports completion, never by stalling the GPU.
 JFR recordings are written to `run\jfr`. Without `-DurationSeconds`, the
 profiler records until Enter is pressed.
 
+The wavefront primary-to-indirect queue owns two 48-byte records per render
+pixel, so its allocation is exactly `renderWidth * renderHeight * 96` bytes.
+The renderer logs the actual byte and MiB count whenever the render size is
+created. Useful reference points:
+
+| Render size | Queue allocation |
+| --- | ---: |
+| 569x320 (854x480 DLSS Quality reference window) | 16.67 MiB |
+| 854x480 (same window at native render resolution) | 37.53 MiB |
+| 1920x1080 native | 189.84 MiB |
+| 2560x1440 native | 337.50 MiB |
+| 3840x2160 native | 759.38 MiB |
+
 ## Linux
 
 Set `DLSS_SDK` and `VULKAN_SDK` before configuring CMake:

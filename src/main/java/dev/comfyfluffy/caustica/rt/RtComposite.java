@@ -66,6 +66,7 @@ import dev.comfyfluffy.caustica.rt.terrain.RtTerrain;
 
 import java.nio.ByteBuffer;
 import java.nio.LongBuffer;
+import java.util.Locale;
 
 /**
  * On-screen composite. Each frame, ray-trace into a render-res storage image (+ guide buffers), use
@@ -742,6 +743,10 @@ public final class RtComposite {
         continuationQueue = ctx.createBuffer(continuationBytes,
                 VK10.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, false,
                 "path continuation queue " + renderW + "x" + renderH + "x2");
+        CausticaMod.LOGGER.info(
+                "RT continuation queue: render={}x{}, recordsPerPixel=2, stride={} B, bytes={}, gpuMiB={}",
+                renderW, renderH, PATH_RECORD_BYTES, continuationBytes,
+                String.format(Locale.ROOT, "%.2f", continuationBytes / (1024.0 * 1024.0)));
         displayImage = ctx.createStorageImage(width, height, VK10.VK_FORMAT_R8G8B8A8_UNORM, "RT display image " + width + "x" + height);
         // PQ-encoded ([0,1], ST.2084) HDR display image, written in parallel by display.comp when HDR mode is active.
         hdrDisplayImage = ctx.createStorageImage(width, height, VK10.VK_FORMAT_R16G16B16A16_SFLOAT, "RT HDR display image " + width + "x" + height);
