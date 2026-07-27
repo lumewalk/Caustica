@@ -74,14 +74,21 @@ public void traceRadiance(uint cullMask, float3 ro, float tmin, float3 rd, float
 // live state in this shader. Rebuilding costs a few constant moves and leaves only these two words
 // spanning the reorder.
 public void traceRadianceReordered(uint cullMask, float3 ro, float tmin, float3 rd, float tmax,
-                            bool showCelestial, float rayConeWidth, float rayConeSpread) {
+                            bool showCelestial, float rayConeWidth, float rayConeSpread,
+                            uint pathPhaseHint) {
     uint flags = showCelestial ? PAYLOAD_SHOW_CELESTIAL : 0u;
     uint rayCone = packHalf2(float2(rayConeWidth, rayConeSpread));
     Payload tracePayload = makeRadiancePayload(flags, rayCone);
     HitObject hObj = HitObject::TraceRay(topLevelAS, RAY_FLAG_NONE, cullMask,
             SBT_RADIANCE, SBT_STRIDE_BUCKET, MISS_RADIANCE,
             makeRay(ro, tmin, rd, tmax), tracePayload);
-    ReorderThread(hObj);
+    // The hit object groups shader IDs first. Its SBT index then supplies the two-bit geometry/material
+    // bucket ({solid, cutout, translucent, water}); terrain and entity record ranges are both multiples
+    // of TERRAIN_BUCKETS, so the low bits have the same meaning. The high two bits describe path lifetime:
+    // pre-roulette, roulette-active, or guaranteed terminal after this hit.
+    uint materialHint = hObj.GetShaderTableIndex() & (TERRAIN_BUCKETS - 1u);
+    uint coherenceHint = (pathPhaseHint << 2u) | materialHint;
+    ReorderThread(hObj, coherenceHint, 4u);
     payload = makeRadiancePayload(flags, rayCone);
     HitObject::Invoke(topLevelAS, hObj, payload);
 }

@@ -71,8 +71,11 @@ public float3 tracePath(PathSegment seg, uint2 pix, uint sampleIndex) {
         // closest-hit for dielectric handling. Geometry is double-sided; the chit flips the normal.
         // Primary (bounce 0) is the camera ray (CULL_PRIMARY): sees particles but not the first-person
         // player. Bounce rays are secondary (CULL_SECONDARY): exclude particles, include the player.
+        // SER lifetime phase: keep paths that are not roulette-eligible, paths that may terminate via
+        // roulette, and paths guaranteed to end at the bounce cap in separate coherence groups.
+        uint pathPhaseHint = bounce >= maxBounces ? 2u : (bounce >= rrStart ? 1u : 0u);
         traceRadianceReordered(bounce == 0 ? CULL_PRIMARY : CULL_SECONDARY, ro, 0.0, rd, 10000.0,
-                               showCelestial, rayConeWidth, rayConeSpread);
+                               showCelestial, rayConeWidth, rayConeSpread, pathPhaseHint);
 
         if (payload.hitT < 0.0) {
             // world.rmiss writes sky radiance (gradient + sun/moon disc + stars) into payload.albedo. The
