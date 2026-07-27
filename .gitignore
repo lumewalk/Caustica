@@ -2,6 +2,7 @@
 .idea/
 /build/
 /buildSrc/build/
+/logs/
 native/ngx_shim/build/
 run/
 out/
