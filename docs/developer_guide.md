@@ -66,9 +66,14 @@ Recorder profile from a second PowerShell window:
 .\profileMinecraft.ps1 -DurationSeconds 45
 ```
 
-The CSV is written to `run\rt-frame-stats\frame.csv`, and JFR recordings are
-written to `run\jfr`. Without `-DurationSeconds`, the profiler records until
-Enter is pressed.
+CPU frame and stage timings are written to `run\rt-frame-stats\frame.csv`.
+The same switch also writes non-blocking Vulkan timestamp results to
+`run\rt-frame-stats\gpu.csv`, split into entity BLAS, TLAS, path trace,
+DLSS-RR/fallback upscale, exposure, display mapping, and output-copy stages.
+GPU rows can arrive several frames late: query results are read only after the
+existing graphics timeline reports completion, never by stalling the GPU.
+JFR recordings are written to `run\jfr`. Without `-DurationSeconds`, the
+profiler records until Enter is pressed.
 
 ## Linux
 

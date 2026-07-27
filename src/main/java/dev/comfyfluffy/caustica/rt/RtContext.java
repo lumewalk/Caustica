@@ -33,11 +33,13 @@ import org.lwjgl.vulkan.VkPhysicalDeviceAccelerationStructurePropertiesKHR;
 import org.lwjgl.vulkan.VkPhysicalDeviceDescriptorIndexingProperties;
 import org.lwjgl.vulkan.VkPhysicalDeviceProperties2;
 import org.lwjgl.vulkan.VkPhysicalDeviceRayTracingPipelinePropertiesKHR;
+import org.lwjgl.vulkan.VkQueueFamilyProperties;
 import org.lwjgl.vulkan.VkSubmitInfo;
 
 import dev.comfyfluffy.caustica.rt.accel.RtBuffer;
 import dev.comfyfluffy.caustica.rt.accel.RtImage;
 
+import java.nio.IntBuffer;
 import java.nio.LongBuffer;
 import java.util.function.Consumer;
 
@@ -67,10 +69,13 @@ public final class RtContext {
     private final int maxShaderGroupStride;
     private final int accelerationStructureScratchAlignment;
     private final long updateAfterBindCombinedImageSamplerLimit;
+    private final float timestampPeriodNanos;
+    private final int graphicsTimestampValidBits;
     private long commandPool;
 
     private RtContext(VulkanDevice device, long vma, int handleSize, int baseAlign, int handleAlign,
-                      int maxSbtStride, int scratchAlign, long updateAfterBindCombinedImageSamplerLimit) {
+                      int maxSbtStride, int scratchAlign, long updateAfterBindCombinedImageSamplerLimit,
+                      float timestampPeriodNanos, int graphicsTimestampValidBits) {
         this.device = device;
         this.vk = device.vkDevice();
         this.vma = vma;
@@ -83,6 +88,8 @@ public final class RtContext {
         this.maxShaderGroupStride = maxSbtStride;
         this.accelerationStructureScratchAlignment = scratchAlign;
         this.updateAfterBindCombinedImageSamplerLimit = updateAfterBindCombinedImageSamplerLimit;
+        this.timestampPeriodNanos = timestampPeriodNanos;
+        this.graphicsTimestampValidBits = graphicsTimestampValidBits;
         this.gpuExecutor = new RtGpuExecutor(this);
     }
 
@@ -154,18 +161,34 @@ public final class RtContext {
                     descriptorProps.maxDescriptorSetUpdateAfterBindSamplers(),
                     descriptorProps.maxDescriptorSetUpdateAfterBindSampledImages(),
                     descriptorProps.maxUpdateAfterBindDescriptorsInAllPools());
+            int timestampValidBits = timestampValidBits(phys, device.graphicsQueue().queueFamilyIndex(), stack);
 
             CausticaMod.LOGGER.info(
                     "RT portability limits: SBT handleAlignment={}, baseAlignment={}, maxStride={}; "
-                            + "AS scratchAlignment={}; update-after-bind combined-sampler limit={}",
+                            + "AS scratchAlignment={}; update-after-bind combined-sampler limit={}; "
+                            + "graphics timestamps={} bits at {} ns/tick",
                     rtProps.shaderGroupHandleAlignment(), rtProps.shaderGroupBaseAlignment(),
                     Integer.toUnsignedLong(rtProps.maxShaderGroupStride()),
-                    asProps.minAccelerationStructureScratchOffsetAlignment(), combinedImageSamplerLimit);
+                    asProps.minAccelerationStructureScratchOffsetAlignment(), combinedImageSamplerLimit,
+                    timestampValidBits, limits.timestampPeriod());
 
             return new RtContext(device, pVma.get(0), rtProps.shaderGroupHandleSize(), rtProps.shaderGroupBaseAlignment(),
                     rtProps.shaderGroupHandleAlignment(), rtProps.maxShaderGroupStride(),
-                    asProps.minAccelerationStructureScratchOffsetAlignment(), combinedImageSamplerLimit);
+                    asProps.minAccelerationStructureScratchOffsetAlignment(), combinedImageSamplerLimit,
+                    limits.timestampPeriod(), timestampValidBits);
         }
+    }
+
+    private static int timestampValidBits(VkPhysicalDevice physicalDevice, int queueFamilyIndex, MemoryStack stack) {
+        IntBuffer count = stack.mallocInt(1);
+        VK10.vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, count, null);
+        int familyCount = count.get(0);
+        if (queueFamilyIndex < 0 || queueFamilyIndex >= familyCount) {
+            return 0;
+        }
+        VkQueueFamilyProperties.Buffer families = VkQueueFamilyProperties.calloc(familyCount, stack);
+        VK10.vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, count, families);
+        return families.get(queueFamilyIndex).timestampValidBits();
     }
 
     private static long minUnsigned(int... values) {
@@ -219,6 +242,14 @@ public final class RtContext {
     /** Conservative combined-image-sampler limit for a descriptor set using update-after-bind. */
     public long updateAfterBindCombinedImageSamplerLimit() {
         return updateAfterBindCombinedImageSamplerLimit;
+    }
+
+    public float timestampPeriodNanos() {
+        return timestampPeriodNanos;
+    }
+
+    public int graphicsTimestampValidBits() {
+        return graphicsTimestampValidBits;
     }
 
     public int accelerationStructureScratchAlignment() {

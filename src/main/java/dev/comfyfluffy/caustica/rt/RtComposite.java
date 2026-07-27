@@ -177,6 +177,7 @@ public final class RtComposite {
     private static final int PUSH_RING = 6;
     private PushSlot[] pushRing;
     private int pushSlot;
+    private final RtGpuFrameStats gpuFrameStats = new RtGpuFrameStats();
     private RtDisplayPipeline displayPipeline;
     private RtImage output;
     private RtImage displayImage;
@@ -777,6 +778,7 @@ public final class RtComposite {
         RtGpuExecutor.GraphicsUseWaiter graphicsUseWaiter = gpuExecutor.graphicsUseWaiter();
         pendingGraphicsUse = graphicsUse;
         RtEntities.FrameEntities frameEntities = null;
+        RtGpuFrameStats.Slot gpuStats = null;
         VkCommandBuffer cmd = encoder.allocateAndBeginTransientCommandBuffer();
         RtDebugLabels.name(ctx, VK10.VK_OBJECT_TYPE_COMMAND_BUFFER, cmd.address(), "composite command buffer");
         int debugView = debugView();
@@ -785,6 +787,8 @@ public final class RtComposite {
             // RR drives the upscale: trace + jitter at render res, DLSS-RR denoises+upscales to display.
             // Jitter is suppressed for the no-RR reference and for the debug guide views (raw inspection).
             boolean rrPath = RtDlssRr.enabled() && debugView == 0;
+            gpuStats = gpuFrameStats.begin(ctx, cmd, graphicsUseWaiter, frameCounter,
+                    renderW, renderH, displayW, displayH);
             float jitterX = 0f;
             float jitterY = 0f;
             if (rrPath) {
@@ -902,6 +906,7 @@ public final class RtComposite {
                 }
                 VulkanCommandEncoder.memoryBarrier(cmd, stack); // entity BLAS writes visible to the TLAS build
             }
+            gpuFrameStats.markEntityBlas(gpuStats, cmd, !fe.blas().isEmpty());
             RtAccel.PreparedTlas frameTlas;
             try (RtFrameStats.Scope ignored = RtFrameStats.FRAME.stage("frame.prepareTlas")) {
                 frameTlas = RtAccel.prepareTlas(ctx, fe.baseInstances(), fe.dynamicInstances(), tlasRing,
@@ -913,6 +918,7 @@ public final class RtComposite {
                 RtAccel.recordTlasBuild(ctx, cmd, frameTlas);
             }
             VulkanCommandEncoder.memoryBarrier(cmd, stack); // TLAS build visible to the trace
+            gpuFrameStats.markTlas(gpuStats, cmd);
 
             // Push the BDA ring slot's address plus the small hot subset used directly by the shaders.
             // Every 64-bit device address the trace needs lives here, not behind worldPushAddr: the
@@ -931,6 +937,7 @@ public final class RtComposite {
                 active.trace(cmd, renderW, renderH, pushConstants);
             }
             VulkanCommandEncoder.memoryBarrier(cmd, stack); // RT writes visible to DLSS reads
+            gpuFrameStats.markTrace(gpuStats, cmd);
             // DLSS-RR denoise + upscale. The RT pass wrote noisy color (render res) + guides;
             // RR reads them and writes the display-res denoised result straight into rrOutput.
             if (rrPath && RtDlssRr.INSTANCE.ensureFeature(cmd.address(), renderW, renderH, displayW, displayH)) {
@@ -953,6 +960,7 @@ public final class RtComposite {
                 }
             }
             VulkanCommandEncoder.memoryBarrier(cmd, stack); // rrOutput visible to exposure histogram
+            gpuFrameStats.markUpscale(gpuStats, cmd, rrDone);
 
             // Auto-exposure meters rrOutput (the post-RR, denoised/converged image), not the raw
             // pre-RR trace: RR has no notion of exposure (DLSS-RR Integration Guide §3.7 — ignore
@@ -966,6 +974,7 @@ public final class RtComposite {
                 exposure.record(ctx, cmd, stack, rrOutput);
             }
             VulkanCommandEncoder.memoryBarrier(cmd, stack); // exposure image visible to the display mapper
+            gpuFrameStats.markExposure(gpuStats, cmd);
 
             try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd, "map RT to display");
                  RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage("frame.displayMap")) {
@@ -974,6 +983,7 @@ public final class RtComposite {
             }
             hdrWrittenThisFrame = CausticaConfig.Rt.Hdr.enabled();
             VulkanCommandEncoder.memoryBarrier(cmd, stack);
+            gpuFrameStats.markDisplayMap(gpuStats, cmd);
 
             try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd, "copy composite to main target");
                  RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage("frame.copyOutput")) {
@@ -981,11 +991,19 @@ public final class RtComposite {
                         dstImage, VK10.VK_IMAGE_LAYOUT_GENERAL, copyRegion(stack, displayW, displayH));
             }
             VulkanCommandEncoder.memoryBarrier(cmd, stack);
+            gpuFrameStats.markCopyOutput(gpuStats, cmd);
         }
         if (VK10.vkEndCommandBuffer(cmd) != VK10.VK_SUCCESS) {
+            gpuFrameStats.cancel(gpuStats);
             throw new IllegalStateException("vkEndCommandBuffer(rt composite) failed");
         }
-        encoder.execute(cmd); // deferred into the frame's submission — correct for per-frame work
+        try {
+            encoder.execute(cmd); // deferred into the frame's submission — correct for per-frame work
+        } catch (RuntimeException | Error failure) {
+            gpuFrameStats.cancel(gpuStats);
+            throw failure;
+        }
+        gpuFrameStats.commit(gpuStats, graphicsUse);
         // Do not attach a merely reserved token: failed recording may never signal it. Once execute succeeds,
         // every owner in this frame's manifest is protected through the final overlay consumer.
         RtEntities.INSTANCE.markGraphicsUse(frameEntities, graphicsUse);
@@ -1186,6 +1204,7 @@ public final class RtComposite {
     public void destroy() {
         // Teardown runs after the device is idle (CLIENT_STOPPING waits), so the TLAS ring's slots are no
         // longer in flight and can be freed immediately.
+        gpuFrameStats.destroy(RtContext.currentOrNull());
         tlasRing.destroy();
         // Teardown follows ownership, not the current setting. RR may have been disabled after its
         // feature was created; destroy it unconditionally so NGX never shuts down with a live handle.
