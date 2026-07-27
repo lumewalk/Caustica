@@ -63,5 +63,7 @@
 	"caustica.options.rt.debugView.11": "Пространственное переиспользование ReSTIR",
 	"caustica.options.rt.debugView.12": "Финальный прямой свет ReSTIR",
 	"caustica.options.rt.restirDirect": "Прямое освещение ReSTIR",
-	"caustica.options.rt.restirDirect.tooltip": "Заменяет прямой свет эмиттеров на первом интерфейсе проверенным temporal/spatial reservoir ReSTIR."
+	"caustica.options.rt.restirDirect.tooltip": "Заменяет прямой свет эмиттеров на первом интерфейсе проверенным temporal/spatial reservoir ReSTIR.",
+	"caustica.options.rt.restirPt": "Экспериментальное хранилище ReSTIR PT",
+	"caustica.options.rt.restirPt.tooltip": "Выделяет проверенное хранилище path-reservoir; переиспользование вторичных отскоков пока не включено."
 }

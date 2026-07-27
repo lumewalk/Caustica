@@ -186,6 +186,7 @@ public final class RtComposite {
     private final RtSurfaceHistory surfaceHistory = new RtSurfaceHistory();
     private final RtTemporalValidation temporalValidation = new RtTemporalValidation();
     private final RtDirectReservoirHistory directReservoirs = new RtDirectReservoirHistory();
+    private final RtPathReservoirHistory pathReservoirs = new RtPathReservoirHistory();
     private RtDisplayPipeline displayPipeline;
     private RtImage output;
     // Packed primary -> indirect continuations. Pass A is fixed at one sample and owns two records per
@@ -521,11 +522,18 @@ public final class RtComposite {
             }
             RtSurfaceHistory.Frame surfaceHistoryFrame = surfaceHistory.beginFrame(historyFrame);
             RtDirectReservoirHistory.Frame reservoirFrame = directReservoirs.beginFrame(historyFrame);
+            boolean restirPt = CausticaConfig.Rt.Composite.RESTIR_PT.value();
+            RtPathReservoirHistory.Frame pathReservoirFrame = restirPt
+                    ? pathReservoirs.beginFrame(historyFrame) : null;
             updateMotion();
-            recordFrame(ctx, active, nativeColor, surfaceHistoryFrame, reservoirFrame);
+            recordFrame(ctx, active, nativeColor, surfaceHistoryFrame, reservoirFrame,
+                    pathReservoirFrame, restirPt);
             if (historyState.markProduced(historyFrame.generation())) {
                 surfaceHistory.commit(surfaceHistoryFrame);
                 directReservoirs.commit(reservoirFrame);
+                if (restirPt) {
+                    pathReservoirs.commit(pathReservoirFrame);
+                }
             }
             if (!loggedActive) {
                 loggedActive = true;
@@ -755,7 +763,9 @@ public final class RtComposite {
     private void ensureOutput(RtContext ctx, int width, int height) {
         boolean rrEnabled = RtDlssRr.enabled();
         int rrQuality = rrEnabled ? RtDlssRr.quality() : Integer.MIN_VALUE;
+        boolean restirPt = CausticaConfig.Rt.Composite.RESTIR_PT.value();
         if (output != null && continuationQueue != null && temporalValidation.ready() && directReservoirs.ready()
+                && restirPt == pathReservoirs.ready()
                 && displayImage != null && hdrDisplayImage != null && rrOutput != null && exposure.ready()
                 && displayW == width && displayH == height
                 && renderSizeRrEnabled == rrEnabled && renderSizeRrQuality == rrQuality) {
@@ -771,6 +781,7 @@ public final class RtComposite {
         // Destroy descriptor owners before any image/buffer their immutable sets reference.
         temporalValidation.destroy();
         directReservoirs.destroy();
+        pathReservoirs.destroy();
         if (output != null) {
             output.destroy();
         }
@@ -852,6 +863,15 @@ public final class RtComposite {
                 renderW, renderH, RtDirectReservoirHistory.SLOT_COUNT,
                 RtDirectReservoirHistory.BYTES_PER_RESERVOIR, reservoirBytes,
                 String.format(Locale.ROOT, "%.2f", reservoirBytes / (1024.0 * 1024.0)));
+        if (restirPt) {
+            pathReservoirs.ensure(ctx, renderW, renderH);
+            long pathReservoirBytes = pathReservoirs.allocatedBytes();
+            CausticaMod.LOGGER.info(
+                    "RT path reservoirs: render={}x{}, slots={}, stride={} B, bytes={}, gpuMiB={}",
+                    renderW, renderH, RtPathReservoirHistory.SLOT_COUNT,
+                    RtPathReservoirHistory.BYTES_PER_RESERVOIR, pathReservoirBytes,
+                    String.format(Locale.ROOT, "%.2f", pathReservoirBytes / (1024.0 * 1024.0)));
+        }
         // Display-res RT image the display mapper reads. Always present (DLSS-RR target, or blit-upscale fallback).
         rrOutput = ctx.createStorageImage(width, height, VK10.VK_FORMAT_R16G16B16A16_SFLOAT, "DLSS-RR output " + width + "x" + height);
         exposure.ensureResources(ctx);
@@ -904,11 +924,14 @@ public final class RtComposite {
         mvHasPrev = false;
         waterWaveTimeValid = false;
         fgReset = true;
+        pathReservoirs.reset();
     }
 
     private void recordFrame(RtContext ctx, RtPipeline active, GpuTexture nativeColor,
                              RtSurfaceHistory.Frame surfaceHistoryFrame,
-                             RtDirectReservoirHistory.Frame reservoirFrame) {
+                             RtDirectReservoirHistory.Frame reservoirFrame,
+                             RtPathReservoirHistory.Frame pathReservoirFrame,
+                             boolean restirPt) {
         long dstImage = vkImage(nativeColor);
         var encoder = (VulkanCommandEncoder) ((CommandEncoderAccessor) RenderSystem.getDevice().createCommandEncoder()).caustica$getBackend();
         RtGpuExecutor gpuExecutor = ctx.gpuExecutor();
@@ -1084,8 +1107,12 @@ public final class RtComposite {
                     terrain.lightLocalAliasBufferAddress(), terrain.lightGridCellBufferAddress(),
                     terrain.lightGridSpanBufferAddress(), continuationQueue.deviceAddress,
                     directReservoirs.finalBuffer(reservoirFrame).deviceAddress,
+                    restirPt ? pathReservoirs.finalBuffer(pathReservoirFrame).deviceAddress : 0L,
                     (int) frameCounter, debugView,
-                    (reservoirFrame.previousAvailable() ? 1 : 0) | (restirDirect ? 2 : 0)).write(pushConstants);
+                    (reservoirFrame.previousAvailable() ? 1 : 0)
+                            | (restirDirect ? 2 : 0)
+                            | (restirPt ? 4 : 0)
+                            | (restirPt && pathReservoirFrame.previousAvailable() ? 8 : 0)).write(pushConstants);
             try (RtFrameStats.Scope ignoredTrace = RtFrameStats.FRAME.stage("frame.trace")) {
                 try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd, "world primary trace");
                      RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage("frame.tracePrimary")) {
@@ -1436,6 +1463,7 @@ public final class RtComposite {
         // Destroy descriptor owners before any image/buffer their immutable sets reference.
         temporalValidation.destroy();
         directReservoirs.destroy();
+        pathReservoirs.destroy();
         if (output != null) {
             output.destroy();
             output = null;

@@ -534,6 +534,8 @@ public final class CausticaConfig {
             public static final IntSetting DEBUG_VIEW = intValue("caustica.rt.debugView", "composite.debug-view", 0);
             public static final BooleanSetting RESTIR_DIRECT =
                     bool("caustica.rt.restirDirect", "composite.restir-direct", false);
+            public static final BooleanSetting RESTIR_PT =
+                    bool("caustica.rt.restirPt", "composite.restir-pt", false);
             public static final IntSetting SPP = intAtLeast("caustica.rt.spp", "composite.spp", 1, 1);
             public static final IntSetting MAX_BOUNCES =
                     clampedInt("caustica.rt.maxBounces", "composite.max-bounces", 4, 2, 8);

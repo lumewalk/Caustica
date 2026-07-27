@@ -28,9 +28,10 @@ public struct WorldPushConstants {
     public uint64_t lightGridSpanAddr;   // packed weighted section spans referenced by cell headers
     public uint64_t pathQueueAddr;       // packed primary -> indirect continuation records
     public uint64_t directReservoirAddr; // finalized per-pixel ReSTIR DI reservoirs
+    public uint64_t pathReservoirAddr;   // current ping-pong ReSTIR PT path-reservoir slot (0 = disabled)
     public uint frameIndex;
     public uint debugView;
-    public uint historyFlags;            // bit0: a generation-matched previous reservoir slot exists
+    public uint historyFlags;            // bit0 direct history, bit1 direct replacement, bit2 PT storage, bit3 PT history
 };
 
 // Block-breaking overlay entry: xyz = breaking block position (rebased, same space as gl_WorldRay*),
@@ -126,6 +127,23 @@ public struct DirectReservoir {
     public float4 radianceProposalPdf;  // xyz emitted radiance, w source proposal density
     public float4 weights;
     public uint4 metadata;
+};
+
+// Clarity-first ReSTIR PT path-reservoir contract. The record is intentionally independent from the
+// transient 48-byte continuation queue: one path sample may outlive a queue record and must retain the
+// unshadowed contribution, density terms, shift footprint, and replay identity needed by a future GRIS
+// reconnection pass. Four aligned lanes keep the first GPU substrate stable while the estimator is still
+// being validated against RtPathReservoirReference.
+//
+// sampleRadianceTarget = {unshadowed RGB contribution, target density}
+// proposalShift = {proposal density, shift Jacobian, path footprint, reserved}
+// weights = {accumulated weight, effective M, final W, confidence}
+// identity = {sample id, path/queue key, topology key, packed geometry/material epoch}
+public struct PathReservoir {
+    public float4 sampleRadianceTarget;
+    public float4 proposalShift;
+    public float4 weights;
+    public uint4 identity;
 };
 
 // TerrainPrim.flags bit 0: this emissive quad is in the light buffer (RtLightCollector membership).
