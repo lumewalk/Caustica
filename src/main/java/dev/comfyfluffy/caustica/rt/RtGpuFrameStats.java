@@ -21,7 +21,7 @@ import org.lwjgl.vulkan.VkQueryPoolCreateInfo;
  */
 final class RtGpuFrameStats {
     private static final int SLOT_COUNT = 8;
-    private static final int QUERY_COUNT = 15;
+    private static final int QUERY_COUNT = 16;
     private static final int ENTITY_BLAS = 1;
     private static final int TLAS = 2;
     private static final int TRACE_PRIMARY = 3;
@@ -31,11 +31,12 @@ final class RtGpuFrameStats {
     private static final int RESERVOIR_CANDIDATES = 7;
     private static final int RESERVOIR_TEMPORAL = 8;
     private static final int RESERVOIR_SPATIAL = 9;
-    private static final int HISTORY_CAPTURE = 10;
-    private static final int UPSCALE = 11;
-    private static final int EXPOSURE = 12;
-    private static final int DISPLAY_MAP = 13;
-    private static final int COPY_OUTPUT = 14;
+    private static final int RESERVOIR_RESOLVE = 10;
+    private static final int HISTORY_CAPTURE = 11;
+    private static final int UPSCALE = 12;
+    private static final int EXPOSURE = 13;
+    private static final int DISPLAY_MAP = 14;
+    private static final int COPY_OUTPUT = 15;
 
     private final Slot[] slots = new Slot[SLOT_COUNT];
     private long queryPool;
@@ -129,6 +130,10 @@ final class RtGpuFrameStats {
 
     void markReservoirSpatial(Slot slot, VkCommandBuffer cmd) {
         mark(slot, cmd, RESERVOIR_SPATIAL);
+    }
+
+    void markReservoirResolve(Slot slot, VkCommandBuffer cmd) {
+        mark(slot, cmd, RESERVOIR_RESOLVE);
     }
 
     void markUpscale(Slot slot, VkCommandBuffer cmd, boolean rrDone) {
@@ -251,18 +256,21 @@ final class RtGpuFrameStats {
                 timestampDelta(timestamps.get(RESERVOIR_CANDIDATES), timestamps.get(RESERVOIR_TEMPORAL), bits), period);
         double reservoirSpatialMs = millis(
                 timestampDelta(timestamps.get(RESERVOIR_TEMPORAL), timestamps.get(RESERVOIR_SPATIAL), bits), period);
+        double reservoirResolveMs = millis(
+                timestampDelta(timestamps.get(RESERVOIR_SPATIAL), timestamps.get(RESERVOIR_RESOLVE), bits), period);
         double historyCaptureMs = millis(
-                timestampDelta(timestamps.get(RESERVOIR_SPATIAL), timestamps.get(HISTORY_CAPTURE), bits), period);
+                timestampDelta(timestamps.get(RESERVOIR_RESOLVE), timestamps.get(HISTORY_CAPTURE), bits), period);
         double upscaleMs = millis(timestampDelta(timestamps.get(HISTORY_CAPTURE), timestamps.get(UPSCALE), bits), period);
         double exposureMs = millis(timestampDelta(timestamps.get(UPSCALE), timestamps.get(EXPOSURE), bits), period);
         double displayMapMs = millis(timestampDelta(timestamps.get(EXPOSURE), timestamps.get(DISPLAY_MAP), bits), period);
         double copyOutputMs = millis(timestampDelta(timestamps.get(DISPLAY_MAP), timestamps.get(COPY_OUTPUT), bits), period);
         double totalMs = millis(timestampDelta(timestamps.get(0), timestamps.get(COPY_OUTPUT), bits), period);
         writer.printf(Locale.ROOT,
-                "%d,%d,%d,%d,%d,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f%n",
+                "%d,%d,%d,%d,%d,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f%n",
                 slot.frameIndex, slot.renderWidth, slot.renderHeight, slot.displayWidth, slot.displayHeight,
                 totalMs, entityBlasMs, tlasMs, traceMs, tracePrimaryMs, traceIndirectMs,
                 temporalValidationMs, reservoirInitMs, reservoirCandidatesMs, reservoirTemporalMs, reservoirSpatialMs,
+                reservoirResolveMs,
                 historyCaptureMs,
                 slot.rrDone ? upscaleMs : 0.0,
                 slot.rrDone ? 0.0 : upscaleMs, exposureMs, displayMapMs, copyOutputMs);
@@ -281,7 +289,7 @@ final class RtGpuFrameStats {
             csv = new PrintWriter(Files.newBufferedWriter(file, StandardCharsets.UTF_8));
             csv.println("frame,renderWidth,renderHeight,displayWidth,displayHeight,totalMs,entityBlasMs,"
                     + "tlasMs,traceMs,tracePrimaryMs,traceIndirectMs,temporalValidationMs,"
-                    + "reservoirInitMs,reservoirCandidatesMs,reservoirTemporalMs,reservoirSpatialMs,historyCaptureMs,"
+                    + "reservoirInitMs,reservoirCandidatesMs,reservoirTemporalMs,reservoirSpatialMs,reservoirResolveMs,historyCaptureMs,"
                     + "dlssRrMs,upscaleMs,exposureMs,"
                     + "displayMapMs,copyOutputMs");
             csv.flush();

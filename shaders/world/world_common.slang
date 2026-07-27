@@ -27,6 +27,7 @@ public struct WorldPushConstants {
     public uint64_t lightGridCellAddr;   // dense light grid cell headers (0 = global proposals only)
     public uint64_t lightGridSpanAddr;   // packed weighted section spans referenced by cell headers
     public uint64_t pathQueueAddr;       // packed primary -> indirect continuation records
+    public uint64_t directReservoirAddr; // finalized per-pixel ReSTIR DI reservoirs
     public uint frameIndex;
     public uint debugView;
     public uint historyFlags;            // bit0: a generation-matched previous reservoir slot exists

@@ -568,7 +568,8 @@ public final class RtComposite {
             bindlessTextureCapacity = RtEntityTextures.maxTextures();
             worldPipeline = RtPipeline.create(ctx, new String[]{
                             RtDeviceBringup.worldPrimaryRaygenShader(),
-                            RtDeviceBringup.worldRaygenShader()},
+                            RtDeviceBringup.worldRaygenShader(),
+                            "direct_resolve.rgen.spv"},
                     new String[]{"world.rmiss.spv", "world_guide.rmiss.spv"},
                     "world.rchit.spv", "world.rahit.spv",
                     WorldPushConstantsData.BYTE_SIZE, true, GUIDE_COUNT, bindlessTextureCapacity, true);
@@ -1078,6 +1079,7 @@ public final class RtComposite {
                     terrain.lightBufferAddress(), terrain.lightAliasBufferAddress(),
                     terrain.lightLocalAliasBufferAddress(), terrain.lightGridCellBufferAddress(),
                     terrain.lightGridSpanBufferAddress(), continuationQueue.deviceAddress,
+                    directReservoirs.finalBuffer(reservoirFrame).deviceAddress,
                     (int) frameCounter, debugView,
                     reservoirFrame.previousAvailable() ? 1 : 0).write(pushConstants);
             try (RtFrameStats.Scope ignoredTrace = RtFrameStats.FRAME.stage("frame.trace")) {
@@ -1124,7 +1126,15 @@ public final class RtComposite {
                 directReservoirs.recordSpatialReuse(cmd, reservoirFrame, pushConstants);
             }
             gpuFrameStats.markReservoirSpatial(gpuStats, cmd);
-            VulkanCommandEncoder.memoryBarrier(cmd, stack); // finalized reservoir visible to later consumers
+            VulkanCommandEncoder.memoryBarrier(cmd, stack); // finalized reservoir visible to resolve
+            if (debugView == 12) {
+                try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd, "direct reservoir resolve");
+                     RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage("frame.reservoirResolve")) {
+                    active.trace(cmd, renderW, renderH, pushConstants, 2);
+                }
+            }
+            gpuFrameStats.markReservoirResolve(gpuStats, cmd);
+            VulkanCommandEncoder.memoryBarrier(cmd, stack); // resolve/guide reads complete
             try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd, "surface history capture");
                  RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage("frame.historyCapture")) {
                 surfaceHistory.recordCapture(cmd, stack, gNormal, gDepth, surfaceHistoryFrame);

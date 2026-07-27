@@ -35,16 +35,18 @@ public float directHgPhase(float cosT) {
             * pow(max(0.0, 1.0 + g2 - 2.0 * DIRECT_SSS_G * cosT), 1.5));
 }
 
-// samplePosition is in the receiver's current rebased world space.
-public float directCandidateTarget(float3 samplePosition, float3 lightNormal, float3 radiance,
+// Unshadowed diffuse/SSS contribution for the proposal target. samplePosition is in the receiver's
+// current rebased world space. Keeping the RGB estimator and scalar target on one implementation avoids
+// a silent mismatch when the diagnostic resolve becomes the production direct-light path later.
+public float3 directCandidateContribution(float3 samplePosition, float3 lightNormal, float3 radiance,
                             float area, float3 hitPosition, float3 normal, float3 rayDirection,
                             float3 diffuseAlbedo, bool twoSided, float sss) {
     float3 toLight = samplePosition - hitPosition;
     float distanceSquared = dot(toLight, toLight);
-    if (distanceSquared < 1.0e-6) return 0.0;
+    if (distanceSquared < 1.0e-6) return float3(0.0, 0.0, 0.0);
     float3 wi = toLight * rsqrt(distanceSquared);
     float cosLight = max(0.0, dot(lightNormal, -wi));
-    if (cosLight <= 0.0) return 0.0;
+    if (cosLight <= 0.0) return float3(0.0, 0.0, 0.0);
     float ndl = dot(normal, wi);
     if (twoSided) ndl = abs(ndl);
     float3 contribution = float3(0.0, 0.0, 0.0);
@@ -56,5 +58,12 @@ public float directCandidateTarget(float3 samplePosition, float3 lightNormal, fl
         contribution = diffuseAlbedo * sss * DIRECT_SSS_STRENGTH
                 * directHgPhase(dot(wi, rayDirection)) * radiance * (geometry * area);
     }
-    return luminance(contribution);
+    return contribution;
+}
+
+public float directCandidateTarget(float3 samplePosition, float3 lightNormal, float3 radiance,
+                            float area, float3 hitPosition, float3 normal, float3 rayDirection,
+                            float3 diffuseAlbedo, bool twoSided, float sss) {
+    return luminance(directCandidateContribution(samplePosition, lightNormal, radiance, area,
+            hitPosition, normal, rayDirection, diffuseAlbedo, twoSided, sss));
 }

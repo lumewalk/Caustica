@@ -60,5 +60,6 @@
 	"caustica.options.rt.debugView.8": "Валидация истории",
 	"caustica.options.rt.debugView.9": "Кандидаты ReSTIR",
 	"caustica.options.rt.debugView.10": "Временное переиспользование ReSTIR",
-	"caustica.options.rt.debugView.11": "Пространственное переиспользование ReSTIR"
+	"caustica.options.rt.debugView.11": "Пространственное переиспользование ReSTIR",
+	"caustica.options.rt.debugView.12": "Финальный прямой свет ReSTIR"
 }

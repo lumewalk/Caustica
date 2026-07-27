@@ -60,5 +60,6 @@
 	"caustica.options.rt.debugView.8": "Temporal Validation",
 	"caustica.options.rt.debugView.9": "ReSTIR Candidates",
 	"caustica.options.rt.debugView.10": "ReSTIR Temporal Reuse",
-	"caustica.options.rt.debugView.11": "ReSTIR Spatial Reuse"
+	"caustica.options.rt.debugView.11": "ReSTIR Spatial Reuse",
+	"caustica.options.rt.debugView.12": "ReSTIR Direct Resolve"
 }
