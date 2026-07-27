@@ -183,6 +183,7 @@ public final class RtComposite {
     private int pushSlot;
     private final RtGpuFrameStats gpuFrameStats = new RtGpuFrameStats();
     private final RtHistoryState historyState = new RtHistoryState();
+    private final RtSurfaceHistory surfaceHistory = new RtSurfaceHistory();
     private RtDisplayPipeline displayPipeline;
     private RtImage output;
     // Packed primary -> indirect continuations. Pass A is fixed at one sample and owns two records per
@@ -511,9 +512,12 @@ public final class RtComposite {
                 CausticaMod.LOGGER.info("RT history reset: generation={}, reasons={}",
                         historyFrame.generation(), historyFrame.resetReasons());
             }
+            RtSurfaceHistory.Frame surfaceHistoryFrame = surfaceHistory.beginFrame(historyFrame);
             updateMotion();
-            recordFrame(ctx, active, nativeColor);
-            historyState.markProduced(historyFrame.generation());
+            recordFrame(ctx, active, nativeColor, surfaceHistoryFrame);
+            if (historyState.markProduced(historyFrame.generation())) {
+                surfaceHistory.commit(surfaceHistoryFrame);
+            }
             if (!loggedActive) {
                 loggedActive = true;
                 CausticaMod.LOGGER.info("RT composite active (terrain): {}x{}, RT output replaces the world target", width, height);
@@ -747,6 +751,7 @@ public final class RtComposite {
             continuationQueue = null;
         }
         destroyGuideImages();
+        surfaceHistory.destroy();
 
         displayW = width;
         displayH = height;
@@ -785,6 +790,13 @@ public final class RtComposite {
         gMotion = ctx.createStorageImage(renderW, renderH, VK10.VK_FORMAT_R16G16_SFLOAT, "guide motion " + renderW + "x" + renderH);
         gSpecAlbedo = ctx.createStorageImage(renderW, renderH, VK10.VK_FORMAT_R16G16B16A16_SFLOAT, "guide specular albedo " + renderW + "x" + renderH);
         gSpecMotion = ctx.createStorageImage(renderW, renderH, VK10.VK_FORMAT_R16G16_SFLOAT, "guide specular motion " + renderW + "x" + renderH);
+        surfaceHistory.ensure(ctx, renderW, renderH);
+        long historyBytes = surfaceHistory.allocatedBytes();
+        CausticaMod.LOGGER.info(
+                "RT surface history: render={}x{}, slots={}, bytesPerPixelPerSlot={}, bytes={}, gpuMiB={}",
+                renderW, renderH, RtSurfaceHistory.SLOT_COUNT,
+                RtSurfaceHistory.BYTES_PER_PIXEL_PER_SLOT, historyBytes,
+                String.format(Locale.ROOT, "%.2f", historyBytes / (1024.0 * 1024.0)));
         // Display-res RT image the display mapper reads. Always present (DLSS-RR target, or blit-upscale fallback).
         rrOutput = ctx.createStorageImage(width, height, VK10.VK_FORMAT_R16G16B16A16_SFLOAT, "DLSS-RR output " + width + "x" + height);
         exposure.ensureResources(ctx);
@@ -833,7 +845,8 @@ public final class RtComposite {
         fgReset = true;
     }
 
-    private void recordFrame(RtContext ctx, RtPipeline active, GpuTexture nativeColor) {
+    private void recordFrame(RtContext ctx, RtPipeline active, GpuTexture nativeColor,
+                             RtSurfaceHistory.Frame surfaceHistoryFrame) {
         long dstImage = vkImage(nativeColor);
         var encoder = (VulkanCommandEncoder) ((CommandEncoderAccessor) RenderSystem.getDevice().createCommandEncoder()).caustica$getBackend();
         RtGpuExecutor gpuExecutor = ctx.gpuExecutor();
@@ -1018,6 +1031,12 @@ public final class RtComposite {
                 gpuFrameStats.markTraceIndirect(gpuStats, cmd);
             }
             VulkanCommandEncoder.memoryBarrier(cmd, stack); // RT writes visible to DLSS reads
+            try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd, "surface history capture");
+                 RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage("frame.historyCapture")) {
+                surfaceHistory.recordCapture(cmd, stack, gNormal, gDepth, surfaceHistoryFrame);
+            }
+            gpuFrameStats.markHistoryCapture(gpuStats, cmd);
+            VulkanCommandEncoder.memoryBarrier(cmd, stack); // history copies and guide reads visible
             // DLSS-RR denoise + upscale. The RT pass wrote noisy color (render res) + guides;
             // RR reads them and writes the display-res denoised result straight into rrOutput.
             if (rrPath && RtDlssRr.INSTANCE.ensureFeature(cmd.address(), renderW, renderH, displayW, displayH)) {
@@ -1315,6 +1334,7 @@ public final class RtComposite {
             continuationQueue = null;
         }
         destroyGuideImages();
+        surfaceHistory.destroy();
         exposure.destroy();
         if (displayPipeline != null) {
             displayPipeline.destroy();

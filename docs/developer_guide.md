@@ -69,6 +69,7 @@ Recorder profile from a second PowerShell window:
 CPU frame and stage timings are written to `run\rt-frame-stats\frame.csv`.
 Its `frame.traceMs` column remains the combined command-recording time, with
 `frame.tracePrimaryMs` and `frame.traceIndirectMs` providing the pass split.
+`frame.historyCaptureMs` measures the deterministic surface-history copy boundary.
 The same switch also writes non-blocking Vulkan timestamp results to
 `run\rt-frame-stats\gpu.csv`, split into entity BLAS, TLAS, primary trace,
 indirect trace, DLSS-RR/fallback upscale, exposure, display mapping, and

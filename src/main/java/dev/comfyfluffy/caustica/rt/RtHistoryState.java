@@ -58,9 +58,11 @@ final class RtHistoryState {
         return new Frame(generation, allowReuse, reasons);
     }
 
-    synchronized void markProduced(long producedGeneration) {
+    synchronized boolean markProduced(long producedGeneration) {
         if (producedGeneration == generation && pendingReasons.isEmpty()) {
             reusable = true;
+            return true;
         }
+        return false;
     }
 }

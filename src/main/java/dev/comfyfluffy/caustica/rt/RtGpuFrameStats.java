@@ -21,15 +21,16 @@ import org.lwjgl.vulkan.VkQueryPoolCreateInfo;
  */
 final class RtGpuFrameStats {
     private static final int SLOT_COUNT = 8;
-    private static final int QUERY_COUNT = 9;
+    private static final int QUERY_COUNT = 10;
     private static final int ENTITY_BLAS = 1;
     private static final int TLAS = 2;
     private static final int TRACE_PRIMARY = 3;
     private static final int TRACE_INDIRECT = 4;
-    private static final int UPSCALE = 5;
-    private static final int EXPOSURE = 6;
-    private static final int DISPLAY_MAP = 7;
-    private static final int COPY_OUTPUT = 8;
+    private static final int HISTORY_CAPTURE = 5;
+    private static final int UPSCALE = 6;
+    private static final int EXPOSURE = 7;
+    private static final int DISPLAY_MAP = 8;
+    private static final int COPY_OUTPUT = 9;
 
     private final Slot[] slots = new Slot[SLOT_COUNT];
     private long queryPool;
@@ -99,6 +100,10 @@ final class RtGpuFrameStats {
 
     void markTraceIndirect(Slot slot, VkCommandBuffer cmd) {
         mark(slot, cmd, TRACE_INDIRECT);
+    }
+
+    void markHistoryCapture(Slot slot, VkCommandBuffer cmd) {
+        mark(slot, cmd, HISTORY_CAPTURE);
     }
 
     void markUpscale(Slot slot, VkCommandBuffer cmd, boolean rrDone) {
@@ -211,15 +216,18 @@ final class RtGpuFrameStats {
         double traceIndirectMs = millis(
                 timestampDelta(timestamps.get(TRACE_PRIMARY), timestamps.get(TRACE_INDIRECT), bits), period);
         double traceMs = millis(timestampDelta(timestamps.get(TLAS), timestamps.get(TRACE_INDIRECT), bits), period);
-        double upscaleMs = millis(timestampDelta(timestamps.get(TRACE_INDIRECT), timestamps.get(UPSCALE), bits), period);
+        double historyCaptureMs = millis(
+                timestampDelta(timestamps.get(TRACE_INDIRECT), timestamps.get(HISTORY_CAPTURE), bits), period);
+        double upscaleMs = millis(timestampDelta(timestamps.get(HISTORY_CAPTURE), timestamps.get(UPSCALE), bits), period);
         double exposureMs = millis(timestampDelta(timestamps.get(UPSCALE), timestamps.get(EXPOSURE), bits), period);
         double displayMapMs = millis(timestampDelta(timestamps.get(EXPOSURE), timestamps.get(DISPLAY_MAP), bits), period);
         double copyOutputMs = millis(timestampDelta(timestamps.get(DISPLAY_MAP), timestamps.get(COPY_OUTPUT), bits), period);
         double totalMs = millis(timestampDelta(timestamps.get(0), timestamps.get(COPY_OUTPUT), bits), period);
         writer.printf(Locale.ROOT,
-                "%d,%d,%d,%d,%d,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f%n",
+                "%d,%d,%d,%d,%d,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f%n",
                 slot.frameIndex, slot.renderWidth, slot.renderHeight, slot.displayWidth, slot.displayHeight,
                 totalMs, entityBlasMs, tlasMs, traceMs, tracePrimaryMs, traceIndirectMs,
+                historyCaptureMs,
                 slot.rrDone ? upscaleMs : 0.0,
                 slot.rrDone ? 0.0 : upscaleMs, exposureMs, displayMapMs, copyOutputMs);
         writer.flush();
@@ -236,7 +244,7 @@ final class RtGpuFrameStats {
             Files.createDirectories(directory);
             csv = new PrintWriter(Files.newBufferedWriter(file, StandardCharsets.UTF_8));
             csv.println("frame,renderWidth,renderHeight,displayWidth,displayHeight,totalMs,entityBlasMs,"
-                    + "tlasMs,traceMs,tracePrimaryMs,traceIndirectMs,dlssRrMs,upscaleMs,exposureMs,"
+                    + "tlasMs,traceMs,tracePrimaryMs,traceIndirectMs,historyCaptureMs,dlssRrMs,upscaleMs,exposureMs,"
                     + "displayMapMs,copyOutputMs");
             csv.flush();
         } catch (IOException e) {
