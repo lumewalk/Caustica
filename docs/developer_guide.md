@@ -2,6 +2,21 @@
 
 ## Windows
 
+Before building, run the environment checker from PowerShell:
+
+```powershell
+.\checkEnvironment.ps1
+```
+
+It verifies the JDK, native compiler, Vulkan shader tools, DLSS SDK files,
+hardware information, and free disk space without changing the system. Add
+`-IncludeCacheSizes` to report the size of disposable Gradle, build, and
+Minecraft run data:
+
+```powershell
+.\checkEnvironment.ps1 -IncludeCacheSizes
+```
+
 1. Install the Vulkan SDK from <https://vulkan.lunarg.com/sdk/home>.
    The installer sets `VULKAN_SDK` automatically.
 2. Download the DLSS SDK from <https://github.com/NVIDIA/DLSS/releases>.
