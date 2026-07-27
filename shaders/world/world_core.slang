@@ -17,6 +17,11 @@ import world_common;
 [[vk::binding(6, 0)]] [format("rg16f")]   public RWTexture2D<float2> gMotion;     // screen-space motion (render px)
 [[vk::binding(7, 0)]] [format("rgba16f")] public RWTexture2D<float4> gSpecAlbedo; // exact-mirror reflected diffuse × reflectance; material reflectance otherwise
 [[vk::binding(8, 0)]] [format("rg16f")]   public RWTexture2D<float2> gSpecMotion; // reflection MVs for RR
+// ReSTIR owns a separate first-interface surface cache. DLSS guides may deliberately resolve through
+// transparent interfaces, which is useful for denoising but is not a valid receiver for DI reuse.
+[[vk::binding(9, 0)]]  [format("rgba32f")] public RWTexture2D<float4> gRestirPositionMaterial;
+[[vk::binding(10, 0)]] [format("rgba16f")] public RWTexture2D<float4> gRestirNormalRoughness;
+[[vk::binding(11, 0)]] [format("rgba16f")] public RWTexture2D<float4> gRestirAlbedoSss;
 
 // Per-frame push data loaded once from the BDA buffer at the top of main() (same pattern as the GLSL
 // `worldPush` global). Layout constants generated from this module's SPIR-V — see world_common.WorldPush.

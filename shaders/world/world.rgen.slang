@@ -21,6 +21,7 @@
 import world_common;
 import world_core;
 import math;
+import sampling_core;
 import medium;
 import segment;
 import water;

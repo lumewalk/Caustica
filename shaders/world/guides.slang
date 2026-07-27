@@ -20,6 +20,14 @@ public static bool gv_motionUseRefracted = false; // true when the MV tracks the
 // World-space displacement of the motion-guide surface since the previous frame (0 for static
 // terrain/sky, an entity's per-vertex/object motion for a dynamic hit).
 public static float3 gv_motionObjDisp = float3(0.0, 0.0, 0.0);
+// Persistent-lighting receiver captured at the first camera interface. Unlike gv_*, these values are
+// never replaced by the destination behind glass/water.
+public static float3 rv_position = float3(0.0, 0.0, 0.0);
+public static float3 rv_normal = float3(0.0, 0.0, 0.0);
+public static float3 rv_albedo = float3(0.0, 0.0, 0.0);
+public static float rv_roughness = 1.0;
+public static float rv_sss = 0.0;
+public static uint rv_material = 255u;
 // Transmission replaces the ordinary guide tuple with the visible destination, so RR's specular inputs
 // (specular albedo + reflection MV) need the foreground glass/water interface kept separately. This is
 // the surface the reflection physically lives on; for an opaque primary hit it is that hit itself.
@@ -149,6 +157,16 @@ public void setTransmissionGuide(float3 hitCamRel, float3 motionPrev, float3 nor
     gv_albedo = diffuseAlbedo;
 }
 
+public void setRestirReceiver(float3 position, float3 normal, float3 albedo,
+                       float roughness, float sss, uint material) {
+    rv_position = position;
+    rv_normal = normal;
+    rv_albedo = albedo;
+    rv_roughness = roughness;
+    rv_sss = sss;
+    rv_material = material;
+}
+
 // Deterministic ordinary guide behind the first transmitted interface. This is guide-only work:
 // radiance reflection/transmission continuations are queued at the first split and traced by Pass B.
 public void resolveTransmissionGuide(float3 surfacePos, float3 transmittedDir,
@@ -272,6 +290,9 @@ public void writeGuides(int2 pix, float3 primaryDir, float2 jndc, float2 size, f
     gMotion[pix] = motion;
     gSpecAlbedo[pix] = float4(specAlbedo, 1.0);
     gSpecMotion[pix] = specMotion;
+    gRestirPositionMaterial[pix] = float4(rv_position, float(rv_material));
+    gRestirNormalRoughness[pix] = float4(rv_normal, rv_roughness);
+    gRestirAlbedoSss[pix] = float4(rv_albedo, rv_sss);
 }
 
 // 48-byte queue record. float3 + uint intentionally share the first 16-byte lane; every remaining

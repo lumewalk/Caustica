@@ -9,6 +9,22 @@ import org.junit.jupiter.api.Test;
 
 final class RtReservoirReferenceTest {
     @Test
+    void proposalScheduleMatchesShaderStratification() {
+        assertEquals(2, RtReservoirReference.globalCandidateCount(8, true));
+        int local = 0;
+        for (int candidate = 0; candidate < 8; candidate++) {
+            if (RtReservoirReference.usesLocalCandidate(candidate, 8, true)) {
+                local++;
+            }
+        }
+        assertEquals(6, local);
+        assertFalse(RtReservoirReference.usesLocalCandidate(0, 1, true));
+        assertEquals(8, RtReservoirReference.globalCandidateCount(8, false));
+        assertThrows(IllegalArgumentException.class,
+                () -> RtReservoirReference.globalCandidateCount(0, true));
+    }
+
+    @Test
     void streamingUpdateUsesTargetOverProposalAndDeterministicSelection() {
         RtReservoirReference.Reservoir reservoir = new RtReservoirReference.Reservoir();
         reservoir.update(new RtReservoirReference.Candidate(10L, 2.0, 1.0), 0.5);

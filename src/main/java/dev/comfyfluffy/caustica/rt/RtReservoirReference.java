@@ -8,6 +8,23 @@ package dev.comfyfluffy.caustica.rt;
  * the effective count, and merging a source reservoir uses {@code pHatCurrent * WSource * MSource}.</p>
  */
 final class RtReservoirReference {
+    static int globalCandidateCount(int candidateCount, boolean hasGridCell) {
+        if (candidateCount <= 0) {
+            throw new IllegalArgumentException("candidate count must be positive");
+        }
+        return hasGridCell ? Math.max(1, (candidateCount + 2) / 4) : candidateCount;
+    }
+
+    static boolean usesLocalCandidate(int candidateIndex, int candidateCount, boolean hasGridCell) {
+        if (candidateIndex < 0 || candidateIndex >= candidateCount) {
+            throw new IllegalArgumentException("candidate index out of range");
+        }
+        int globals = globalCandidateCount(candidateCount, hasGridCell);
+        int globalsBefore = candidateIndex * globals / candidateCount;
+        int globalsAfter = (candidateIndex + 1) * globals / candidateCount;
+        return hasGridCell && globalsAfter == globalsBefore;
+    }
+
     record Candidate(long sampleId, double targetDensity, double proposalDensity) {
         Candidate {
             if (sampleId < 0L) {

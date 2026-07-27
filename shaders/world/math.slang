@@ -3,8 +3,7 @@
 
 import world_common;
 import world_core;
-
-public float luminance(float3 c) { return dot(c, float3(0.2126, 0.7152, 0.0722)); }
+import sampling_core;
 
 // GGX normal distribution.
 // NOTE: the 1e-7 denominator guard is not merely a divide-by-zero epsilon, and it is load-bearing. At
@@ -90,19 +89,6 @@ public float fresnelDielectric(float cosI, float etaI, float etaT) {
     float rs = (etaI * cosI - etaT * cosT) / (etaI * cosI + etaT * cosT);
     float rp = (etaI * cosT - etaT * cosI) / (etaI * cosT + etaT * cosI);
     return 0.5 * (rs * rs + rp * rp);
-}
-
-// PCG hash RNG.
-public uint pcg(inout uint s) {
-    s = s * 747796405u + 2891336453u;
-    uint w = ((s >> ((s >> 28u) + 4u)) ^ s) * 277803737u;
-    return (w >> 22u) ^ w;
-}
-public float rndf(inout uint s) {
-    // Convert the high 24 bits, which are exactly representable as float. Converting all 32 bits first
-    // lets the top 128 uint values round to 2^32, incorrectly returning 1.0 and breaking `< probability`
-    // tests (most seriously the F == 1 total-internal-reflection branch).
-    return float(pcg(s) >> 8u) * (1.0 / 16777216.0);
 }
 
 public float3 primaryRayDir(float2 ndc) {

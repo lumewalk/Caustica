@@ -16,6 +16,7 @@
 import world_common;
 import world_core;
 import math;
+import sampling_core;
 import medium;
 import segment;
 import water;
@@ -71,6 +72,8 @@ public PathSegment tracePrimary(PathSegment seg,
             float3 diffAlb = material == MATERIAL_PARTICLE
                     ? float3(payload.albedo) : float3(payload.albedo) * (1.0 - metal);
             if (bounce == 0) {
+                setRestirReceiver(hitPos, n, diffAlb, rough,
+                        material == MATERIAL_PARTICLE ? 0.0 : payloadSss(), material);
                 gv_normal = n;
                 gv_hitCamRel = hitPos - worldPush.camOffset;
                 gv_motionUseRefracted = false;
@@ -132,6 +135,9 @@ public PathSegment tracePrimary(PathSegment seg,
         float transmitBias = isWater ? SURF_BIAS : INSET_TRANSMIT_BIAS;
 
         if (bounce == 0) {
+            // Dielectric direct-light reuse will be added with a dedicated transmissive target.
+            // Preserve the first interface now, but leave its diffuse target at zero.
+            setRestirReceiver(hitPos, n, float3(0.0, 0.0, 0.0), 0.0, 0.0, material);
             gv_normal = n;
             gv_rough = 0.0;
             gv_albedo = float3(0.0, 0.0, 0.0);

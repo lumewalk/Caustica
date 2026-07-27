@@ -97,7 +97,7 @@ public final class RtComposite {
     // Real inline push constants (fast constant-bank reads), separate from the WorldPush BDA ring above.
     // Hot addresses/frameIndex and raygen's debugView avoid unnecessary global-memory dereferences;
     // WorldPushConstantsData is generated from the same Slang module and owns this second ABI as well.
-    private static final int GUIDE_COUNT = 6; // RR guide buffers bound at world-pipeline bindings 3..8
+    private static final int GUIDE_COUNT = 9; // six RR guides + three first-interface ReSTIR surface guides
     private static final long PATH_RECORD_BYTES = 48L;
     private static int debugView() {
         return CausticaConfig.Rt.Composite.DEBUG_VIEW.value();
@@ -246,6 +246,9 @@ public final class RtComposite {
     private RtImage gMotion;
     private RtImage gSpecAlbedo;
     private RtImage gSpecMotion;
+    private RtImage gRestirPositionMaterial;
+    private RtImage gRestirNormalRoughness;
+    private RtImage gRestirAlbedoSss;
     // Display-res RT image the display mapper reads: DLSS-RR writes it (render -> display denoise+upscale), or a
     // linear blit of `output` fills it when RR is off/unavailable (the no-RR reference / fallback).
     private RtImage rrOutput;
@@ -700,6 +703,9 @@ public final class RtComposite {
         worldPipeline.setExtraStorageImage(3, gMotion.view);
         worldPipeline.setExtraStorageImage(4, gSpecAlbedo.view);
         worldPipeline.setExtraStorageImage(5, gSpecMotion.view);
+        worldPipeline.setExtraStorageImage(6, gRestirPositionMaterial.view);
+        worldPipeline.setExtraStorageImage(7, gRestirNormalRoughness.view);
+        worldPipeline.setExtraStorageImage(8, gRestirAlbedoSss.view);
     }
 
     private void destroyGuideImages() {
@@ -727,6 +733,18 @@ public final class RtComposite {
             gSpecMotion.destroy();
             gSpecMotion = null;
         }
+        if (gRestirPositionMaterial != null) {
+            gRestirPositionMaterial.destroy();
+            gRestirPositionMaterial = null;
+        }
+        if (gRestirNormalRoughness != null) {
+            gRestirNormalRoughness.destroy();
+            gRestirNormalRoughness = null;
+        }
+        if (gRestirAlbedoSss != null) {
+            gRestirAlbedoSss.destroy();
+            gRestirAlbedoSss = null;
+        }
         if (rrOutput != null) {
             rrOutput.destroy();
             rrOutput = null;
@@ -749,6 +767,9 @@ public final class RtComposite {
         if (hdrDisplayImage != null) {
             hdrDisplayImage.destroy();
         }
+        // Destroy descriptor owners before any image/buffer their immutable sets reference.
+        temporalValidation.destroy();
+        directReservoirs.destroy();
         if (output != null) {
             output.destroy();
         }
@@ -756,10 +777,8 @@ public final class RtComposite {
             continuationQueue.destroy();
             continuationQueue = null;
         }
-        temporalValidation.destroy();
         destroyGuideImages();
         surfaceHistory.destroy();
-        directReservoirs.destroy();
 
         displayW = width;
         displayH = height;
@@ -798,6 +817,17 @@ public final class RtComposite {
         gMotion = ctx.createStorageImage(renderW, renderH, VK10.VK_FORMAT_R16G16_SFLOAT, "guide motion " + renderW + "x" + renderH);
         gSpecAlbedo = ctx.createStorageImage(renderW, renderH, VK10.VK_FORMAT_R16G16B16A16_SFLOAT, "guide specular albedo " + renderW + "x" + renderH);
         gSpecMotion = ctx.createStorageImage(renderW, renderH, VK10.VK_FORMAT_R16G16_SFLOAT, "guide specular motion " + renderW + "x" + renderH);
+        gRestirPositionMaterial = ctx.createStorageImage(renderW, renderH,
+                VK10.VK_FORMAT_R32G32B32A32_SFLOAT, "ReSTIR receiver position material " + renderW + "x" + renderH);
+        gRestirNormalRoughness = ctx.createStorageImage(renderW, renderH,
+                VK10.VK_FORMAT_R16G16B16A16_SFLOAT, "ReSTIR receiver normal roughness " + renderW + "x" + renderH);
+        gRestirAlbedoSss = ctx.createStorageImage(renderW, renderH,
+                VK10.VK_FORMAT_R16G16B16A16_SFLOAT, "ReSTIR receiver albedo SSS " + renderW + "x" + renderH);
+        long restirReceiverBytes = Math.multiplyExact(pixelRecords, 32L);
+        CausticaMod.LOGGER.info(
+                "RT ReSTIR receiver cache: render={}x{}, bytesPerPixel=32, bytes={}, gpuMiB={}",
+                renderW, renderH, restirReceiverBytes,
+                String.format(Locale.ROOT, "%.2f", restirReceiverBytes / (1024.0 * 1024.0)));
         surfaceHistory.ensure(ctx, renderW, renderH);
         long historyBytes = surfaceHistory.allocatedBytes();
         CausticaMod.LOGGER.info(
@@ -812,7 +842,8 @@ public final class RtComposite {
                 "RT temporal validation: render={}x{}, bytesPerPixel={}, bytes={}, gpuMiB={}",
                 renderW, renderH, RtTemporalValidation.BYTES_PER_PIXEL, validationBytes,
                 String.format(Locale.ROOT, "%.2f", validationBytes / (1024.0 * 1024.0)));
-        directReservoirs.ensure(ctx, renderW, renderH);
+        directReservoirs.ensure(ctx, renderW, renderH,
+                gRestirPositionMaterial, gRestirNormalRoughness, gRestirAlbedoSss, output);
         long reservoirBytes = directReservoirs.allocatedBytes();
         CausticaMod.LOGGER.info(
                 "RT direct reservoirs: render={}x{}, slots={}, stride={} B, bytes={}, gpuMiB={}",
@@ -1072,7 +1103,13 @@ public final class RtComposite {
                 directReservoirs.recordInitialize(cmd, reservoirFrame);
             }
             gpuFrameStats.markReservoirInit(gpuStats, cmd);
-            VulkanCommandEncoder.memoryBarrier(cmd, stack); // initialized reservoir storage visible to later passes
+            VulkanCommandEncoder.memoryBarrier(cmd, stack); // cleared reservoir storage visible to candidate writes
+            try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd, "direct reservoir candidates");
+                 RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage("frame.reservoirCandidates")) {
+                directReservoirs.recordCandidates(cmd, reservoirFrame, pushConstants);
+            }
+            gpuFrameStats.markReservoirCandidates(gpuStats, cmd);
+            VulkanCommandEncoder.memoryBarrier(cmd, stack); // candidate writes visible to later reuse passes
             try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd, "surface history capture");
                  RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage("frame.historyCapture")) {
                 surfaceHistory.recordCapture(cmd, stack, gNormal, gDepth, surfaceHistoryFrame);
@@ -1367,6 +1404,9 @@ public final class RtComposite {
             fgHdrHudlessImage = null;
         }
         RtWorldOverlay.INSTANCE.destroy(); // overlay features/pipelines/scratch live on the same device lifetime
+        // Destroy descriptor owners before any image/buffer their immutable sets reference.
+        temporalValidation.destroy();
+        directReservoirs.destroy();
         if (output != null) {
             output.destroy();
             output = null;
@@ -1375,10 +1415,8 @@ public final class RtComposite {
             continuationQueue.destroy();
             continuationQueue = null;
         }
-        temporalValidation.destroy();
         destroyGuideImages();
         surfaceHistory.destroy();
-        directReservoirs.destroy();
         exposure.destroy();
         if (displayPipeline != null) {
             displayPipeline.destroy();
