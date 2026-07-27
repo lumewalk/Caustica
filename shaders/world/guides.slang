@@ -16,7 +16,6 @@ public static float3 gv_normal = float3(0.0, 0.0, 0.0);
 public static float3 gv_albedo = float3(0.0, 0.0, 0.0);
 public static float gv_rough = 0.0;
 public static float3 gv_hitCamRel = float3(0.0, 0.0, 0.0);       // primary-surface hit position relative to the current camera
-public static float3 gv_motionHitCamRel = float3(0.0, 0.0, 0.0); // motion-guide hit position; water tracks the refracted hit instead
 public static bool gv_motionUseRefracted = false; // true when the MV tracks the refracted hit (its own reprojection delta)
 // World-space displacement of the motion-guide surface since the previous frame (0 for static
 // terrain/sky, an entity's per-vertex/object motion for a dynamic hit).
@@ -132,7 +131,6 @@ public float2 resolveSpecularGuides(SpecSurface surface, float3 primaryDir,
 public void setTransmissionGuide(float3 hitCamRel, float3 motionPrev, float3 normal,
                           float roughness, float3 diffuseAlbedo) {
     gv_hitCamRel = hitCamRel;
-    gv_motionHitCamRel = hitCamRel;
     gv_motionObjDisp = motionPrev;
     gv_motionUseRefracted = true;
     gv_normal = normal;
@@ -236,12 +234,12 @@ public void writeGuides(int2 pix, float3 primaryDir, float2 jndc, float2 size, f
     // For a dynamic surface, previous-frame position is the current point minus its world-space
     // displacement; subtracting gv_motionObjDisp de-cameras the MV.
     float4 prevClip = mul(worldPush.prevViewProj,
-            float4(gv_motionHitCamRel + worldPush.camDelta - gv_motionObjDisp, 1.0));
+            float4(gv_hitCamRel + worldPush.camDelta - gv_motionObjDisp, 1.0));
     float2 curNdc = jndc; // primary hit's current screen position is exactly the jittered ray ndc
     // Transmitted content is its own feature: compare its previous and current projections rather than
     // subtracting the primary interface's jittered NDC.
     float4 curClipMotion = gv_motionUseRefracted
-            ? mul(worldPush.curViewProj, float4(gv_motionHitCamRel, 1.0))
+            ? mul(worldPush.curViewProj, float4(gv_hitCamRel, 1.0))
             : float4(0.0, 0.0, 0.0, 1.0); // unused; keeps the guard below uniform
     // Guard both perspective divides the way the depth above does. A guide point can land behind either
     // camera — most easily a transmitted destination seen at a grazing angle, or one that leaves the

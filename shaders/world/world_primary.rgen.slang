@@ -25,7 +25,7 @@ import guides;
 public PathSegment tracePrimary(PathSegment seg,
                                 DevicePtr<PackedPathSegment> queue,
                                 uint splitRecord,
-                                out uint nextRecord, out bool alive) {
+                                out uint nextRecord) {
     float3 ro = seg.ro;
     float3 rd = seg.rd;
     float3 throughput = seg.throughput;
@@ -36,13 +36,12 @@ public PathSegment tracePrimary(PathSegment seg,
     bool showCelestial = seg.showCelestial;
     bool waterWaves = (worldPush.flags & 16u) != 0u;
     nextRecord = PATH_NO_NEXT;
-    alive = false;
 
     {
         int bounce = seg.bounce;
         PathSegment terminal = makePathSegment(ro, rd, throughput, medium,
                                                rayConeWidth, rayConeSpread, seed, bounce,
-                                               showCelestial, false, false);
+                                               showCelestial);
         traceRadiance(CULL_PRIMARY, ro, 0.0, rd, 10000.0,
                       showCelestial, rayConeWidth, rayConeSpread);
 
@@ -52,12 +51,10 @@ public PathSegment tracePrimary(PathSegment seg,
                 gv_albedo = SKY_DIFF_ALBEDO;
                 gv_rough = 1.0;
                 gv_hitCamRel = rd * 1.0e6;
-                gv_motionHitCamRel = gv_hitCamRel;
                 gv_motionUseRefracted = false;
                 gv_motionObjDisp = float3(0.0, 0.0, 0.0);
                 gv_spec = makeSpecSurface(gv_hitCamRel, gv_normal, 1.0, SKY_SPEC_ALBEDO);
             }
-            alive = true;
             return terminal;
         }
 
@@ -76,7 +73,6 @@ public PathSegment tracePrimary(PathSegment seg,
             if (bounce == 0) {
                 gv_normal = n;
                 gv_hitCamRel = hitPos - worldPush.camOffset;
-                gv_motionHitCamRel = gv_hitCamRel;
                 gv_motionUseRefracted = false;
                 gv_motionObjDisp = payload.motionPrev;
                 if (material == MATERIAL_PARTICLE) {
@@ -93,7 +89,6 @@ public PathSegment tracePrimary(PathSegment seg,
                 }
             }
 
-            alive = true;
             return terminal;
         }
 
@@ -141,7 +136,6 @@ public PathSegment tracePrimary(PathSegment seg,
             gv_rough = 0.0;
             gv_albedo = float3(0.0, 0.0, 0.0);
             gv_hitCamRel = hitPos - worldPush.camOffset;
-            gv_motionHitCamRel = gv_hitCamRel;
             gv_motionUseRefracted = false;
             gv_motionObjDisp = isWater ? float3(0.0, 0.0, 0.0) : payload.motionPrev;
             gv_spec = makeSpecSurface(gv_hitCamRel, n, previousNormal, geometricNormal,
@@ -176,16 +170,15 @@ public PathSegment tracePrimary(PathSegment seg,
                     offsetSurfaceOrigin(hitPos, geometricNormal, deferredDir, transmitBias),
                     deferredDir, throughput * (1.0 - F), transmittedMedium,
                     rayConeWidth, rayConeSpread, seed, bounce + 1,
-                    true, false, false);
-            queue[splitRecord] = packPathSegment(deferred, true, PATH_NO_NEXT);
+                    true);
+            queue[splitRecord] = packPathSegment(deferred, PATH_NO_NEXT);
             nextRecord = splitRecord;
             float3 reflectedDir = reflect(rd, n);
             PathSegment reflected = makePathSegment(
                     offsetSurfaceOrigin(hitPos, geometricNormal, reflectedDir, SURF_BIAS),
                     reflectedDir, throughput * F, medium,
                     rayConeWidth, rayConeSpread, seed ^ 0xa511e9b3u, bounce + 1,
-                    true, false, false);
-            alive = true;
+                    true);
             return reflected;
         }
 
@@ -197,7 +190,7 @@ public PathSegment tracePrimary(PathSegment seg,
                     offsetSurfaceOrigin(hitPos, geometricNormal, reflectedDir, SURF_BIAS),
                     reflectedDir, throughput * F, medium,
                     rayConeWidth, rayConeSpread, seed, bounce + 1,
-                    true, false, false);
+                    true);
         } else {
             float3 deferredDir = normalize(transmittedDir);
             if (entering) {
@@ -209,9 +202,8 @@ public PathSegment tracePrimary(PathSegment seg,
                     offsetSurfaceOrigin(hitPos, geometricNormal, deferredDir, transmitBias),
                     deferredDir, throughput * (1.0 - F), medium,
                     rayConeWidth, rayConeSpread, seed, bounce + 1,
-                    true, false, false);
+                    true);
         }
-        alive = true;
         return continuation;
     }
 }
@@ -244,12 +236,11 @@ void main() {
 
     seed = pcg(seed);
     PathSegment current = makePathSegment(origin, dir, float3(1.0, 1.0, 1.0),
-            cameraMedium, 0.0, rayConeSpread, seed, 0, true, false, false);
+            cameraMedium, 0.0, rayConeSpread, seed, 0, true);
     uint nextRecord;
-    bool alive;
     PathSegment terminal = tracePrimary(
-            current, queue, splitRecord, nextRecord, alive);
-    queue[pixelIndex] = packPathSegment(terminal, alive, nextRecord);
+            current, queue, splitRecord, nextRecord);
+    queue[pixelIndex] = packPathSegment(terminal, nextRecord);
 
     writeGuides(pix, dir, jndc, size, rayConeSpread);
     if (pc.debugView != 0u) {

@@ -25,14 +25,11 @@ public struct PathSegment {
     public uint seed;
     public int bounce;          // interfaces already consumed, so RR start and the bounce cap stay global
     public bool showCelestial;
-    public bool captureGuides;
-    public bool maySplit;       // may still spawn a deterministic Fresnel branch
 };
 
 public PathSegment makePathSegment(float3 ro, float3 rd, float3 throughput, MediumStack medium,
                             float rayConeWidth, float rayConeSpread, uint seed,
-                            int bounce, bool showCelestial,
-                            bool captureGuides, bool maySplit) {
+                            int bounce, bool showCelestial) {
     PathSegment s;
     s.ro = ro;
     s.rd = rd;
@@ -43,8 +40,6 @@ public PathSegment makePathSegment(float3 ro, float3 rd, float3 throughput, Medi
     s.seed = seed;
     s.bounce = bounce;
     s.showCelestial = showCelestial;
-    s.captureGuides = captureGuides;
-    s.maySplit = maySplit;
     return s;
 }
 // field is a uint, so Std430DataLayout gives this an exact 48-byte stride.
@@ -61,7 +56,6 @@ public struct PackedPathSegment {
     public uint nextRecord;
 };
 
-public static const uint PATH_VALID = 1u << 11u;
 public static const uint PATH_NO_NEXT = 0xffffffffu;
 
 public float2 octEncode(float3 direction) {
@@ -112,7 +106,7 @@ public float3 unpackRgb9e5(uint p) {
     return float3(p & 0x1ffu, (p >> 9u) & 0x1ffu, (p >> 18u) & 0x1ffu) * scale;
 }
 
-public PackedPathSegment packPathSegment(PathSegment seg, bool valid, uint nextRecord) {
+public PackedPathSegment packPathSegment(PathSegment seg, uint nextRecord) {
     PackedPathSegment p;
     p.ro = seg.ro;
     p.rd = packUnorm16x2(octEncode(seg.rd));
@@ -125,13 +119,12 @@ public PackedPathSegment packPathSegment(PathSegment seg, bool valid, uint nextR
     p.pathFlags = (uint(seg.bounce) & 15u)
             | (seg.showCelestial ? 1u << 8u : 0u)
             | (seg.medium.current.water ? 1u << 9u : 0u)
-            | (seg.medium.outer.water ? 1u << 10u : 0u)
-            | (valid ? PATH_VALID : 0u);
+            | (seg.medium.outer.water ? 1u << 10u : 0u);
     p.nextRecord = nextRecord;
     return p;
 }
 
-public PathSegment unpackPathSegment(PackedPathSegment p, out bool valid) {
+public PathSegment unpackPathSegment(PackedPathSegment p) {
     float2 iors = unpackHalf2(p.mediumIors);
     Medium current;
     current.ior = iors.x;
@@ -145,10 +138,9 @@ public PathSegment unpackPathSegment(PackedPathSegment p, out bool valid) {
     medium.current = current;
     medium.outer = outer;
     float2 cone = unpackHalf2(p.rayCone);
-    valid = (p.pathFlags & PATH_VALID) != 0u;
     return makePathSegment(p.ro, octDecode(unpackUnorm16x2(p.rd)),
             unpackRgb9e5(p.throughput), medium, cone.x, cone.y, p.seed,
-            int(p.pathFlags & 15u), (p.pathFlags & (1u << 8u)) != 0u, false, false);
+            int(p.pathFlags & 15u), (p.pathFlags & (1u << 8u)) != 0u);
 }
 
 // Walk only the visually-primary dielectric chain. The terminal non-dielectric/miss trace is repeated

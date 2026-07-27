@@ -220,13 +220,13 @@ public void selectLightGridLight(LightGridCell cell, bool useLocal, inout uint p
     }
 }
 
-// ---- RIS cost budget. Both constants below come from a set of temporary probes that pinned the
-// candidate walk out of the shader to bound what memory-side RIS work could ever be worth. Against an
+// ---- RIS cost profile. Temporary probes pinned the candidate walk out of the shader to bound what
+// memory-side RIS work could ever be worth. Against an
 // 18.0ms frame at M=8, removing every dependent load (span -> alias -> record) and all lane divergence
 // saved 5.9ms — a third of the frame. Split by vertex that was ~4.3ms at secondary vertices against
 // ~1.1ms at the primary hit, and forcing coherent selection recovered at most 1.3ms of it. So the cost
-// was chasing DEPTH, not divergence, and it lived at secondary vertices. The two knobs below spend that
-// finding; a presampled candidate pool would attack the same 5.9ms structurally, but see the note on
+// was chasing depth, not divergence, and it lived at secondary vertices. A presampled candidate pool
+// would attack the same 5.9ms structurally, but see the note on
 // proposalSeed in tracePath for why it should share the pool rather than the seed.
 
 // Initial RIS over M power-weighted candidates -> one resampled sample, no shadow ray yet. The chosen
@@ -245,6 +245,7 @@ public Reservoir risInitial(float3 hitPos, float3 n, float3 v, float3 rd, float3
     }
     bool hasGridCell = findLightGridCell(gridLookup, gridCell, gridCellCoord);
     uint candidateCount = worldPush.risCandidates;
+    r.M = float(candidateCount);
     // Deterministically stratify the proposal mixture. At the default M=8 this schedules exactly six
     // local and two global candidates, with every lane taking the same branch for a given candidate.
     // Counts that are not divisible by four use the nearest practical split with at least one global
@@ -254,7 +255,6 @@ public Reservoir risInitial(float3 hitPos, float3 n, float3 v, float3 rd, float3
     uint localCandidateCount = candidateCount - globalCandidateCount;
     float localProbability = float(localCandidateCount) / float(candidateCount);
     for (uint c = 0u; c < candidateCount; c++) {
-        r.M += 1.0;
         uint li;
         uint globalsBefore = (c * globalCandidateCount) / candidateCount;
         uint globalsAfter = ((c + 1u) * globalCandidateCount) / candidateCount;
@@ -295,8 +295,7 @@ public Reservoir risInitial(float3 hitPos, float3 n, float3 v, float3 rd, float3
 // the survivor (front BRDF, twoSided billboard, or SSS backscatter) — the origin is biased toward the
 // sample's side of the surface.
 public float3 shadeReservoir(Reservoir s, float3 hitPos, float3 n, float3 v, float3 rd, float3 diffAlb,
-                      float3 F0, float rough, bool twoSided, float sss, out float3 vis) {
-    vis = float3(0.0, 0.0, 0.0);
+                      float3 F0, float rough, bool twoSided, float sss) {
     if (s.W <= 0.0 || s.phat <= 0.0) {
         return float3(0.0, 0.0, 0.0);
     }
@@ -316,7 +315,7 @@ public float3 shadeReservoir(Reservoir s, float3 hitPos, float3 n, float3 v, flo
     float dist = length(toL);
     // Stop just short of the sample point so the ray doesn't self-occlude on the emitter's own face.
     VisibilityResult shadow = visibility(origin, toL / dist, dist * 0.999);
-    vis = shadow.transmittance;
+    float3 vis = shadow.transmittance;
     return contrib * vis * s.W;
 }
 

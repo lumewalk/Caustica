@@ -107,6 +107,11 @@ public float3 tracePath(PathSegment seg, uint2 pix, uint sampleIndex) {
         // (payloadDielectricEntering), so a stray or missing face cannot desync the medium for the rest
         // of the path.
         if (material == MATERIAL_WATER || material == MATERIAL_DIELECTRIC) {
+            // A dielectric has no local shading term. At the path cap its continuation cannot be traced,
+            // so avoid computing an unused Fresnel choice, medium update, and roulette step.
+            if (bounce >= maxBounces) {
+                break;
+            }
             bool isWater = material == MATERIAL_WATER;
             bool entering = payloadDielectricEntering();
             float3 tint = payload.albedo;
@@ -196,9 +201,8 @@ public float3 tracePath(PathSegment seg, uint2 pix, uint sampleIndex) {
                 float3 v = -rd;
                 Reservoir r = risInitial(hitPos, n, v, rd, albedo, float3(0.0, 0.0, 0.0), 1.0,
                                          true, 0.0, seed, proposalSeed);
-                float3 risVis;
                 L += throughput * shadeReservoir(r, hitPos, n, v, rd, albedo, float3(0.0, 0.0, 0.0), 1.0,
-                                                 true, 0.0, risVis);
+                                                 true, 0.0);
             }
 
             if (bounce >= maxBounces) {
@@ -242,8 +246,7 @@ public float3 tracePath(PathSegment seg, uint2 pix, uint sampleIndex) {
         // One gate drives both the RIS call below and the direct-hit emission suppression here. They must
         // agree: gateEmitter exists only because RIS already accounted for this emitter, so a bounce where
         // RIS is skipped must also gather emission directly or that light is lost outright.
-        bool risActive = risOn;
-        bool gateEmitter = risActive && payloadEmitterInList();
+        bool gateEmitter = risOn && payloadEmitterInList();
         if (emission > 0.0 && (!gateEmitter || showCelestial)) {
             L += throughput * albedo * emission;
         }
@@ -287,13 +290,12 @@ public float3 tracePath(PathSegment seg, uint2 pix, uint sampleIndex) {
         // only be in front of n or behind it, never both, so combining them into one target function is
         // exact, not an approximation. The SSS term is gated off past MAX_SSS_INDIRECT_DEPTH by passing
         // sss=0 there (falls back to plain front-only RIS).
-        if (risActive) {
+        if (risOn) {
             float activeSss = hitDepth <= MAX_SSS_INDIRECT_DEPTH ? sss : 0.0;
             Reservoir r = risInitial(hitPos, n, v, rd, diffAlb, F0, rough, false, activeSss,
                                      seed, proposalSeed);
-            float3 risVis;
             L += throughput * shadeReservoir(r, hitPos, n, v, rd, diffAlb, F0, rough, false,
-                                             activeSss, risVis);
+                                             activeSss);
         }
 
         // Thin-surface SSS transmission. Light entering from the back face scatters through toward the
@@ -317,6 +319,12 @@ public float3 tracePath(PathSegment seg, uint2 pix, uint sampleIndex) {
                     L += throughput * diffAlb * sss * SSS_STRENGTH * hg(cosT, SSS_G) * backNdl * worldPush.lightRadiance.xyz * visB;
                 }
             }
+        }
+
+        // Preserve all local lighting at the terminal hit, but do not sample a continuation that the
+        // bounce loop cannot trace.
+        if (bounce >= maxBounces) {
+            break;
         }
 
         // Indirect continuation: importance-sample the diffuse OR the GGX specular lobe, chosen by their
@@ -380,14 +388,11 @@ void main() {
     ConstPtr<PackedPathSegment> queue = ConstPtr<PackedPathSegment>(pc.pathQueueAddr);
     float3 frameRadiance = float3(0.0, 0.0, 0.0);
     uint recordIndex = pixelIndex;
-    for (uint leaf = 0u; leaf < 2u; ++leaf) {
+    for (uint leaf = 0u; leaf < MAX_PATH_SEGMENTS; ++leaf) {
         PackedPathSegment packed = queue[recordIndex];
-        bool valid;
-        PathSegment segment = unpackPathSegment(packed, valid);
-        if (valid) {
-            for (uint s = 0u; s < spp; ++s) {
-                frameRadiance += tracePath(segment, uint2(pix), s + leaf * spp);
-            }
+        PathSegment segment = unpackPathSegment(packed);
+        for (uint s = 0u; s < spp; ++s) {
+            frameRadiance += tracePath(segment, uint2(pix), s + leaf * spp);
         }
         if (packed.nextRecord == PATH_NO_NEXT) {
             break;
