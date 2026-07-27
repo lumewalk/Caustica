@@ -14,6 +14,8 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import net.fabricmc.loader.api.FabricLoader;
 
 /**
@@ -38,6 +40,7 @@ public final class RtFrameStats {
                     "terrain.drainCompletion",
                     "terrain.snapshotDispatch",
                     "terrain.publish",
+                    "terrain.lightGridPublish",
                     "entity.capture",
                     "entity.capture.extract",
                     "entity.capture.submit",
@@ -131,6 +134,7 @@ public final class RtFrameStats {
         private final String[] counterNames;
         private final Map<String, Integer> stageIndices;
         private final Map<String, Integer> counterIndices;
+        private final Set<String> reportedUnknownNames = ConcurrentHashMap.newKeySet();
         private final boolean trackGc;
         private final long[] stageNanos;
         private final long[] counters;
@@ -188,7 +192,10 @@ public final class RtFrameStats {
             if (!enabled() || !active) {
                 return Scope.NOOP;
             }
-            int idx = indexOf(stageIndices, stageName);
+            Integer idx = findIndex(stageIndices, "stage", stageName);
+            if (idx == null) {
+                return Scope.NOOP;
+            }
             long start = System.nanoTime();
             return () -> stageNanos[idx] += System.nanoTime() - start;
         }
@@ -206,7 +213,10 @@ public final class RtFrameStats {
             if (startNanos == 0L) {
                 return;
             }
-            stageNanos[indexOf(stageIndices, stageName)] += System.nanoTime() - startNanos;
+            Integer idx = findIndex(stageIndices, "stage", stageName);
+            if (idx != null) {
+                stageNanos[idx] += System.nanoTime() - startNanos;
+            }
         }
 
         /** Add to a named counter for the current frame. */
@@ -214,7 +224,10 @@ public final class RtFrameStats {
             if (!enabled() || !active || delta == 0) {
                 return;
             }
-            counters[indexOf(counterIndices, counterName)] += delta;
+            Integer idx = findIndex(counterIndices, "counter", counterName);
+            if (idx != null) {
+                counters[idx] += delta;
+            }
         }
 
         /** Finish the current frame: record it into the rolling median and log a hitch line if it's slow. */
@@ -338,12 +351,13 @@ public final class RtFrameStats {
             return result;
         }
 
-        private static int indexOf(Map<String, Integer> indices, String name) {
-            Integer index = indices.get(name);
-            if (index == null) {
-                throw new IllegalArgumentException("Unknown RtFrameStats name: " + name);
+        private Integer findIndex(Map<String, Integer> indices, String kind, String metricName) {
+            Integer index = indices.get(metricName);
+            if (index == null && reportedUnknownNames.add(kind + ":" + metricName)) {
+                CausticaMod.LOGGER.warn("RtFrameStats profile {} ignored unknown {} name: {}", name, kind, metricName);
             }
             return index;
         }
+
     }
 }
