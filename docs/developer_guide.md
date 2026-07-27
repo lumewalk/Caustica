@@ -53,6 +53,23 @@ Minecraft run data:
 .\runClient.ps1
 ```
 
+For repeatable performance measurements, enable Caustica's frame-stage CSV:
+
+```powershell
+.\runClient.ps1 -FrameStats
+```
+
+After loading a representative world, record a 45-second Java Flight
+Recorder profile from a second PowerShell window:
+
+```powershell
+.\profileMinecraft.ps1 -DurationSeconds 45
+```
+
+The CSV is written to `run\rt-frame-stats\frame.csv`, and JFR recordings are
+written to `run\jfr`. Without `-DurationSeconds`, the profiler records until
+Enter is pressed.
+
 ## Linux
 
 Set `DLSS_SDK` and `VULKAN_SDK` before configuring CMake:

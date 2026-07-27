@@ -1,24 +1,62 @@
 param(
 	[int]$TargetPid = 0,
 	[string]$RecordingName = "mc",
-	[string]$Settings = "profile"
+	[string]$Settings = "profile",
+	[ValidateRange(0, 3600)]
+	[int]$DurationSeconds = 0
 )
 
 $ErrorActionPreference = "Stop"
 
-$jcmdCommand = Get-Command jcmd -ErrorAction SilentlyContinue
-if ($null -eq $jcmdCommand -and $env:JAVA_HOME) {
-	$javaHomeJcmd = Join-Path $env:JAVA_HOME "bin\jcmd.exe"
-	if (Test-Path -LiteralPath $javaHomeJcmd) {
-		$jcmdCommand = Get-Command $javaHomeJcmd
+function Find-JdkTool {
+	param(
+		[Parameter(Mandatory = $true)]
+		[string]$ToolName
+	)
+
+	$command = Get-Command $ToolName -ErrorAction SilentlyContinue
+	if ($null -ne $command) {
+		return $command.Source
 	}
+
+	$candidates = @()
+	if ($env:JAVA_HOME) {
+		$candidates += Join-Path $env:JAVA_HOME "bin\$ToolName.exe"
+	}
+
+	$javaCommand = Get-Command java -ErrorAction SilentlyContinue
+	if ($null -ne $javaCommand) {
+		$candidates += Join-Path (Split-Path -Parent $javaCommand.Source) "$ToolName.exe"
+	}
+
+	$jdkRoots = @(
+		(Join-Path $env:ProgramFiles "Java"),
+		(Join-Path $env:ProgramFiles "Eclipse Adoptium")
+	)
+
+	foreach ($jdkRoot in $jdkRoots) {
+		if (-not (Test-Path -LiteralPath $jdkRoot)) {
+			continue
+		}
+
+		$candidates += Get-ChildItem -LiteralPath $jdkRoot -Directory -ErrorAction SilentlyContinue |
+			Sort-Object LastWriteTime -Descending |
+			ForEach-Object { Join-Path $_.FullName "bin\$ToolName.exe" }
+	}
+
+	foreach ($candidate in $candidates) {
+		if ($candidate -and (Test-Path -LiteralPath $candidate)) {
+			return (Resolve-Path -LiteralPath $candidate).Path
+		}
+	}
+
+	return $null
 }
 
-if ($null -eq $jcmdCommand) {
-	throw "Could not find jcmd. Put a JDK bin directory on PATH or set JAVA_HOME."
+$jcmdPath = Find-JdkTool "jcmd"
+if ($null -eq $jcmdPath) {
+	throw "Could not find jcmd. Install a full JDK, put its bin directory on PATH, or set JAVA_HOME."
 }
-
-$jcmdPath = $jcmdCommand.Source
 
 function Invoke-Jcmd {
 	param(
@@ -107,7 +145,12 @@ try {
 	Invoke-Jcmd $targetPidText "JFR.start" "name=$RecordingName" "settings=$Settings" "filename=$jfrPath"
 	$started = $true
 	Write-Host ""
-	Read-Host "Profiling started. Press Enter to stop"
+	if ($DurationSeconds -gt 0) {
+		Write-Host "Profiling for $DurationSeconds seconds..."
+		Start-Sleep -Seconds $DurationSeconds
+	} else {
+		Read-Host "Profiling started. Press Enter to stop"
+	}
 } finally {
 	if ($started) {
 		Write-Host "Stopping JFR recording..."
