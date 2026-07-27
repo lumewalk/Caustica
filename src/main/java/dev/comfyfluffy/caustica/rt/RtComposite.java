@@ -966,6 +966,10 @@ public final class RtComposite {
             if (waterWaves()) {
                 flags |= 0b10000; // W1: animated water wave normals
             }
+            boolean restirDirect = CausticaConfig.Rt.Composite.RESTIR_DIRECT.value();
+            if (restirDirect) {
+                flags |= 0b10; // replace only the valid first-interface emitter NEE with the reservoir resolve
+            }
 
             // W1/W2 water parameters: camera-biome tint plus wrapped animation time. Per-water-body tint
             // comes from the primitive; this is the fallback for a camera already inside the medium.
@@ -1081,7 +1085,7 @@ public final class RtComposite {
                     terrain.lightGridSpanBufferAddress(), continuationQueue.deviceAddress,
                     directReservoirs.finalBuffer(reservoirFrame).deviceAddress,
                     (int) frameCounter, debugView,
-                    reservoirFrame.previousAvailable() ? 1 : 0).write(pushConstants);
+                    (reservoirFrame.previousAvailable() ? 1 : 0) | (restirDirect ? 2 : 0)).write(pushConstants);
             try (RtFrameStats.Scope ignoredTrace = RtFrameStats.FRAME.stage("frame.trace")) {
                 try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd, "world primary trace");
                      RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage("frame.tracePrimary")) {
@@ -1127,7 +1131,7 @@ public final class RtComposite {
             }
             gpuFrameStats.markReservoirSpatial(gpuStats, cmd);
             VulkanCommandEncoder.memoryBarrier(cmd, stack); // finalized reservoir visible to resolve
-            if (debugView == 12) {
+            if (debugView == 12 || (debugView == 0 && restirDirect)) {
                 try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd, "direct reservoir resolve");
                      RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage("frame.reservoirResolve")) {
                     active.trace(cmd, renderW, renderH, pushConstants, 2);

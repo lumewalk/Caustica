@@ -44,6 +44,7 @@ public final class RtVideoOptions {
             hdrEnabled(),
             hdrPaperWhite(),
             hdrPeak(),
+            restirDirect(),
             debugView(),
         };
     }
@@ -181,6 +182,10 @@ public final class RtVideoOptions {
             new OptionInstance.Enum<>(List.of(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12), Codec.INT),
             Math.clamp(setting.value(), 0, 12),
             setting::set);
+    }
+
+    private static OptionInstance<Boolean> restirDirect() {
+        return bool("caustica.options.rt.restirDirect", CausticaConfig.Rt.Composite.RESTIR_DIRECT);
     }
 
     private static OptionInstance<Boolean> bool(String captionKey, BooleanSetting setting) {

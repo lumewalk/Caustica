@@ -30,6 +30,7 @@ import trace;
 import trace_ser;
 #endif
 import lighting;
+import direct_reservoir_common;
 
 public float3 tracePath(PathSegment seg, uint2 pix, uint sampleIndex) {
     float3 L = float3(0.0, 0.0, 0.0);
@@ -107,6 +108,19 @@ public float3 tracePath(PathSegment seg, uint2 pix, uint sampleIndex) {
         rayConeWidth = max(rayConeWidth + rayConeSpread * max(payload.hitT, 0.0), RAY_CONE_MIN_WIDTH);
         uint material = payloadMaterial();
         int hitDepth = indirectDepth++;
+        bool restirAtFirstInterface = (worldPush.flags & 2u) != 0u && hitDepth == 0
+                && pc.directReservoirAddr != 0;
+        if (restirAtFirstInterface) {
+            uint2 restirDimensions = DispatchRaysDimensions().xy;
+            uint restirIndex = pix.y * restirDimensions.x + pix.x;
+            DirectReservoir restirReservoir = ConstPtr<DirectReservoir>(pc.directReservoirAddr)[restirIndex];
+            uint restirFlags = reservoirFlags(restirReservoir);
+            restirAtFirstInterface = (restirFlags & RESERVOIR_FLAG_VALID) != 0u
+                    && restirReservoir.metadata.y == worldPush.lightEpoch
+                    && restirReservoir.weights.y > 0.0
+                    && restirReservoir.weights.z > 0.0;
+        }
+        bool risAtVertex = risOn && !restirAtFirstInterface;
 
         // ---- Dielectric interface: water, stained glass, ice. ONE handler and one behaviour — every
         // dielectric is a volume. Fresnel from the relative index across the face, then reflect or
@@ -209,7 +223,7 @@ public float3 tracePath(PathSegment seg, uint2 pix, uint sampleIndex) {
             // RIS direct lighting from block emitters (lava, glowstone, torches, ...) — same reservoir
             // sampler as terrain/entities, but two-sided: a billboard has no back face, so light
             // striking either side of the quad should still land (matches the sun/moon NEE above).
-            if (risOn) {
+            if (risAtVertex) {
                 float3 v = -rd;
                 Reservoir r = risInitial(hitPos, n, v, rd, albedo, float3(0.0, 0.0, 0.0), 1.0,
                                          true, 0.0, seed, proposalSeed);
@@ -258,7 +272,7 @@ public float3 tracePath(PathSegment seg, uint2 pix, uint sampleIndex) {
         // One gate drives both the RIS call below and the direct-hit emission suppression here. They must
         // agree: gateEmitter exists only because RIS already accounted for this emitter, so a bounce where
         // RIS is skipped must also gather emission directly or that light is lost outright.
-        bool gateEmitter = risOn && payloadEmitterInList();
+        bool gateEmitter = risAtVertex && payloadEmitterInList();
         if (emission > 0.0 && (!gateEmitter || showCelestial)) {
             L += throughput * albedo * emission;
         }
@@ -302,7 +316,7 @@ public float3 tracePath(PathSegment seg, uint2 pix, uint sampleIndex) {
         // only be in front of n or behind it, never both, so combining them into one target function is
         // exact, not an approximation. The SSS term is gated off past MAX_SSS_INDIRECT_DEPTH by passing
         // sss=0 there (falls back to plain front-only RIS).
-        if (risOn) {
+        if (risAtVertex) {
             float activeSss = hitDepth <= MAX_SSS_INDIRECT_DEPTH ? sss : 0.0;
             Reservoir r = risInitial(hitPos, n, v, rd, diffAlb, F0, rough, false, activeSss,
                                      seed, proposalSeed);

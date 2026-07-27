@@ -9,13 +9,16 @@ import direct_reservoir_common;
 
 [shader("raygeneration")]
 void main() {
-    if (pc.debugView != 12u) return;
+    bool debugOnly = pc.debugView == 12u;
+    bool blendEnabled = (pc.historyFlags & 2u) != 0u;
+    if (!debugOnly && !blendEnabled) return;
 
     worldPush = ConstPtr<WorldPush>(pc.worldPushAddr)[0];
     uint2 pixel = DispatchRaysIndex().xy;
     uint2 dimensions = DispatchRaysDimensions().xy;
     uint pixelIndex = pixel.y * dimensions.x + pixel.x;
     int2 texel = int2(pixel);
+    float3 baseRadiance = outImage[texel].xyz;
 
     float4 positionMaterial = gRestirPositionMaterial[texel];
     float4 normalRoughness = gRestirNormalRoughness[texel];
@@ -33,7 +36,7 @@ void main() {
             && reservoir.weights.y > 0.0
             && reservoir.weights.z > 0.0;
     if (!receiverPresent || !reservoirValid) {
-        outImage[texel] = float4(0.0, 0.0, 0.0, 1.0);
+        if (debugOnly) outImage[texel] = float4(0.0, 0.0, 0.0, 1.0);
         return;
     }
 
@@ -56,7 +59,7 @@ void main() {
             reservoir.samplePositionArea.w,
             hitPosition, normal, rayDirection, albedoSss.xyz, twoSided, sss);
     if (max(contribution.x, max(contribution.y, contribution.z)) <= 0.0) {
-        outImage[texel] = float4(0.0, 0.0, 0.0, 1.0);
+        if (debugOnly) outImage[texel] = float4(0.0, 0.0, 0.0, 1.0);
         return;
     }
 
@@ -67,5 +70,5 @@ void main() {
     VisibilityResult shadow = visibility(shadowOrigin, toLight / distanceToLight,
             distanceToLight * 0.999);
     float3 resolved = contribution * shadow.transmittance * reservoir.weights.z;
-    outImage[texel] = float4(resolved, 1.0);
+    outImage[texel] = float4(debugOnly ? resolved : baseRadiance + resolved, 1.0);
 }
