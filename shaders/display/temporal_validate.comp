@@ -1,0 +1,141 @@
+#version 460
+
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+layout(binding = 0, set = 0, rgba16f) uniform readonly image2D currentNormalRoughness;
+layout(binding = 1, set = 0, r32f) uniform readonly image2D currentDepth;
+layout(binding = 2, set = 0, rg16f) uniform readonly image2D currentMotion;
+layout(binding = 3, set = 0, rgba16f) uniform readonly image2D previousNormalRoughness;
+layout(binding = 4, set = 0, r32f) uniform readonly image2D previousDepth;
+layout(binding = 5, set = 0, r32ui) uniform writeonly uimage2D validationMetadata;
+layout(binding = 6, set = 0, rgba16f) uniform writeonly image2D debugColor;
+
+// Bit 7 is the future temporal-reuse contract. Lower bits preserve rejection evidence for diagnostics.
+const uint HISTORY_AVAILABLE = 1u << 0;
+const uint REPROJECTED_IN_BOUNDS = 1u << 1;
+const uint SURFACE_PRESENT = 1u << 2;
+const uint NORMAL_COMPATIBLE = 1u << 3;
+const uint ROUGHNESS_COMPATIBLE = 1u << 4;
+const uint DEPTH_COMPATIBLE = 1u << 5;
+const uint VALID = 1u << 7;
+
+layout(push_constant) uniform Push {
+    // currentClip = currentFromPreviousClip * previousClip. This includes camera rotation and
+    // translation, so static surfaces are compared in one common camera space.
+    mat4 currentFromPreviousClip;
+    uint previousAvailable;
+    uint debugView;
+    float normalCosMin;
+    float roughnessTolerance;
+    float depthBaseTolerance;
+    float depthRelativeTolerance;
+    float depthMaxTolerance;
+    // Current projection coefficients used to turn reversed-Z NDC depth into camera-space distance.
+    float projectionM22;
+    float projectionM23;
+    float projectionM32;
+    float projectionM33;
+} pc;
+
+float viewDistance(float depth) {
+    float denominator = depth * pc.projectionM23 - pc.projectionM22;
+    if (abs(denominator) < 1.0e-8) {
+        return 1.0e20;
+    }
+    float viewZ = (pc.projectionM32 - depth * pc.projectionM33) / denominator;
+    return abs(viewZ);
+}
+
+vec3 debugValidation(uint flags) {
+    if ((flags & VALID) != 0u) {
+        return vec3(0.08, 0.90, 0.18); // accepted
+    }
+    if ((flags & HISTORY_AVAILABLE) == 0u) {
+        return vec3(0.0); // reset / first frame
+    }
+    if ((flags & REPROJECTED_IN_BOUNDS) == 0u) {
+        return vec3(0.08, 0.20, 0.95); // left the previous frame
+    }
+    if ((flags & SURFACE_PRESENT) == 0u) {
+        return vec3(0.08); // sky / no primary surface
+    }
+    if ((flags & NORMAL_COMPATIBLE) == 0u) {
+        return vec3(0.90, 0.08, 0.85);
+    }
+    if ((flags & ROUGHNESS_COMPATIBLE) == 0u) {
+        return vec3(0.95, 0.75, 0.08);
+    }
+    return vec3(0.95, 0.08, 0.06); // depth/disocclusion rejection
+}
+
+void main() {
+    ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 size = imageSize(currentDepth);
+    if (pixel.x >= size.x || pixel.y >= size.y) {
+        return;
+    }
+
+    uint flags = 0u;
+    if (pc.previousAvailable != 0u) {
+        flags |= HISTORY_AVAILABLE;
+    }
+
+    vec2 previousPixel = vec2(pixel) + vec2(0.5) + imageLoad(currentMotion, pixel).xy;
+    ivec2 previousTexel = ivec2(floor(previousPixel));
+    bool inBounds = pc.previousAvailable != 0u
+            && all(greaterThanEqual(previousTexel, ivec2(0)))
+            && all(lessThan(previousTexel, size));
+    if (inBounds) {
+        flags |= REPROJECTED_IN_BOUNDS;
+
+        vec4 currentSurface = imageLoad(currentNormalRoughness, pixel);
+        vec4 previousSurface = imageLoad(previousNormalRoughness, previousTexel);
+        float currentNormalLength = length(currentSurface.xyz);
+        float previousNormalLength = length(previousSurface.xyz);
+        bool surfacePresent = currentNormalLength >= 0.5 && previousNormalLength >= 0.5;
+        if (surfacePresent) {
+            flags |= SURFACE_PRESENT;
+            float normalAgreement = dot(
+                    currentSurface.xyz / currentNormalLength,
+                    previousSurface.xyz / previousNormalLength);
+            bool normalCompatible = normalAgreement >= pc.normalCosMin;
+            bool roughnessCompatible =
+                    abs(currentSurface.w - previousSurface.w) <= pc.roughnessTolerance;
+            if (normalCompatible) {
+                flags |= NORMAL_COMPATIBLE;
+            }
+            if (roughnessCompatible) {
+                flags |= ROUGHNESS_COMPATIBLE;
+            }
+
+            float previousNdcDepth = imageLoad(previousDepth, previousTexel).x;
+            vec2 previousNdc = previousPixel / vec2(size) * 2.0 - 1.0;
+            vec4 currentClip = pc.currentFromPreviousClip
+                    * vec4(previousNdc, previousNdcDepth, 1.0);
+            bool depthCompatible = false;
+            if (currentClip.w > 0.0) {
+                float projectedCurrentDepth = currentClip.z / currentClip.w;
+                float currentDistance = viewDistance(imageLoad(currentDepth, pixel).x);
+                float projectedDistance = viewDistance(projectedCurrentDepth);
+                float tolerance = clamp(
+                        currentDistance * pc.depthRelativeTolerance,
+                        pc.depthBaseTolerance,
+                        pc.depthMaxTolerance);
+                depthCompatible = !isnan(currentDistance) && !isinf(currentDistance)
+                        && !isnan(projectedDistance) && !isinf(projectedDistance)
+                        && abs(projectedDistance - currentDistance) <= tolerance;
+            }
+            if (depthCompatible) {
+                flags |= DEPTH_COMPATIBLE;
+            }
+            if (normalCompatible && roughnessCompatible && depthCompatible) {
+                flags |= VALID;
+            }
+        }
+    }
+
+    imageStore(validationMetadata, pixel, uvec4(flags, 0u, 0u, 0u));
+    if (pc.debugView == 8u) {
+        imageStore(debugColor, pixel, vec4(debugValidation(flags), 1.0));
+    }
+}

@@ -184,6 +184,7 @@ public final class RtComposite {
     private final RtGpuFrameStats gpuFrameStats = new RtGpuFrameStats();
     private final RtHistoryState historyState = new RtHistoryState();
     private final RtSurfaceHistory surfaceHistory = new RtSurfaceHistory();
+    private final RtTemporalValidation temporalValidation = new RtTemporalValidation();
     private RtDisplayPipeline displayPipeline;
     private RtImage output;
     // Packed primary -> indirect continuations. Pass A is fixed at one sample and owns two records per
@@ -264,6 +265,8 @@ public final class RtComposite {
     private final Matrix4f mvPrevProjView = new Matrix4f();
     private final Matrix4f mvCurProjView = new Matrix4f();
     private final Matrix4f mvPushMatrix = new Matrix4f();
+    private final Matrix4f historyCurrentFromPreviousClip = new Matrix4f();
+    private final Matrix4f mvMatrixTmp = new Matrix4f();
     private final Matrix4f frameInvViewProj = new Matrix4f();
     private final BlockPos.MutableBlockPos cameraBlockPos = new BlockPos.MutableBlockPos();
     private double mvPrevCamX;
@@ -730,7 +733,7 @@ public final class RtComposite {
     private void ensureOutput(RtContext ctx, int width, int height) {
         boolean rrEnabled = RtDlssRr.enabled();
         int rrQuality = rrEnabled ? RtDlssRr.quality() : Integer.MIN_VALUE;
-        if (output != null && continuationQueue != null
+        if (output != null && continuationQueue != null && temporalValidation.ready()
                 && displayImage != null && hdrDisplayImage != null && rrOutput != null && exposure.ready()
                 && displayW == width && displayH == height
                 && renderSizeRrEnabled == rrEnabled && renderSizeRrQuality == rrQuality) {
@@ -750,6 +753,7 @@ public final class RtComposite {
             continuationQueue.destroy();
             continuationQueue = null;
         }
+        temporalValidation.destroy();
         destroyGuideImages();
         surfaceHistory.destroy();
 
@@ -797,6 +801,13 @@ public final class RtComposite {
                 renderW, renderH, RtSurfaceHistory.SLOT_COUNT,
                 RtSurfaceHistory.BYTES_PER_PIXEL_PER_SLOT, historyBytes,
                 String.format(Locale.ROOT, "%.2f", historyBytes / (1024.0 * 1024.0)));
+        temporalValidation.ensure(ctx, renderW, renderH,
+                gNormal, gDepth, gMotion, surfaceHistory, output);
+        long validationBytes = temporalValidation.allocatedBytes();
+        CausticaMod.LOGGER.info(
+                "RT temporal validation: render={}x{}, bytesPerPixel={}, bytes={}, gpuMiB={}",
+                renderW, renderH, RtTemporalValidation.BYTES_PER_PIXEL, validationBytes,
+                String.format(Locale.ROOT, "%.2f", validationBytes / (1024.0 * 1024.0)));
         // Display-res RT image the display mapper reads. Always present (DLSS-RR target, or blit-upscale fallback).
         rrOutput = ctx.createStorageImage(width, height, VK10.VK_FORMAT_R16G16B16A16_SFLOAT, "DLSS-RR output " + width + "x" + height);
         exposure.ensureResources(ctx);
@@ -821,11 +832,17 @@ public final class RtComposite {
             mvCamDeltaX = (float) (camX - mvPrevCamX);
             mvCamDeltaY = (float) (camY - mvPrevCamY);
             mvCamDeltaZ = (float) (camZ - mvPrevCamZ);
+            // A previous clip point first becomes previous camera-relative world through inverse(prevVP),
+            // then subtracts the camera translation, and finally enters the current view-projection.
+            historyCurrentFromPreviousClip.set(mvCurProjView)
+                    .translate(-mvCamDeltaX, -mvCamDeltaY, -mvCamDeltaZ)
+                    .mul(mvMatrixTmp.set(mvPushMatrix).invert());
         } else {
             mvPushMatrix.set(mvCurProjView);
             mvCamDeltaX = 0f;
             mvCamDeltaY = 0f;
             mvCamDeltaZ = 0f;
+            historyCurrentFromPreviousClip.identity();
         }
         mvPrevProjView.set(mvCurProjView);
         mvPrevCamX = camX;
@@ -1031,6 +1048,13 @@ public final class RtComposite {
                 gpuFrameStats.markTraceIndirect(gpuStats, cmd);
             }
             VulkanCommandEncoder.memoryBarrier(cmd, stack); // RT writes visible to DLSS reads
+            try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd, "temporal validation");
+                 RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage("frame.temporalValidation")) {
+                temporalValidation.record(cmd, surfaceHistoryFrame,
+                        historyCurrentFromPreviousClip, debugView, frameProjection);
+            }
+            gpuFrameStats.markTemporalValidation(gpuStats, cmd);
+            VulkanCommandEncoder.memoryBarrier(cmd, stack); // validation writes visible; guide reads complete
             try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd, "surface history capture");
                  RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage("frame.historyCapture")) {
                 surfaceHistory.recordCapture(cmd, stack, gNormal, gDepth, surfaceHistoryFrame);
@@ -1333,6 +1357,7 @@ public final class RtComposite {
             continuationQueue.destroy();
             continuationQueue = null;
         }
+        temporalValidation.destroy();
         destroyGuideImages();
         surfaceHistory.destroy();
         exposure.destroy();

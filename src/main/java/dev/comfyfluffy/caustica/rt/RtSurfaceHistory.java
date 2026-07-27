@@ -97,6 +97,16 @@ final class RtSurfaceHistory {
         return frame.previousAvailable() ? depth[frame.previousSlot()] : null;
     }
 
+    RtImage normalRoughnessSlot(int slot) {
+        requireSlot(slot);
+        return normalRoughness[slot];
+    }
+
+    RtImage depthSlot(int slot) {
+        requireSlot(slot);
+        return depth[slot];
+    }
+
     long allocatedBytes() {
         if (!ready()) {
             return 0L;
@@ -125,6 +135,15 @@ final class RtSurfaceHistory {
     private boolean ready() {
         return normalRoughness[0] != null && normalRoughness[1] != null
                 && depth[0] != null && depth[1] != null;
+    }
+
+    private void requireSlot(int slot) {
+        if (!ready()) {
+            throw new IllegalStateException("Surface history used before allocation");
+        }
+        if (slot < 0 || slot >= SLOT_COUNT) {
+            throw new IllegalArgumentException("Surface history slot out of range: " + slot);
+        }
     }
 
     private void requireCompatible(RtImage image, String name) {
