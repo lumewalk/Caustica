@@ -232,24 +232,42 @@ public final class RtDlssRr {
      * teardown ({@code NgxRuntime.shutdown()} in {@code CausticaClient.shutdownRt}), so FG can keep using NGX.
      */
     public void destroy() {
-        if (((GpuDeviceAccessor) RenderSystem.getDevice()).caustica$getBackend() instanceof VulkanDevice device) {
-            releaseFeature(device);
+        try {
+            if (((GpuDeviceAccessor) RenderSystem.getDevice()).caustica$getBackend() instanceof VulkanDevice device) {
+                releaseFeature(device);
+            }
+        } finally {
+            // The backend may already have changed by the time teardown runs. Never retain an NGX handle
+            // from the old device: a later RT session with the same dimensions could otherwise mistake it
+            // for a valid feature and evaluate through a stale native pointer.
+            resetFeatureState();
+            initialized = false;
+            failed = false;
+            loggedAvailable = false;
+            resetHistory = false;
+            lastFrameNanos = 0L;
+            lib = null;
         }
-        initialized = false;
-        lib = null;
     }
 
     private void releaseFeature(VulkanDevice device) {
-        if (!isNull(feature)) {
-            RtContext ctx = RtContext.currentOrNull();
-            if (ctx != null && ctx.device() == device) {
-                ctx.waitIdle();
-            } else {
-                VK10.vkDeviceWaitIdle(device.vkDevice());
+        try {
+            if (lib != null && !isNull(feature)) {
+                RtContext ctx = RtContext.currentOrNull();
+                if (ctx != null && ctx.device() == device) {
+                    ctx.waitIdle();
+                } else {
+                    VK10.vkDeviceWaitIdle(device.vkDevice());
+                }
+                lib.release(feature);
             }
-            lib.release(feature);
-            feature = MemorySegment.NULL;
+        } finally {
+            resetFeatureState();
         }
+    }
+
+    private void resetFeatureState() {
+        feature = MemorySegment.NULL;
         featureRenderWidth = -1;
         featureRenderHeight = -1;
         featureDisplayWidth = -1;

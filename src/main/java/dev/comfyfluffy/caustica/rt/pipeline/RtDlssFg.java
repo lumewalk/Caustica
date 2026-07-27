@@ -227,23 +227,41 @@ public final class RtDlssFg {
 
     /** Release the FG feature. NGX itself is shut down by {@link NgxRuntime} at device teardown. */
     public void destroy() {
-        if (((GpuDeviceAccessor) RenderSystem.getDevice()).caustica$getBackend() instanceof VulkanDevice device) {
-            releaseFeature(device);
+        try {
+            if (((GpuDeviceAccessor) RenderSystem.getDevice()).caustica$getBackend() instanceof VulkanDevice device) {
+                releaseFeature(device);
+            }
+        } finally {
+            // A renderer restart is a new NGX session even when it happens in the same JVM. Discard all
+            // device-owned state and capability latches so the new device is probed instead of reusing a
+            // stale feature pointer or a failure recorded by the previous session.
+            resetFeatureState();
+            initialized = false;
+            failed = false;
+            probed = false;
+            available = false;
+            multiFrameCountMax = 0;
+            lib = null;
         }
-        initialized = false;
-        lib = null;
     }
 
     private void releaseFeature(VulkanDevice device) {
-        if (lib != null && !isNull(feature)) {
-            RtContext ctx = RtContext.currentOrNull();
-            if (ctx != null && ctx.device() == device) {
-                ctx.waitIdle();
-            } else {
-                VK10.vkDeviceWaitIdle(device.vkDevice());
+        try {
+            if (lib != null && !isNull(feature)) {
+                RtContext ctx = RtContext.currentOrNull();
+                if (ctx != null && ctx.device() == device) {
+                    ctx.waitIdle();
+                } else {
+                    VK10.vkDeviceWaitIdle(device.vkDevice());
+                }
+                lib.release(feature);
             }
-            lib.release(feature);
+        } finally {
+            resetFeatureState();
         }
+    }
+
+    private void resetFeatureState() {
         feature = MemorySegment.NULL;
         featureWidth = -1;
         featureHeight = -1;

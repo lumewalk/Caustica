@@ -1187,9 +1187,9 @@ public final class RtComposite {
         // Teardown runs after the device is idle (CLIENT_STOPPING waits), so the TLAS ring's slots are no
         // longer in flight and can be freed immediately.
         tlasRing.destroy();
-        if (RtDlssRr.enabled()) {
-            RtDlssRr.INSTANCE.destroy();
-        }
+        // Teardown follows ownership, not the current setting. RR may have been disabled after its
+        // feature was created; destroy it unconditionally so NGX never shuts down with a live handle.
+        RtDlssRr.INSTANCE.destroy();
         if (displayImage != null) {
             displayImage.destroy();
             displayImage = null;
@@ -1268,6 +1268,43 @@ public final class RtComposite {
             }
             atlasSampler = 0L;
         }
+        resetSessionState();
+    }
+
+    /**
+     * Return non-resource state to fresh-instance defaults so RT can stop and start again in one JVM.
+     * Resource fields are released and nulled above; this method clears only frame/device-derived caches
+     * and failure latches that must not cross the device-session boundary.
+     */
+    private void resetSessionState() {
+        reloadRebindRequested = false;
+        boundBlockAlbedoAtlasHandle = 0L;
+        pushSlot = 0;
+        hdrWrittenThisFrame = false;
+        fgReset = true;
+        displayW = -1;
+        displayH = -1;
+        renderW = -1;
+        renderH = -1;
+        renderSizeRrEnabled = false;
+        renderSizeRrQuality = Integer.MIN_VALUE;
+        mvPrevCamX = 0.0;
+        mvPrevCamY = 0.0;
+        mvPrevCamZ = 0.0;
+        mvCamDeltaX = 0.0f;
+        mvCamDeltaY = 0.0f;
+        mvCamDeltaZ = 0.0f;
+        mvHasPrev = false;
+        failed = false;
+        loggedActive = false;
+        camX = 0.0;
+        camY = 0.0;
+        camZ = 0.0;
+        frameCaptured = false;
+        celestialUvAtlasHandle = 0L;
+        celestialUvMoonPhase = -1;
+        currentTlasHandle = 0L;
+        pendingGraphicsUse = null;
     }
 
     private long atlasSampler(RtContext ctx) {
