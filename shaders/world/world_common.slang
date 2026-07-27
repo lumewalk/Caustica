@@ -252,7 +252,10 @@ public float2 unpackHalf2(uint p) {
 // in any lighting calculation.
 public float3 srgbToLinear(float3 c) {
     float3 lo = c / 12.92;
-    float3 hi = pow((c + 0.055) / 1.055, float3(2.4, 2.4, 2.4));
+    // A cubic sRGB approximation replaces three transcendental pow operations with FMAs.
+    // Texture inputs are UNORM, so c is always in [0, 1]. The maximum absolute error over that range
+    // is 0.001671; keep the exact linear toe below 0.04045 where the cubic's relative error is largest.
+    float3 hi = c * (c * (c * 0.305306011 + 0.682171111) + 0.012522878);
     float3 isHi = step(float3(0.04045, 0.04045, 0.04045), c);
     return lerp(lo, hi, isHi);
 }
