@@ -95,7 +95,7 @@ sum the leaves, divide by SPP, and write the pixel once. It never touches `gv_*`
 ### What each pass does NOT contain
 
 - Pass A: no NEE, no RIS, no SSS, no finite GGX sampling, and no radiance trace after the camera hit.
-- Pass B: no guide capture, no auxiliary guide walks, no `specularReflectionMotion`, no
+- Pass B: no guide capture, no auxiliary guide walks, no `resolveSpecularGuides`, no
   `waterWaveGradTemporal`, no debug views.
 
 ### Accepted duplication
@@ -148,11 +148,12 @@ supply the endpoints without affecting queued radiance:
   widened values before `OpImageWrite`; the Vulkan image store owns the final format conversion.
 - Keep distance-dependent Beer–Lambert extinction in radiance/lighting, not `gAlbedo`; otherwise the
   material guide varies with path length and disagrees with RR's material demodulation.
-- The baseline `gSpecAlbedo` remains average view-dependent material reflectance
-  (`rrSpecularAlbedo` / interface Fresnel). The reflected terminal supplies motion, not albedo.
-  “Reflected diffuse content × reflection strength” is an experimental, flag-gated follow-up because it
-  is not the documented guide identity and is unstable for emissive destinations, metals (`diffAlb=0`),
-  sky, and mirror recursion. It requires a material-reflectance fallback and an in-place A/B.
+- For exact mirrors, `gSpecAlbedo` is the reflected terminal's diffuse content multiplied by the
+  foreground reflection strength/color (`rrSpecularAlbedo` or interface Fresnel). The existing
+  reflection-motion probe supplies that terminal without another ray. Sky, emissive destinations,
+  metals (`diffAlb=0`), and another dielectric/mirror fall back to the foreground material reflectance
+  to avoid an unstable zero or recursively defined demodulation signal. Rougher surfaces retain their
+  conventional material-reflectance guide.
 - `resolveTransmissionGuide` deterministically refracts through later interfaces and never follows a
   reflected branch into ordinary albedo/depth. TIR freezes the ordinary tuple on that interface.
   Reflection motion uses its own one-ray guide probe. These are the only traces Pass A performs after
@@ -223,9 +224,9 @@ a Pass A radiance trace.
   Pass B, remove carried `diffuseDepth`, and count every hit observed by Pass B.
 - **M2.4 — deterministic auxiliary guides.** Use dedicated reflected/refracted guide probes after the
   first hit. Never let stochastic radiance choices or reflected content enter ordinary guides.
-- **M2.5 — experimental reflected-content guide.** Optional runtime A/B only. Modulate reflected
-  terminal diffuse content by material reflectance with explicit fallbacks for sky/emissive/metal/mirror.
-  Do not make this the default based only on another game's debug buffer.
+- **M2.5 — reflected-content guide.** For exact mirrors, modulate reflected terminal diffuse content
+  by foreground material reflectance, with explicit material-reflectance fallbacks for
+  sky/emissive/metal/mirror destinations.
 - **M3 — validate and measure.** Play-test energy parity against the stochastic M1 reference, debug all
   six guides, profile Pass A/Pass B and Pass A live state, and compare combined time against both M1's
   **14.2 ms** and `db6418b`'s 21 ms. M2 must not give back the structural M1 win.
@@ -250,8 +251,8 @@ a Pass A radiance trace.
   diffuse+specular BSDF. Moving mixed surfaces requires an explicit diffuse-only terminal contract.
 - **Rough dielectric gap.** Current water/glass transport is exact-delta in both passes. A real glossy
   dielectric is a separate BSDF feature, not something M2 gets merely by comparing roughness.
-- **Spec-guide experiment.** Destination albedo is not material reflectance. Keep it flag-gated with
-  robust fallbacks and judge RR stability, not only debug-view appearance.
+- **Reflected-content spec guide.** Destination albedo is not the documented material-reflectance
+  identity. Keep the robust fallbacks and judge RR stability/ringing as well as debug-view appearance.
 - **SER is Pass B only.** Pass A is compiled without an invocation-reorder capability and uses ordinary
   `TraceRay`. A full no-reorder A/B for the larger indirect shader remains a separate experiment.
 - **Two dispatches means a barrier**; trivial next to the trace cost, but it serialises pass A/B, so
@@ -274,7 +275,8 @@ a Pass A radiance trace.
       in Pass B; GPU parity check pending
 - [x] M2.4 deterministic auxiliary guides — reflected/refracted guide probes are decoupled from
       stochastic radiance and reflected content never enters ordinary guides; GPU parity check pending
-- [ ] M2.5 reflected-content `gSpecAlbedo` experiment (flagged, non-default)
+- [x] M2.5 reflected-content `gSpecAlbedo` — exact mirrors use reflected diffuse content times
+      foreground reflection strength, with material-reflectance fallbacks
 - [ ] M3 GPU validation and measurement
 
 Current worktree verification: Gradle test suite and SPIR-V validation pass. The emitted

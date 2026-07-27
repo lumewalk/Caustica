@@ -73,10 +73,15 @@ public float2 previousReflectionNdc(float3 surfacePos, float3 surfaceNormal, flo
     return projectPrevNdc(mirroredHit, valid);
 }
 
-// Reflection motion remains owned by the physical foreground interface even when transmission later
-// replaces the ordinary guide tuple. Guide tracing is intentionally non-SER (traceGuide above).
-public float2 specularReflectionMotion(SpecSurface surface, float3 primaryDir,
-                                float2 currentNdc, float2 size, float primaryConeSpread) {
+// Reflection guides remain owned by the physical foreground interface even when transmission later
+// replaces the ordinary guide tuple. The same non-SER probe resolves both motion and, for exact
+// mirrors, the reflected terminal's diffuse content. Destinations without a stable diffuse albedo keep
+// the foreground material reflectance: sky, emissive surfaces, metals, and another dielectric/mirror
+// would otherwise give RR a zero or recursively defined demodulation signal.
+public float2 resolveSpecularGuides(SpecSurface surface, float3 primaryDir,
+                             float2 currentNdc, float2 size, float primaryConeSpread,
+                             out float3 specAlbedo) {
+    specAlbedo = surface.albedo;
     if (length(surface.normal) < 0.5
             || max(surface.albedo.r, max(surface.albedo.g, surface.albedo.b)) <= 0.001
             || surface.roughness > SPEC_MOTION_ALPHA_MAX) {
@@ -98,8 +103,20 @@ public float2 specularReflectionMotion(SpecSurface surface, float3 primaryDir,
     float3 reflectedMotionPrev;
     if (payload.hitT > 0.0) {
         reflectedHit = surfacePos + specDir * payload.hitT;
-        reflectedMotionPrev = payloadMaterial() == MATERIAL_OPAQUE
+        uint reflectedMaterial = payloadMaterial();
+        reflectedMotionPrev = reflectedMaterial == MATERIAL_OPAQUE
                 ? payload.motionPrev : float3(0.0, 0.0, 0.0);
+        if (surface.roughness <= MIRROR_ALPHA_MAX
+                && (reflectedMaterial == MATERIAL_OPAQUE
+                    || reflectedMaterial == MATERIAL_PARTICLE)
+                && payloadEmission() <= 0.0) {
+            float3 reflectedDiffuse = reflectedMaterial == MATERIAL_PARTICLE
+                    ? float3(payload.albedo)
+                    : float3(payload.albedo) * (1.0 - clamp(payloadMetalness(), 0.0, 1.0));
+            if (max(reflectedDiffuse.r, max(reflectedDiffuse.g, reflectedDiffuse.b)) > 0.001) {
+                specAlbedo = surface.albedo * reflectedDiffuse;
+            }
+        }
     } else {
         reflectedHit = surfacePos + specDir * 1.0e6;
         reflectedMotionPrev = float3(0.0, 0.0, 0.0);
@@ -201,7 +218,9 @@ public void resolveTransmissionGuide(float3 surfacePos, float3 transmittedDir,
 public void writeGuides(int2 pix, float3 primaryDir, float2 jndc, float2 size, float primaryConeSpread) {
     // Reflection remains owned by the foreground interface even when a dielectric replaced the ordinary
     // tuple with the transmitted destination.
-    float2 specMotion = specularReflectionMotion(gv_spec, primaryDir, jndc, size, primaryConeSpread);
+    float3 specAlbedo;
+    float2 specMotion = resolveSpecularGuides(
+            gv_spec, primaryDir, jndc, size, primaryConeSpread, specAlbedo);
 
     // Hardware (non-linear, reversed-Z) depth for DLSS-RR + Frame Generation: project the camera-relative
     // primary hit through the forward view-projection and take ndc z/w — exactly the value a rasterizer
@@ -242,7 +261,7 @@ public void writeGuides(int2 pix, float3 primaryDir, float2 jndc, float2 size, f
     gAlbedo[pix] = float4(gv_albedo, 1.0);
     gDepth[pix] = depth;
     gMotion[pix] = motion;
-    gSpecAlbedo[pix] = float4(gv_spec.albedo, 1.0);
+    gSpecAlbedo[pix] = float4(specAlbedo, 1.0);
     gSpecMotion[pix] = specMotion;
 }
 
