@@ -5,7 +5,8 @@ import world_common;
 
 [shader("miss")]
 void main(inout Payload payload) {
-    payload.hitT = -1.0;
+    // Preserve hitT: guide payloads already seed the -1 miss sentinel, while shadow any-hit may have
+    // recorded the nearest water crossing here for underwater caustics.
     payload.normal = half3(0.0h, 0.0h, 0.0h);
     payload.flags = 0u;
 }
