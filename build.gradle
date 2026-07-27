@@ -160,12 +160,16 @@ abstract class CompileShaders extends DefaultTask {
 			def base = outBase(src)
 			def spv = new File(scratchDir, "${base}.spv")
 			if (src.name.endsWith(".slang")) {
-				// Build both SER encodings from one source; RtDeviceBringup selects the supported variant.
-				compileOneSlang(src, spv, base == "world.rgen"
-						? ["-capability", "spvShaderInvocationReorderEXT"] : [])
-				if (base == "world.rgen") {
-					compileOneSlang(src, new File(scratchDir, "world_nv.rgen.spv"),
-							["-capability", "spvShaderInvocationReorderNV"])
+				def worldIndirectRaygen = base == "world.rgen"
+				if (worldIndirectRaygen) {
+					// Keep a capability-free TraceRay fallback for devices without EXT SER, and
+					// publish the reordered variant separately when the extension is available.
+					compileOneSlang(src, spv, [])
+					compileOneSlang(src, new File(scratchDir, "world_ser.rgen.spv"),
+							["-DCAUSTICA_ENABLE_EXT_SER", "-capability", "spvShaderInvocationReorderEXT"])
+				} else {
+					// Pass A intentionally uses ordinary TraceRay.
+					compileOneSlang(src, spv, [])
 				}
 			} else {
 				compileOne(src, spv, [])

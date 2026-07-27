@@ -22,7 +22,6 @@ import org.lwjgl.vulkan.VkPhysicalDeviceRayTracingPipelinePropertiesKHR;
 import org.lwjgl.vulkan.VkPhysicalDeviceRayTracingPositionFetchFeaturesKHR;
 import org.lwjgl.vulkan.VkPhysicalDeviceRayQueryFeaturesKHR;
 import org.lwjgl.vulkan.VkPhysicalDeviceRayTracingInvocationReorderFeaturesEXT;
-import org.lwjgl.vulkan.VkPhysicalDeviceRayTracingInvocationReorderFeaturesNV;
 import org.lwjgl.vulkan.VkPhysicalDeviceFeatures;
 import org.lwjgl.vulkan.VkPhysicalDeviceVulkan12Features;
 import org.lwjgl.vulkan.VkPhysicalDeviceOpacityMicromapFeaturesEXT;
@@ -53,8 +52,6 @@ import static org.lwjgl.vulkan.KHRPresentId.VK_KHR_PRESENT_ID_EXTENSION_NAME;
 import static org.lwjgl.vulkan.KHRPresentId.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_ID_FEATURES_KHR;
 import static org.lwjgl.vulkan.EXTRayTracingInvocationReorder.VK_EXT_RAY_TRACING_INVOCATION_REORDER_EXTENSION_NAME;
 import static org.lwjgl.vulkan.EXTRayTracingInvocationReorder.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_INVOCATION_REORDER_FEATURES_EXT;
-import static org.lwjgl.vulkan.NVRayTracingInvocationReorder.VK_NV_RAY_TRACING_INVOCATION_REORDER_EXTENSION_NAME;
-import static org.lwjgl.vulkan.NVRayTracingInvocationReorder.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_INVOCATION_REORDER_FEATURES_NV;
 
 /**
  * RT device bring-up. Enables the hardware ray-tracing device extensions and their
@@ -93,15 +90,6 @@ public final class RtDeviceBringup {
             VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
             VK_KHR_RAY_TRACING_POSITION_FETCH_EXTENSION_NAME,
             VK_KHR_RAY_QUERY_EXTENSION_NAME);
-
-    /**
-     * Shader Execution Reordering is still required by Caustica's current world raygen, but the SPIR-V
-     * extension differs between the original NVIDIA path and the ratified EXT path. Prefer NV when present
-     * for older NVIDIA drivers, otherwise use EXT.
-     */
-    public static final List<String> SER_EXTENSIONS = List.of(
-            VK_NV_RAY_TRACING_INVOCATION_REORDER_EXTENSION_NAME,
-            VK_EXT_RAY_TRACING_INVOCATION_REORDER_EXTENSION_NAME);
 
     /**
      * OPTIONAL RT extensions: enabled only when the selected device supports them AND the gate is on, but
@@ -149,9 +137,6 @@ public final class RtDeviceBringup {
     private static final VulkanPNextStruct RAY_QUERY_FEATURES_STRUCT = new VulkanPNextStruct(
             VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR,
             VkPhysicalDeviceRayQueryFeaturesKHR.SIZEOF);
-    private static final VulkanPNextStruct SER_NV_FEATURES_STRUCT = new VulkanPNextStruct(
-            VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_INVOCATION_REORDER_FEATURES_NV,
-            VkPhysicalDeviceRayTracingInvocationReorderFeaturesNV.SIZEOF);
     private static final VulkanPNextStruct SER_EXT_FEATURES_STRUCT = new VulkanPNextStruct(
             VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_INVOCATION_REORDER_FEATURES_EXT,
             VkPhysicalDeviceRayTracingInvocationReorderFeaturesEXT.SIZEOF);
@@ -190,9 +175,6 @@ public final class RtDeviceBringup {
             VkPhysicalDeviceRayTracingPositionFetchFeaturesKHR.RAYTRACINGPOSITIONFETCH);
     private static final VulkanFeature RAY_QUERY_FEATURE = new VulkanFeature(
             RAY_QUERY_FEATURES_STRUCT, "rayQuery", VkPhysicalDeviceRayQueryFeaturesKHR.RAYQUERY);
-    private static final VulkanFeature SER_NV_FEATURE = new VulkanFeature(
-            SER_NV_FEATURES_STRUCT, "rayTracingInvocationReorder(NV)",
-            VkPhysicalDeviceRayTracingInvocationReorderFeaturesNV.RAYTRACINGINVOCATIONREORDER);
     private static final VulkanFeature SER_EXT_FEATURE = new VulkanFeature(
             SER_EXT_FEATURES_STRUCT, "rayTracingInvocationReorder(EXT)",
             VkPhysicalDeviceRayTracingInvocationReorderFeaturesEXT.RAYTRACINGINVOCATIONREORDER);
@@ -216,17 +198,20 @@ public final class RtDeviceBringup {
             RAY_QUERY_FEATURE);
 
     private enum SerBackend {
-        NONE("none", null, "world.rgen.spv"),
-        NV("NV", VK_NV_RAY_TRACING_INVOCATION_REORDER_EXTENSION_NAME, "world_nv.rgen.spv"),
-        EXT("EXT", VK_EXT_RAY_TRACING_INVOCATION_REORDER_EXTENSION_NAME, "world.rgen.spv");
+        NONE("none", null, "world_primary.rgen.spv", "world.rgen.spv"),
+        EXT("EXT", VK_EXT_RAY_TRACING_INVOCATION_REORDER_EXTENSION_NAME,
+                "world_primary.rgen.spv", "world_ser.rgen.spv");
 
         final String label;
         final String extensionName;
+        final String worldPrimaryRaygenShader;
         final String worldRaygenShader;
 
-        SerBackend(String label, String extensionName, String worldRaygenShader) {
+        SerBackend(String label, String extensionName, String worldPrimaryRaygenShader,
+                   String worldRaygenShader) {
             this.label = label;
             this.extensionName = extensionName;
+            this.worldPrimaryRaygenShader = worldPrimaryRaygenShader;
             this.worldRaygenShader = worldRaygenShader;
         }
     }
@@ -234,7 +219,7 @@ public final class RtDeviceBringup {
     private record FeatureSupport(List<String> missingRequired, SerBackend serBackend,
                                   boolean omm, boolean presentId, boolean wideLines) {
         boolean supportsRt() {
-            return missingRequired.isEmpty() && serBackend != SerBackend.NONE;
+            return missingRequired.isEmpty();
         }
     }
 
@@ -250,8 +235,8 @@ public final class RtDeviceBringup {
         return serBackend.worldRaygenShader;
     }
 
-    public static boolean serNvEnabled() {
-        return serBackend == SerBackend.NV;
+    public static String worldPrimaryRaygenShader() {
+        return serBackend.worldPrimaryRaygenShader;
     }
 
     public static boolean serExtEnabled() {
@@ -456,13 +441,8 @@ public final class RtDeviceBringup {
 
             boolean hasSerExt = physicalDevice.hasDeviceExtension(
                     VK_EXT_RAY_TRACING_INVOCATION_REORDER_EXTENSION_NAME);
-            boolean hasSerNv = physicalDevice.hasDeviceExtension(
-                    VK_NV_RAY_TRACING_INVOCATION_REORDER_EXTENSION_NAME);
             if (hasSerExt) {
                 SER_EXT_FEATURE.struct().findOrCreateStructInPNextChain(available, stack);
-            }
-            if (hasSerNv) {
-                SER_NV_FEATURE.struct().findOrCreateStructInPNextChain(available, stack);
             }
 
             boolean queryOmm = ommRequested()
@@ -486,13 +466,8 @@ public final class RtDeviceBringup {
                     missing.add(feature.name());
                 }
             }
-            // Preserve the existing EXT preference, but fall back to NV when EXT is advertised with a
-            // false feature boolean.
             SerBackend supportedSer = hasSerExt && SER_EXT_FEATURE.get(available) ? SerBackend.EXT
-                    : hasSerNv && SER_NV_FEATURE.get(available) ? SerBackend.NV : SerBackend.NONE;
-            if (supportedSer == SerBackend.NONE) {
-                missing.add("rayTracingInvocationReorder(NV or EXT)");
-            }
+                    : SerBackend.NONE;
             return new FeatureSupport(missing, supportedSer,
                     queryOmm && OMM_FEATURE.get(available),
                     queryPresentId && PRESENT_ID_FEATURE.get(available),
@@ -505,11 +480,6 @@ public final class RtDeviceBringup {
             if (!physicalDevice.hasDeviceExtension(ext)) {
                 return ext;
             }
-        }
-        if (!physicalDevice.hasDeviceExtension(VK_NV_RAY_TRACING_INVOCATION_REORDER_EXTENSION_NAME)
-                && !physicalDevice.hasDeviceExtension(VK_EXT_RAY_TRACING_INVOCATION_REORDER_EXTENSION_NAME)) {
-            return VK_NV_RAY_TRACING_INVOCATION_REORDER_EXTENSION_NAME + " or "
-                    + VK_EXT_RAY_TRACING_INVOCATION_REORDER_EXTENSION_NAME;
         }
         return null;
     }
@@ -529,7 +499,7 @@ public final class RtDeviceBringup {
             }
         }
         String serExtension = support.serBackend.extensionName;
-        if (!augmentedExtensions.contains(serExtension)) {
+        if (serExtension != null && !augmentedExtensions.contains(serExtension)) {
             augmentedExtensions.add(serExtension);
         }
         for (String ext : supportedOptionalExtensions(physicalDevice, support)) {
@@ -579,7 +549,9 @@ public final class RtDeviceBringup {
         // Bindless entity textures: a runtime-sized sampler2D[] indexed non-uniformly in the hit shader,
         // with partially-bound + update-after-bind slots (a growing per-RenderType registry). Core on the
         // VK 1.4 device; just needs enabling alongside bufferDeviceAddress on the same struct.
-        features.add(support.serBackend == SerBackend.NV ? SER_NV_FEATURE : SER_EXT_FEATURE);
+        if (support.serBackend == SerBackend.EXT) {
+            features.add(SER_EXT_FEATURE);
+        }
 
         // Optional: wideLines (core VK10 feature, no extension). Lets the world-overlay pass (block
         // outline) draw a real thick native line via a raster pipeline's lineWidth / VK_DYNAMIC_STATE_LINE
@@ -625,10 +597,10 @@ public final class RtDeviceBringup {
         serBackend = support.serBackend;
         List<String> optionalExtensions = supportedOptionalExtensions(physicalDevice, support);
         CausticaMod.LOGGER.info(
-                "Ray tracing: enabling {} + {}{} + features [bufferDeviceAddress, accelerationStructure, rayTracingPipeline, rayQuery, rayTracingInvocationReorder({})"
+                "Ray tracing: enabling {}{}{} + features [bufferDeviceAddress, accelerationStructure, rayTracingPipeline, rayQuery, SER={}"
                         + (wideLinesEnabled ? ", wideLines(max=" + maxLineWidth + ")" : "")
                         + (ommEnabled ? ", opacityMicromap" : "") + "] + overlayMsaa=" + overlayMsaaSamples + "x on [{}]",
-                RT_EXTENSIONS, serBackend.extensionName,
+                RT_EXTENSIONS, serBackend.extensionName == null ? "" : " + " + serBackend.extensionName,
                 optionalExtensions.isEmpty() ? "" : " + " + optionalExtensions,
                 serBackend.label, physicalDevice.deviceName());
     }

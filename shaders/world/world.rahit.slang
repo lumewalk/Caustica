@@ -12,6 +12,7 @@
 // a trace. Shadow traversal uses albedo.rgb as accumulated transmittance and hitT as the nearest-water
 // crossing; radiance cutout paths do not touch either field.
 import world_common;
+import math;
 
 [[vk::push_constant]] WorldPushConstants pc;
 
@@ -86,7 +87,7 @@ void main(inout Payload payload, in BuiltInTriangleIntersectionAttributes attr) 
         // Radiance rays accept the surface and continue to closest-hit. Shadow rays use the same material
         // model here so entity dielectrics transmit instead of becoming opaque shadow blockers.
         bool shadowRay = (RayFlags() & RAY_FLAG_SKIP_CLOSEST_HIT_SHADER) != 0u;
-        if (instanceKind == ENTITY_BIT && shadowRay && materialHeader.model == MATERIAL_GLASS) {
+        if (instanceKind == ENTITY_BIT && shadowRay && materialHeader.model == MATERIAL_DIELECTRIC) {
             float3 tint = lerp(float3(1.0, 1.0, 1.0),
                     srgbToLinear(texel.rgb) * epr.tint.rgb, texel.a);
             payload.albedo *= half3(tint * clamp(materialHeader.params.w, 0.0, 1.0));

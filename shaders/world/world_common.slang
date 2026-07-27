@@ -8,6 +8,7 @@ module world_common;
 // scalarBlockLayout device feature. Keep std430 unless RtDeviceBringup explicitly enables that feature;
 // this alias is the single layout switch and generated Java serialization stays in lock-step.
 public typealias ConstPtr<T> = Ptr<T, Access.Read, AddressSpace.Device, Std430DataLayout>;
+public typealias DevicePtr<T> = Ptr<T, Access.ReadWrite, AddressSpace.Device, Std430DataLayout>;
 
 // Push constant block. The hot inline lanes avoid dereferencing WorldPush for values that are read in
 // hit shaders or used for raygen control flow — every 64-bit device address lives here for exactly that
@@ -25,6 +26,7 @@ public struct WorldPushConstants {
     public uint64_t lightLocalAliasAddr; // power aliases relative to each section's range
     public uint64_t lightGridCellAddr;   // dense light grid cell headers (0 = global proposals only)
     public uint64_t lightGridSpanAddr;   // packed weighted section spans referenced by cell headers
+    public uint64_t pathQueueAddr;       // packed primary -> indirect continuation records
     public uint frameIndex;
     public uint debugView;
 };
@@ -55,7 +57,7 @@ public struct WorldPush {
     public float4   sunUv;            // vanilla sun sprite atlas rect (u0,v0,u1,v1)
     public float4   moonUv;           // vanilla current-moon-phase sprite atlas rect
     public float4   waterParams;      // xyz camera-biome water tint, w wave time (s)
-    public float4   waterAnchor;      // xy world-stable wave-domain anchor
+    public float4   waterAnchor;      // xy world-stable wave-domain anchor, z previous wave time
     public float4x4 curViewProj;      // forward camera-relative view-projection
     public uint     breakCount;
     public BreakEntry breaking[8];    // Java capacity and breakCount serialization are generated from this
@@ -140,11 +142,13 @@ public static const uint PAYLOAD_SHOW_CELESTIAL = 4u;
 // Set by world.rchit on a terrain hit whose prim carries TERRAIN_PRIM_IN_LIGHT_BUFFER: this emitter is
 // RIS-sampled, so raygen gates its direct-hit emission on diffuse continuation rays (no double count).
 public static const uint PAYLOAD_EMITTER_IN_LIST = 128u;
-// Set by world.rchit on a MATERIAL_WATER hit: true when the incoming ray travels against the prim's
-// outward face normal (entering the water volume), false when it exits (water -> air). Bit 2
-// (PAYLOAD_SHOW_CELESTIAL) is only meaningful on a miss and this bit only on a hit, so they never need
-// to be read together, but they get distinct bits anyway to keep the two concerns unambiguous.
-public static const uint PAYLOAD_WATER_ENTERING = 8u;
+// Set by world.rchit on any dielectric hit (water or glass/ice): true when the incoming ray travels
+// against the prim's outward face normal (entering the volume), false when it exits. Derived from face
+// orientation rather than toggled, so a stray or missing face cannot corrupt the medium for the rest of
+// the path — each crossing re-derives which side it is on. Bit 2 (PAYLOAD_SHOW_CELESTIAL) is only
+// meaningful on a miss and this bit only on a hit, so they never need to be read together, but they get
+// distinct bits anyway to keep the two concerns unambiguous.
+public static const uint PAYLOAD_DIELECTRIC_ENTERING = 8u;
 public static const uint PAYLOAD_EMISSION_SOURCE_SHIFT = 4u;
 public static const uint PAYLOAD_EMISSION_SOURCE_MASK = 7u;
 public static const uint EMISSION_SOURCE_NONE = 0u;
@@ -154,9 +158,14 @@ public static const uint EMISSION_SOURCE_LAB_PBR = 3u;
 
 public static const uint PAYLOAD_MATERIAL_MASK = 3u;
 public static const uint MATERIAL_OPAQUE = 0u;
+// Both dielectrics are volumes: they refract and push a participating medium. They stay distinct ids
+// because water owns behaviour nothing else has — an animated wave surface, the caustic term, biome-tint
+// absorption calibrated per block of depth, and a chit path fed by the fluid mesher rather than the
+// (inset) translucent terrain layer. MATERIAL_DIELECTRIC is everything else transparent: glass, ice, and
+// any solid transparent block a pack defines.
 public static const uint MATERIAL_WATER = 1u;
 public static const uint MATERIAL_PARTICLE = 2u;
-public static const uint MATERIAL_GLASS = 3u;
+public static const uint MATERIAL_DIELECTRIC = 3u;
 
 // Entity per-triangle record (48 B). The final lane mirrors TerrainPrim's integer material metadata.
 public struct Prim {
@@ -243,19 +252,4 @@ public uint packHalf2(float2 v) {
 
 public float2 unpackHalf2(uint p) {
     return float2(f16tof32(p & 0xFFFFu), f16tof32(p >> 16));
-}
-
-// Vanilla's block/entity atlases are ordinary sRGB-encoded PNGs sampled through a plain UNORM view (no
-// hardware sRGB decode), so the raw texel is gamma-encoded. The path tracer's BRDF math (Lambertian/GGX,
-// Beer-Lambert, NEE) is only correct on linear radiance/albedo, so every COLOR texture sample (not the
-// LabPBR _s/_n data maps, which are already linear data channels) must go through this before it's used
-// in any lighting calculation.
-public float3 srgbToLinear(float3 c) {
-    float3 lo = c / 12.92;
-    // A cubic sRGB approximation replaces three transcendental pow operations with FMAs.
-    // Texture inputs are UNORM, so c is always in [0, 1]. The maximum absolute error over that range
-    // is 0.001671; keep the exact linear toe below 0.04045 where the cubic's relative error is largest.
-    float3 hi = c * (c * (c * 0.305306011 + 0.682171111) + 0.012522878);
-    float3 isHi = step(float3(0.04045, 0.04045, 0.04045), c);
-    return lerp(lo, hi, isHi);
 }

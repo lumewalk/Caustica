@@ -95,6 +95,7 @@ public final class RtComposite {
     // Hot addresses/frameIndex and raygen's debugView avoid unnecessary global-memory dereferences;
     // WorldPushConstantsData is generated from the same Slang module and owns this second ABI as well.
     private static final int GUIDE_COUNT = 6; // RR guide buffers bound at world-pipeline bindings 3..8
+    private static final long PATH_RECORD_BYTES = 48L;
     private static int debugView() {
         return CausticaConfig.Rt.Composite.DEBUG_VIEW.value();
     }
@@ -180,6 +181,9 @@ public final class RtComposite {
     private final RtGpuFrameStats gpuFrameStats = new RtGpuFrameStats();
     private RtDisplayPipeline displayPipeline;
     private RtImage output;
+    // Packed primary -> indirect continuations. Pass A is fixed at one sample and owns two records per
+    // render pixel (base + optional transmission); Pass B resamples them at the configured SPP.
+    private RtBuffer continuationQueue;
     private RtImage displayImage;
     // Parallel PQ-encoded ([0,1], ST.2084) HDR display image. Written alongside displayImage when HDR is
     // enabled. When the PQ swapchain is active, the combined UI overlay is composited over this image, then
@@ -264,6 +268,8 @@ public final class RtComposite {
     private float mvCamDeltaY;
     private float mvCamDeltaZ;
     private boolean mvHasPrev;
+    private float previousWaterWaveTime;
+    private boolean waterWaveTimeValid;
     private long atlasSampler;
     private boolean failed;
     private boolean loggedActive;
@@ -520,8 +526,11 @@ public final class RtComposite {
     private RtPipeline ensureWorld(RtContext ctx) {
         if (worldPipeline == null) {
             bindlessTextureCapacity = RtEntityTextures.maxTextures();
-            worldPipeline = RtPipeline.create(ctx, RtDeviceBringup.worldRaygenShader(),
-                    new String[]{"world.rmiss.spv"}, "world.rchit.spv", "world.rahit.spv",
+            worldPipeline = RtPipeline.create(ctx, new String[]{
+                            RtDeviceBringup.worldPrimaryRaygenShader(),
+                            RtDeviceBringup.worldRaygenShader()},
+                    new String[]{"world.rmiss.spv", "world_guide.rmiss.spv"},
+                    "world.rchit.spv", "world.rahit.spv",
                     WorldPushConstantsData.BYTE_SIZE, true, GUIDE_COUNT, bindlessTextureCapacity, true);
             // Per-frame world data lives in this BDA ring; the pipeline pushes its address and hot fields.
             if (pushRing == null) {
@@ -688,7 +697,8 @@ public final class RtComposite {
     private void ensureOutput(RtContext ctx, int width, int height) {
         boolean rrEnabled = RtDlssRr.enabled();
         int rrQuality = rrEnabled ? RtDlssRr.quality() : Integer.MIN_VALUE;
-        if (output != null && displayImage != null && hdrDisplayImage != null && rrOutput != null && exposure.ready()
+        if (output != null && continuationQueue != null
+                && displayImage != null && hdrDisplayImage != null && rrOutput != null && exposure.ready()
                 && displayW == width && displayH == height
                 && renderSizeRrEnabled == rrEnabled && renderSizeRrQuality == rrQuality) {
             return;
@@ -702,6 +712,10 @@ public final class RtComposite {
         }
         if (output != null) {
             output.destroy();
+        }
+        if (continuationQueue != null) {
+            continuationQueue.destroy();
+            continuationQueue = null;
         }
         destroyGuideImages();
 
@@ -722,6 +736,12 @@ public final class RtComposite {
         // mapping seam. displayImage stays R8G8B8A8 to match the main target it is copied into
         // (vkCmdCopyImage requires texel-size-compatible formats).
         output = ctx.createStorageImage(renderW, renderH, VK10.VK_FORMAT_R16G16B16A16_SFLOAT, "trace color " + renderW + "x" + renderH);
+        long pixelRecords = Math.multiplyExact((long) renderW, (long) renderH);
+        long continuationBytes = Math.multiplyExact(
+                Math.multiplyExact(pixelRecords, 2L), PATH_RECORD_BYTES);
+        continuationQueue = ctx.createBuffer(continuationBytes,
+                VK10.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, false,
+                "path continuation queue " + renderW + "x" + renderH + "x2");
         displayImage = ctx.createStorageImage(width, height, VK10.VK_FORMAT_R8G8B8A8_UNORM, "RT display image " + width + "x" + height);
         // PQ-encoded ([0,1], ST.2084) HDR display image, written in parallel by display.comp when HDR mode is active.
         hdrDisplayImage = ctx.createStorageImage(width, height, VK10.VK_FORMAT_R16G16B16A16_SFLOAT, "RT HDR display image " + width + "x" + height);
@@ -737,6 +757,7 @@ public final class RtComposite {
         exposure.ensureResources(ctx);
 
         mvHasPrev = false; // recreated images -> first MV frame is zero
+        waterWaveTimeValid = false;
         if (worldPipeline != null) {
             worldPipeline.setStorageImage(output.view);
             bindGuideImages();
@@ -837,13 +858,21 @@ public final class RtComposite {
                 wtg = ((wc >> 8) & 0xFF) / 255f;
                 wtb = (wc & 0xFF) / 255f;
             }
-            Float4 waterParams = new Float4(wtr, wtg, wtb,
-                    (float) (System.nanoTime() / 1.0e9 % 3600.0));
+            float waterWaveTime = (float) (System.nanoTime() / 1.0e9 % 3600.0);
+            float waterWaveDelta = waterWaveTime - previousWaterWaveTime;
+            // A first frame, long pause, or one-hour phase wrap has no adjacent wave frame to reproject.
+            // Use the current phase so the reflection MV is neutral instead of manufacturing a huge jump.
+            float priorWaterWaveTime = waterWaveTimeValid
+                    && waterWaveDelta >= 0f && waterWaveDelta <= 0.25f
+                    ? previousWaterWaveTime : waterWaveTime;
+            previousWaterWaveTime = waterWaveTime;
+            waterWaveTimeValid = true;
+            Float4 waterParams = new Float4(wtr, wtg, wtb, waterWaveTime);
             // W1 wave-domain anchor: the terrain rebase origin reduced mod 4096 (kept small for shader
             // float precision). hitPos.xz (rebased) + anchor reconstructs a world-pinned coordinate, so the
             // ripple pattern stays fixed in the world as the player moves and the rebase origin shifts.
             Float4 waterAnchor = new Float4(terrain.blockX & WATER_ANCHOR_MASK,
-                    terrain.blockZ & WATER_ANCHOR_MASK, 0f, 0f);
+                    terrain.blockZ & WATER_ANCHOR_MASK, priorWaterWaveTime, 0f);
 
             // Rebuild the TLAS this frame from static section instances merged with dynamic entity
             // instances, bind it into the pipeline's descriptor ring, record the build, then barrier so
@@ -930,14 +959,20 @@ public final class RtComposite {
                     RtMaterialRegistry.INSTANCE.tableAddress(),
                     terrain.lightBufferAddress(), terrain.lightAliasBufferAddress(),
                     terrain.lightLocalAliasBufferAddress(), terrain.lightGridCellBufferAddress(),
-                    terrain.lightGridSpanBufferAddress(),
+                    terrain.lightGridSpanBufferAddress(), continuationQueue.deviceAddress,
                     (int) frameCounter, debugView).write(pushConstants);
-            try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd, "world trace");
-                 RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage("frame.trace")) {
-                active.trace(cmd, renderW, renderH, pushConstants);
+            try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd, "world primary trace");
+                 RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage("frame.tracePrimary")) {
+                active.trace(cmd, renderW, renderH, pushConstants, 0);
             }
+            gpuFrameStats.markTracePrimary(gpuStats, cmd);
+            VulkanCommandEncoder.memoryBarrier(cmd, stack); // continuation/guide writes visible to pass B
+            try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd, "world indirect trace");
+                 RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage("frame.traceIndirect")) {
+                active.trace(cmd, renderW, renderH, pushConstants, 1);
+            }
+            gpuFrameStats.markTraceIndirect(gpuStats, cmd);
             VulkanCommandEncoder.memoryBarrier(cmd, stack); // RT writes visible to DLSS reads
-            gpuFrameStats.markTrace(gpuStats, cmd);
             // DLSS-RR denoise + upscale. The RT pass wrote noisy color (render res) + guides;
             // RR reads them and writes the display-res denoised result straight into rrOutput.
             if (rrPath && RtDlssRr.INSTANCE.ensureFeature(cmd.address(), renderW, renderH, displayW, displayH)) {
@@ -1229,6 +1264,10 @@ public final class RtComposite {
         if (output != null) {
             output.destroy();
             output = null;
+        }
+        if (continuationQueue != null) {
+            continuationQueue.destroy();
+            continuationQueue = null;
         }
         destroyGuideImages();
         exposure.destroy();

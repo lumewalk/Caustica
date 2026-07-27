@@ -21,14 +21,15 @@ import org.lwjgl.vulkan.VkQueryPoolCreateInfo;
  */
 final class RtGpuFrameStats {
     private static final int SLOT_COUNT = 8;
-    private static final int QUERY_COUNT = 8;
+    private static final int QUERY_COUNT = 9;
     private static final int ENTITY_BLAS = 1;
     private static final int TLAS = 2;
-    private static final int TRACE = 3;
-    private static final int UPSCALE = 4;
-    private static final int EXPOSURE = 5;
-    private static final int DISPLAY_MAP = 6;
-    private static final int COPY_OUTPUT = 7;
+    private static final int TRACE_PRIMARY = 3;
+    private static final int TRACE_INDIRECT = 4;
+    private static final int UPSCALE = 5;
+    private static final int EXPOSURE = 6;
+    private static final int DISPLAY_MAP = 7;
+    private static final int COPY_OUTPUT = 8;
 
     private final Slot[] slots = new Slot[SLOT_COUNT];
     private long queryPool;
@@ -92,8 +93,12 @@ final class RtGpuFrameStats {
         mark(slot, cmd, TLAS);
     }
 
-    void markTrace(Slot slot, VkCommandBuffer cmd) {
-        mark(slot, cmd, TRACE);
+    void markTracePrimary(Slot slot, VkCommandBuffer cmd) {
+        mark(slot, cmd, TRACE_PRIMARY);
+    }
+
+    void markTraceIndirect(Slot slot, VkCommandBuffer cmd) {
+        mark(slot, cmd, TRACE_INDIRECT);
     }
 
     void markUpscale(Slot slot, VkCommandBuffer cmd, boolean rrDone) {
@@ -200,16 +205,22 @@ final class RtGpuFrameStats {
         double entityBlasMs = slot.hasEntityBlas
                 ? millis(timestampDelta(timestamps.get(0), timestamps.get(ENTITY_BLAS), bits), period) : 0.0;
         double tlasMs = millis(timestampDelta(timestamps.get(ENTITY_BLAS), timestamps.get(TLAS), bits), period);
-        double traceMs = millis(timestampDelta(timestamps.get(TLAS), timestamps.get(TRACE), bits), period);
-        double upscaleMs = millis(timestampDelta(timestamps.get(TRACE), timestamps.get(UPSCALE), bits), period);
+        double tracePrimaryMs = millis(
+                timestampDelta(timestamps.get(TLAS), timestamps.get(TRACE_PRIMARY), bits), period);
+        // Includes the primary-to-indirect visibility barrier recorded between the two timestamps.
+        double traceIndirectMs = millis(
+                timestampDelta(timestamps.get(TRACE_PRIMARY), timestamps.get(TRACE_INDIRECT), bits), period);
+        double traceMs = millis(timestampDelta(timestamps.get(TLAS), timestamps.get(TRACE_INDIRECT), bits), period);
+        double upscaleMs = millis(timestampDelta(timestamps.get(TRACE_INDIRECT), timestamps.get(UPSCALE), bits), period);
         double exposureMs = millis(timestampDelta(timestamps.get(UPSCALE), timestamps.get(EXPOSURE), bits), period);
         double displayMapMs = millis(timestampDelta(timestamps.get(EXPOSURE), timestamps.get(DISPLAY_MAP), bits), period);
         double copyOutputMs = millis(timestampDelta(timestamps.get(DISPLAY_MAP), timestamps.get(COPY_OUTPUT), bits), period);
         double totalMs = millis(timestampDelta(timestamps.get(0), timestamps.get(COPY_OUTPUT), bits), period);
         writer.printf(Locale.ROOT,
-                "%d,%d,%d,%d,%d,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f%n",
+                "%d,%d,%d,%d,%d,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f%n",
                 slot.frameIndex, slot.renderWidth, slot.renderHeight, slot.displayWidth, slot.displayHeight,
-                totalMs, entityBlasMs, tlasMs, traceMs, slot.rrDone ? upscaleMs : 0.0,
+                totalMs, entityBlasMs, tlasMs, traceMs, tracePrimaryMs, traceIndirectMs,
+                slot.rrDone ? upscaleMs : 0.0,
                 slot.rrDone ? 0.0 : upscaleMs, exposureMs, displayMapMs, copyOutputMs);
         writer.flush();
     }
@@ -225,7 +236,8 @@ final class RtGpuFrameStats {
             Files.createDirectories(directory);
             csv = new PrintWriter(Files.newBufferedWriter(file, StandardCharsets.UTF_8));
             csv.println("frame,renderWidth,renderHeight,displayWidth,displayHeight,totalMs,entityBlasMs,"
-                    + "tlasMs,traceMs,dlssRrMs,upscaleMs,exposureMs,displayMapMs,copyOutputMs");
+                    + "tlasMs,traceMs,tracePrimaryMs,traceIndirectMs,dlssRrMs,upscaleMs,exposureMs,"
+                    + "displayMapMs,copyOutputMs");
             csv.flush();
         } catch (IOException e) {
             CausticaMod.LOGGER.warn("RtGpuFrameStats: failed to open CSV {}: {}", file, e.toString());

@@ -40,7 +40,7 @@ public final class RtMaterialRegistry {
     // with a plain mask.
     public static final int MODEL_OPAQUE = 0;
     public static final int MODEL_WATER = 1;
-    public static final int MODEL_GLASS = 3;
+    public static final int MODEL_DIELECTRIC = 3;
     public static final int FEATURE_SPEC = 1;
     public static final int FEATURE_NORMAL = 2;
     public static final int FEATURE_HEURISTIC_EMISSION = 4;
@@ -55,7 +55,7 @@ public final class RtMaterialRegistry {
     private static final float MAX_EMISSION_STRENGTH = 32.0f;
     private static final int MAX_LOD_SHIFT = 24;
 
-    private static final int MODEL_VARIANTS = 2; // ordinary opaque/cutout and thin glass
+    private static final int MODEL_VARIANTS = 2; // ordinary opaque/cutout and transparent dielectric
     private static final int EMISSION_VARIANTS = 2; // state-gated emission disabled/enabled
     private static final int VARIANT_OPAQUE = 0;
     private static final int VARIANT_GLASS = 1;
@@ -130,7 +130,7 @@ public final class RtMaterialRegistry {
                         continue;
                     }
                     fallbackVariants[variant] = headers.size();
-                    add(headers, descriptions, grids, compileDesc(glass ? MODEL_GLASS : MODEL_OPAQUE, 0,
+                    add(headers, descriptions, grids, compileDesc(glass ? MODEL_DIELECTRIC : MODEL_OPAQUE, 0,
                                     profile, emitting, true, RtMaterialDesc.EmissionSummary.NONE),
                             transparentWhiteAverage(), fallbackEntry, null);
                 }
@@ -171,14 +171,18 @@ public final class RtMaterialRegistry {
                     break;
                 }
             }
+            // Resolved once per sprite: IOR is a property of the material, so it costs no extra variants
+            // — it varies with the sprite, not with the profile/glass/emitting cross product.
+            float dielectricIor = RtDielectrics.iorForSprite(sprite.contents().name());
             int[] variants = new int[profileVariants];
             for (RtMaterials.Profile profile : SPRITE_PROFILES) {
                 for (boolean glass : new boolean[]{false, true}) {
                     for (boolean emitting : new boolean[]{false, true}) {
                         int features = emitting ? baseFeatures : baseFeatures & ~FEATURE_HEURISTIC_EMISSION;
-                        RtMaterialDesc desc = compileDesc(glass ? MODEL_GLASS : MODEL_OPAQUE, features,
+                        RtMaterialDesc desc = compileDesc(glass ? MODEL_DIELECTRIC : MODEL_OPAQUE, features,
                                 profile, emitting, false,
-                                variantSummary(features, emitting, entry, stats.uniformSummary()));
+                                variantSummary(features, emitting, entry, stats.uniformSummary()),
+                                dielectricIor);
                         if (spriteWide != null) {
                             desc = spriteWide.rule.apply(desc);
                         }
@@ -196,9 +200,10 @@ public final class RtMaterialRegistry {
                     for (boolean glass : new boolean[]{false, true}) {
                         for (boolean emitting : new boolean[]{false, true}) {
                             int features = emitting ? baseFeatures : baseFeatures & ~FEATURE_HEURISTIC_EMISSION;
-                            RtMaterialDesc base = compileDesc(glass ? MODEL_GLASS : MODEL_OPAQUE,
+                            RtMaterialDesc base = compileDesc(glass ? MODEL_DIELECTRIC : MODEL_OPAQUE,
                                     features, profile, emitting, false,
-                                    variantSummary(features, emitting, entry, stats.uniformSummary()));
+                                    variantSummary(features, emitting, entry, stats.uniformSummary()),
+                                    dielectricIor);
                             RtMaterialDesc desc = compiled.rule.apply(base);
                             overrideVariants[index(profile, glass, emitting)] = headers.size();
                             add(headers, descriptions, grids, desc, stats.average(), entry, stats.albedoGrid());
@@ -424,10 +429,24 @@ public final class RtMaterialRegistry {
     private static RtMaterialDesc compileDesc(int model, int features, RtMaterials.Profile profile,
                                               boolean emitting, boolean neutral,
                                               RtMaterialDesc.EmissionSummary emissionSummary) {
-        float roughness = model == MODEL_GLASS ? 0.05f : profile.roughness();
-        float metalness = model == MODEL_GLASS ? 0.0f : profile.metalness();
-        float ior = model == MODEL_WATER ? 1.333f : (model == MODEL_GLASS ? 1.52f : 1.0f);
-        float transmission = model == MODEL_WATER || model == MODEL_GLASS ? 1.0f : 0.0f;
+        return compileDesc(model, features, profile, emitting, neutral, emissionSummary,
+                RtDielectrics.GLASS_IOR);
+    }
+
+    private static RtMaterialDesc compileDesc(int model, int features, RtMaterials.Profile profile,
+                                              boolean emitting, boolean neutral,
+                                              RtMaterialDesc.EmissionSummary emissionSummary,
+                                              float dielectricIor) {
+        float roughness = model == MODEL_DIELECTRIC ? 0.0025f : profile.roughness(); // linear; s = 0.95
+        float metalness = model == MODEL_DIELECTRIC ? 0.0f : profile.metalness();
+        // Refractive index is per material, not per model: ice and window glass are both
+        // MODEL_DIELECTRIC but bend light by measurably different amounts.
+        float ior = switch (model) {
+            case MODEL_WATER -> RtDielectrics.WATER_IOR;
+            case MODEL_DIELECTRIC -> dielectricIor;
+            default -> 1.0f;
+        };
+        float transmission = model == MODEL_WATER || model == MODEL_DIELECTRIC ? 1.0f : 0.0f;
         boolean labPbr = (features & (FEATURE_SPEC | FEATURE_NORMAL)) != 0;
         RtMaterialDesc.Source source = neutral ? RtMaterialDesc.Source.NEUTRAL
                 : (labPbr ? RtMaterialDesc.Source.LAB_PBR : RtMaterialDesc.Source.HEURISTIC);

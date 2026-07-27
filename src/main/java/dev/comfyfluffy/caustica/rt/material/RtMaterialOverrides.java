@@ -58,10 +58,13 @@ public final class RtMaterialOverrides {
 
         Integer model = null;
         if (root.has("model")) {
+            // Every dielectric is a volume now, so the old thin/volume names described nothing. "water"
+            // is the animated fluid surface (waves, caustics, biome-tint absorption); "dielectric" is
+            // every other transparent material.
             model = switch (root.get("model").getAsString()) {
                 case "opaque" -> RtMaterialRegistry.MODEL_OPAQUE;
-                case "volume_dielectric" -> RtMaterialRegistry.MODEL_WATER;
-                case "thin_dielectric" -> RtMaterialRegistry.MODEL_GLASS;
+                case "water" -> RtMaterialRegistry.MODEL_WATER;
+                case "dielectric" -> RtMaterialRegistry.MODEL_DIELECTRIC;
                 default -> throw new IllegalArgumentException("Unknown material model");
             };
         }
@@ -69,6 +72,8 @@ public final class RtMaterialOverrides {
         Float metalness = null;
         if (root.has("base")) {
             JsonObject base = root.getAsJsonObject("base");
+            // "roughness" is LINEAR roughness (GGX alpha), the same units LabPBR stores and
+            // RtMaterials.Profile carries — NOT perceptual roughness. alpha = (1 - smoothness)^2.
             roughness = optionalFloat(base, "roughness");
             metalness = optionalFloat(base, "metalness");
         }
@@ -150,12 +155,12 @@ public final class RtMaterialOverrides {
         }
 
         private static float defaultIor(int model) {
-            return model == RtMaterialRegistry.MODEL_WATER ? 1.333f
-                    : model == RtMaterialRegistry.MODEL_GLASS ? 1.52f : 1.0f;
+            return model == RtMaterialRegistry.MODEL_WATER ? RtDielectrics.WATER_IOR
+                    : model == RtMaterialRegistry.MODEL_DIELECTRIC ? RtDielectrics.GLASS_IOR : 1.0f;
         }
 
         private static float defaultTransmission(int model) {
-            return model == RtMaterialRegistry.MODEL_WATER || model == RtMaterialRegistry.MODEL_GLASS
+            return model == RtMaterialRegistry.MODEL_WATER || model == RtMaterialRegistry.MODEL_DIELECTRIC
                     ? 1.0f : 0.0f;
         }
     }

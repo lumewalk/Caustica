@@ -10,3 +10,4 @@ out/
 *.class
 third_party/
 bin/
+/logs
