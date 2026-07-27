@@ -37,7 +37,10 @@ function Write-Check {
 }
 
 function Get-ConfiguredEnvironmentVariable {
-	param([string]$Name)
+	param(
+		[string]$Name,
+		[string]$DefaultPath
+	)
 
 	$processValue = [Environment]::GetEnvironmentVariable($Name, "Process")
 	if (-not [string]::IsNullOrWhiteSpace($processValue)) {
@@ -54,6 +57,14 @@ function Get-ConfiguredEnvironmentVariable {
 				Value = $value
 				Scope = "$scope environment (restart the terminal to activate it)"
 			}
+		}
+	}
+
+	if (-not [string]::IsNullOrWhiteSpace($DefaultPath) -and
+		(Test-Path -LiteralPath $DefaultPath -PathType Container)) {
+		return [pscustomobject]@{
+			Value = $DefaultPath
+			Scope = "Codex toolchain default"
 		}
 	}
 
@@ -159,6 +170,11 @@ try {
 Write-Host ""
 Write-Host "Required build tools" -ForegroundColor White
 
+$documentsPath = [Environment]::GetFolderPath("MyDocuments")
+$toolchainRoot = Join-Path $documentsPath "Codex\Toolchains"
+$defaultVulkanSdk = Join-Path $toolchainRoot "VulkanSDK\1.4.350.0"
+$defaultDlssSdk = Join-Path $toolchainRoot "DLSS"
+
 $javaPath = Find-Tool "java"
 if ($null -eq $javaPath) {
 	Write-Check "ERROR" "Java" "JDK 25 was not found on PATH."
@@ -176,33 +192,45 @@ if ($null -eq $javaPath) {
 	}
 }
 
-foreach ($toolName in @("git", "cmake")) {
-	$toolPath = Find-Tool $toolName
-	if ($null -eq $toolPath) {
-		Write-Check "ERROR" $toolName "Not found on PATH."
-	} else {
-		Write-Check "OK" $toolName $toolPath
-	}
+$gitPath = Find-Tool "git"
+if ($null -eq $gitPath) {
+	Write-Check "ERROR" "git" "Not found on PATH."
+} else {
+	Write-Check "OK" "git" $gitPath
 }
 
 $vsWherePath = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"
 $msvcPath = Find-Tool "cl"
-if ($null -ne $msvcPath) {
-	Write-Check "OK" "C++ compiler" $msvcPath
-} elseif (Test-Path -LiteralPath $vsWherePath -PathType Leaf) {
+$visualStudioPath = $null
+if (Test-Path -LiteralPath $vsWherePath -PathType Leaf) {
 	$visualStudioPath = (& $vsWherePath -latest -products * `
 		-requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
-		-property installationPath).Trim()
+		-property installationPath | Select-Object -First 1)
 	if (-not [string]::IsNullOrWhiteSpace($visualStudioPath)) {
-		Write-Check "OK" "C++ compiler" "Visual Studio C++ tools at $visualStudioPath"
-	} else {
-		Write-Check "ERROR" "C++ compiler" "Install Visual Studio 2022 Build Tools with Desktop development with C++."
+		$visualStudioPath = $visualStudioPath.Trim()
 	}
+}
+
+if ($null -ne $msvcPath) {
+	Write-Check "OK" "C++ compiler" $msvcPath
+} elseif (-not [string]::IsNullOrWhiteSpace($visualStudioPath)) {
+	Write-Check "OK" "C++ compiler" "Visual Studio C++ tools at $visualStudioPath"
 } else {
 	Write-Check "ERROR" "C++ compiler" "Install Visual Studio 2022 Build Tools with Desktop development with C++."
 }
 
-$vulkanConfig = Get-ConfiguredEnvironmentVariable "VULKAN_SDK"
+$cmakeDirectories = @()
+if (-not [string]::IsNullOrWhiteSpace($visualStudioPath)) {
+	$cmakeDirectories += Join-Path $visualStudioPath "Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin"
+}
+$cmakePath = Find-Tool "cmake" $cmakeDirectories
+if ($null -eq $cmakePath) {
+	Write-Check "ERROR" "cmake" "Not found on PATH or in Visual Studio Build Tools."
+} else {
+	Write-Check "OK" "cmake" $cmakePath
+}
+
+$vulkanConfig = Get-ConfiguredEnvironmentVariable "VULKAN_SDK" $defaultVulkanSdk
 $vulkanDirectories = @()
 if ($null -eq $vulkanConfig) {
 	Write-Check "ERROR" "VULKAN_SDK" "Not configured. Install the LunarG Vulkan SDK."
@@ -234,7 +262,7 @@ foreach ($shaderTool in @("slangc", "glslangValidator", "spirv-val")) {
 	}
 }
 
-$dlssConfig = Get-ConfiguredEnvironmentVariable "DLSS_SDK"
+$dlssConfig = Get-ConfiguredEnvironmentVariable "DLSS_SDK" $defaultDlssSdk
 if ($null -eq $dlssConfig) {
 	Write-Check "ERROR" "DLSS_SDK" "Not configured. Download and extract the NVIDIA DLSS SDK."
 } elseif (-not (Test-Path -LiteralPath $dlssConfig.Value -PathType Container)) {

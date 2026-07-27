@@ -38,15 +38,19 @@ Minecraft run data:
 3. Configure and build the native shim:
 
 ```powershell
-cmake -S native/ngx_shim -B build/cmake/ngx_shim/release -DCMAKE_BUILD_TYPE=Release
-cmake --build build/cmake/ngx_shim/release --config Release
+.\buildNative.ps1
 ```
 
-4. Run the client:
+   The script accepts `VULKAN_SDK` and `DLSS_SDK` when they are set. It also
+   recognizes the default personal Codex toolchain layout:
+   `Documents\Codex\Toolchains\VulkanSDK\1.4.350.0` and
+   `Documents\Codex\Toolchains\DLSS`.
+
+4. Run the client. This also performs an incremental native shim build, so it
+   is the only command normally needed after initial setup:
 
 ```powershell
-$env:JAVA_TOOL_OPTIONS = "-Xmx8G -XX:+UseCompactObjectHeaders -XX:+AlwaysPreTouch -XX:+UseStringDeduplication -XX:+UseZGC"
-.\gradlew.bat runClient --args="--renderDebugLabels --graphicsBackend VULKAN"
+.\runClient.ps1
 ```
 
 ## Linux
