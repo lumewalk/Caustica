@@ -1,5 +1,5 @@
-// Ray dispatch: SBT/cull constants, payload construction, and the three ways this renderer casts a
-// ray — reordered radiance, non-reordered guide probe, and shadow visibility. Depends on core.
+// Ray dispatch: SBT/cull constants, payload construction, ordinary/reordered radiance, guide probes,
+// and shadow visibility. Depends on core.
 
 // receiver billboards only. The first-person camera owner uses 0x01 (secondary only).
 
@@ -61,38 +61,6 @@ public void traceRadiance(uint cullMask, float3 ro, float tmin, float3 rd, float
             makeRay(ro, tmin, rd, tmax), payload);
 }
 
-// SER radiance trace: trace into a hit object, reorder threads by hit coherence, THEN invoke the
-// hit/miss shader — this is where the divergent Section/Prim shading work (world.rchit/world.rahit)
-// actually happens, so reordering before it is what pays for the reorder's own cost.
-//
-// The payload is built TWICE from the trace state rather than carried across ReorderThread. Traversal
-// runs only world.rahit, which never writes a RADIANCE payload: its terrain tint paths live in the
-// translucent/water buckets, which carry no any-hit record for radiance rays, and its entity paths are
-// gated on RAY_FLAG_SKIP_CLOSEST_HIT_SHADER. So whatever TraceRay leaves in the payload holds no
-// information. Reading it back and carrying it over would pin all ten members — 72 bytes — in registers
-// across the one point where SER must spill every live value, which profiling showed to be the peak
-// live state in this shader. Rebuilding costs a few constant moves and leaves only these two words
-// spanning the reorder.
-public void traceRadianceReordered(uint cullMask, float3 ro, float tmin, float3 rd, float tmax,
-                            bool showCelestial, float rayConeWidth, float rayConeSpread,
-                            uint pathPhaseHint) {
-    uint flags = showCelestial ? PAYLOAD_SHOW_CELESTIAL : 0u;
-    uint rayCone = packHalf2(float2(rayConeWidth, rayConeSpread));
-    Payload tracePayload = makeRadiancePayload(flags, rayCone);
-    HitObject hObj = HitObject::TraceRay(topLevelAS, RAY_FLAG_NONE, cullMask,
-            SBT_RADIANCE, SBT_STRIDE_BUCKET, MISS_RADIANCE,
-            makeRay(ro, tmin, rd, tmax), tracePayload);
-    // The hit object groups shader IDs first. Its SBT index then supplies the two-bit geometry/material
-    // bucket ({solid, cutout, translucent, water}); terrain and entity record ranges are both multiples
-    // of TERRAIN_BUCKETS, so the low bits have the same meaning. The high two bits describe path lifetime:
-    // pre-roulette, roulette-active, or guaranteed terminal after this hit.
-    uint materialHint = hObj.GetShaderTableIndex() & (TERRAIN_BUCKETS - 1u);
-    uint coherenceHint = (pathPhaseHint << 2u) | materialHint;
-    ReorderThread(hObj, coherenceHint, 4u);
-    payload = makeRadiancePayload(flags, rayCone);
-    HitObject::Invoke(topLevelAS, hObj, payload);
-}
-
 // Auxiliary RR probes deliberately use ordinary TraceRay. They are one-off, incoherent rays whose
 // result is consumed immediately, so paying a reorder barrier and carrying guide state across it only
 // adds latency. The dedicated miss record also avoids the atmosphere march: guides need hit-vs-miss,
@@ -111,7 +79,9 @@ public Payload makeShadowPayload() {
     shadowPayload.normal = half3(0.0h, 0.0h, 0.0h);
     shadowPayload.motionPrev = half3(0.0h, 0.0h, 0.0h);
     shadowPayload.f0 = half3(0.0h, 0.0h, 0.0h);
-    shadowPayload.flags = 0u;
+    // world_guide.rmiss clears this sentinel. An accepted opaque hit skips closest-hit and therefore
+    // leaves it set, while ignored translucent/water hits continue until either a later opaque hit or miss.
+    shadowPayload.flags = 1u;
     shadowPayload.roughMetal = 0u;
     shadowPayload.emissionSss = 0u;
     shadowPayload.iorTransmission = 0u;
@@ -125,13 +95,15 @@ public VisibilityResult visibility(float3 origin, float3 dir, float tmax) {
     Payload shadowPayload = makeShadowPayload();
     // Shadow SBT records run any-hit only for cutout/translucent/water. Cutout alpha-tests; translucent
     // and water tint shadowPayload.albedo and pass through. Solid blocks terminate traversal. There is no
-    // closest or miss shader worth executing, so use a hit object only as the traversal result.
-    HitObject hObj = HitObject::TraceRay(topLevelAS,
+    // closest shader worth executing. The lightweight guide miss clears the flags sentinel so this path
+    // needs only ordinary TraceRay and no invocation-reorder capability.
+    TraceRay(topLevelAS,
             RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER,
-            CULL_SECONDARY, SBT_SHADOW, SBT_STRIDE_BUCKET, 0u,
+            CULL_SECONDARY, SBT_SHADOW, SBT_STRIDE_BUCKET, MISS_GUIDE,
             makeRay(origin, RAY_TMIN, dir, tmax), shadowPayload);
     VisibilityResult result;
-    result.transmittance = hObj.IsMiss() ? shadowPayload.albedo : float3(0.0, 0.0, 0.0);
+    result.transmittance = shadowPayload.flags == 0u
+            ? shadowPayload.albedo : float3(0.0, 0.0, 0.0);
     result.waterHitT = shadowPayload.hitT;
     return result;
 }

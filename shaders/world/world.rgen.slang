@@ -17,7 +17,7 @@
 // job. With RR disabled the output is the raw noisy path trace — a reference view, not a converged
 // image. Output is HDR (R16G16B16A16_SFLOAT); the HDR -> LDR tonemap happens at the display.comp seam.
 //
-// SER: the build emits EXT and NV shader-invocation-reorder variants from this source.
+// The build emits an ordinary TraceRay fallback and an optional EXT SER variant from this source.
 import world_common;
 import world_core;
 import math;
@@ -25,6 +25,9 @@ import medium;
 import segment;
 import water;
 import trace;
+#ifdef CAUSTICA_ENABLE_EXT_SER
+import trace_ser;
+#endif
 import lighting;
 
 public float3 tracePath(PathSegment seg, uint2 pix, uint sampleIndex) {
@@ -71,11 +74,16 @@ public float3 tracePath(PathSegment seg, uint2 pix, uint sampleIndex) {
         // closest-hit for dielectric handling. Geometry is double-sided; the chit flips the normal.
         // Primary (bounce 0) is the camera ray (CULL_PRIMARY): sees particles but not the first-person
         // player. Bounce rays are secondary (CULL_SECONDARY): exclude particles, include the player.
+#ifdef CAUSTICA_ENABLE_EXT_SER
         // SER lifetime phase: keep paths that are not roulette-eligible, paths that may terminate via
         // roulette, and paths guaranteed to end at the bounce cap in separate coherence groups.
         uint pathPhaseHint = bounce >= maxBounces ? 2u : (bounce >= rrStart ? 1u : 0u);
         traceRadianceReordered(bounce == 0 ? CULL_PRIMARY : CULL_SECONDARY, ro, 0.0, rd, 10000.0,
                                showCelestial, rayConeWidth, rayConeSpread, pathPhaseHint);
+#else
+        traceRadiance(bounce == 0 ? CULL_PRIMARY : CULL_SECONDARY, ro, 0.0, rd, 10000.0,
+                      showCelestial, rayConeWidth, rayConeSpread);
+#endif
 
         if (payload.hitT < 0.0) {
             // world.rmiss writes sky radiance (gradient + sun/moon disc + stars) into payload.albedo. The
