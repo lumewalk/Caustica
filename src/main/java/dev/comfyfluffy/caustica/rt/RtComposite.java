@@ -739,12 +739,16 @@ public final class RtComposite {
         // (vkCmdCopyImage requires texel-size-compatible formats).
         output = ctx.createStorageImage(renderW, renderH, VK10.VK_FORMAT_R16G16B16A16_SFLOAT, "trace color " + renderW + "x" + renderH);
         continuationQueueSpp = desiredSpp;
-        long continuationBytes = Math.multiplyExact(
+        long baseRecords = Math.multiplyExact(
                 Math.multiplyExact((long) renderW, (long) renderH),
-                Math.multiplyExact((long) continuationQueueSpp, PATH_RECORD_BYTES));
+                (long) continuationQueueSpp);
+        long splitRecords = Math.multiplyExact((long) renderW, (long) renderH);
+        long continuationBytes = Math.multiplyExact(
+                Math.addExact(baseRecords, splitRecords), PATH_RECORD_BYTES);
         continuationQueue = ctx.createBuffer(continuationBytes,
                 VK10.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, false,
-                "path continuation queue " + renderW + "x" + renderH + "x" + continuationQueueSpp);
+                "path continuation queue " + renderW + "x" + renderH + "x" + continuationQueueSpp
+                        + " + one split slot per pixel");
         displayImage = ctx.createStorageImage(width, height, VK10.VK_FORMAT_R8G8B8A8_UNORM, "RT display image " + width + "x" + height);
         // PQ-encoded ([0,1], ST.2084) HDR display image, written in parallel by display.comp when HDR mode is active.
         hdrDisplayImage = ctx.createStorageImage(width, height, VK10.VK_FORMAT_R16G16B16A16_SFLOAT, "RT HDR display image " + width + "x" + height);

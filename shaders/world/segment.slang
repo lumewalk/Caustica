@@ -24,7 +24,6 @@ public struct PathSegment {
     public float rayConeSpread;
     public uint seed;
     public int bounce;          // interfaces already consumed, so RR start and the bounce cap stay global
-    public int diffuseDepth;    // surfaces already SHADED (see the field of the same name in tracePath)
     public bool showCelestial;
     public bool captureGuides;
     public bool maySplit;       // may still spawn a deterministic Fresnel branch
@@ -32,7 +31,7 @@ public struct PathSegment {
 
 public PathSegment makePathSegment(float3 ro, float3 rd, float3 throughput, MediumStack medium,
                             float rayConeWidth, float rayConeSpread, uint seed,
-                            int bounce, int diffuseDepth, bool showCelestial,
+                            int bounce, bool showCelestial,
                             bool captureGuides, bool maySplit) {
     PathSegment s;
     s.ro = ro;
@@ -43,7 +42,6 @@ public PathSegment makePathSegment(float3 ro, float3 rd, float3 throughput, Medi
     s.rayConeSpread = rayConeSpread;
     s.seed = seed;
     s.bounce = bounce;
-    s.diffuseDepth = diffuseDepth;
     s.showCelestial = showCelestial;
     s.captureGuides = captureGuides;
     s.maySplit = maySplit;
@@ -60,10 +58,11 @@ public struct PackedPathSegment {
     public uint rayCone;
     public uint seed;
     public uint pathFlags;
-    public uint pixelSample;
+    public uint nextRecord;
 };
 
 public static const uint PATH_VALID = 1u << 11u;
+public static const uint PATH_NO_NEXT = 0xffffffffu;
 
 public float2 octEncode(float3 direction) {
     float3 n = direction / max(abs(direction.x) + abs(direction.y) + abs(direction.z), 1.0e-20);
@@ -113,7 +112,7 @@ public float3 unpackRgb9e5(uint p) {
     return float3(p & 0x1ffu, (p >> 9u) & 0x1ffu, (p >> 18u) & 0x1ffu) * scale;
 }
 
-public PackedPathSegment packPathSegment(PathSegment seg, uint pixelIndex, uint sampleIndex, bool valid) {
+public PackedPathSegment packPathSegment(PathSegment seg, bool valid, uint nextRecord) {
     PackedPathSegment p;
     p.ro = seg.ro;
     p.rd = packUnorm16x2(octEncode(seg.rd));
@@ -124,12 +123,11 @@ public PackedPathSegment packPathSegment(PathSegment seg, uint pixelIndex, uint 
     p.rayCone = packHalf2(float2(seg.rayConeWidth, seg.rayConeSpread));
     p.seed = seg.seed;
     p.pathFlags = (uint(seg.bounce) & 15u)
-            | ((uint(seg.diffuseDepth) & 15u) << 4u)
             | (seg.showCelestial ? 1u << 8u : 0u)
             | (seg.medium.current.water ? 1u << 9u : 0u)
             | (seg.medium.outer.water ? 1u << 10u : 0u)
             | (valid ? PATH_VALID : 0u);
-    p.pixelSample = (pixelIndex & 0x1fffffffu) | ((sampleIndex & 7u) << 29u);
+    p.nextRecord = nextRecord;
     return p;
 }
 
@@ -150,8 +148,7 @@ public PathSegment unpackPathSegment(PackedPathSegment p, out bool valid) {
     valid = (p.pathFlags & PATH_VALID) != 0u;
     return makePathSegment(p.ro, octDecode(unpackUnorm16x2(p.rd)),
             unpackRgb9e5(p.throughput), medium, cone.x, cone.y, p.seed,
-            int(p.pathFlags & 15u), int((p.pathFlags >> 4u) & 15u),
-            (p.pathFlags & (1u << 8u)) != 0u, false, false);
+            int(p.pathFlags & 15u), (p.pathFlags & (1u << 8u)) != 0u, false, false);
 }
 
 // Walk only the visually-primary dielectric chain. The terminal non-dielectric/miss trace is repeated

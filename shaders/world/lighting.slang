@@ -246,23 +246,14 @@ public static const uint SECONDARY_RIS_DIVISOR = 4u;
 // failure mode is noisier emitter light at depth rather than missing light. Unlike the divisor this also
 // drops shadeReservoir's per-vertex shadow ray, which never scaled with M. Gating at all: 16.1 -> 15.7ms.
 //
-// This counts diffuseDepth, not `bounce`, and the difference is not cosmetic. MATERIAL_DIELECTRIC and
-// MATERIAL_WATER continue without shading anything, so looking through a pane spends bounce 0 on the
-// glass and lands the first shaded surface at bounce 1. Gating on `bounce` therefore starved surfaces
-// seen through glass or water — visually primary, but counted as depth — and they went black, since only
-// a path randomly striking an emitter could light them. Keying on shaded surfaces removes that whole
-// class of bug and lets the budget go lower than the two bounces of headroom the dielectric prefix used
-// to cost.
-//
-// Caveat this does not solve: a smooth specular bounce IS a shaded surface, so a wall seen in a metal
-// block counts as depth 1. Accumulated roughness rather than a vertex count is the principled fix, and
-// is what a radiance cache would need anyway to decide cache-vs-trace.
-public static const uint RIS_MAX_DIFFUSE_DEPTH = 2u;
+// This counts hits observed by Pass B. The primary/interface prefix consumed by Pass A is outside the
+// budget, while every material and lobe encountered after the handoff advances it uniformly.
+public static const uint RIS_MAX_INDIRECT_DEPTH = 2u;
 
 // Initial RIS over M power-weighted candidates -> one resampled sample, no shadow ray yet. The chosen
 // sample's W = wSum / (M * p-hat); M counts every candidate, including zero-weight ones.
 public Reservoir risInitial(float3 hitPos, float3 n, float3 v, float3 rd, float3 diffAlb, float3 F0,
-                     float rough, bool twoSided, float sss, uint shadedDepth,
+                     float rough, bool twoSided, float sss, uint indirectDepth,
                      inout uint seed, inout uint proposalSeed) {
     Reservoir r = resEmpty();
     LightGridCell gridCell;
@@ -275,9 +266,7 @@ public Reservoir risInitial(float3 hitPos, float3 n, float3 v, float3 rd, float3
                 * worldPush.lightGridOrigin.w;
     }
     bool hasGridCell = findLightGridCell(gridLookup, gridCell, gridCellCoord);
-    // shadedDepth, not the bounce index: a surface behind glass or water is the first thing this path has
-    // shaded and is visually primary, so it keeps the full candidate count.
-    uint candidateCount = shadedDepth == 0u
+    uint candidateCount = indirectDepth == 0u
             ? worldPush.risCandidates
             : max(1u, worldPush.risCandidates / SECONDARY_RIS_DIVISOR);
     // Deterministically stratify the proposal mixture. At the default M=8 this schedules exactly six

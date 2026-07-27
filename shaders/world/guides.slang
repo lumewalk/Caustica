@@ -22,6 +22,12 @@ public static bool gv_motionUseRefracted = false; // true when the MV tracks the
 // World-space displacement of the motion-guide surface since the previous frame (0 for static
 // terrain/sky, an entity's per-vertex/object motion for a dynamic hit).
 public static float3 gv_motionObjDisp = float3(0.0, 0.0, 0.0);
+// M2 fast path: when the deterministic reflection leaf reaches opaque content/sky in exactly one ray,
+// Pass A already owns the endpoint that specularReflectionMotion would trace again. More complex leaves
+// leave this false and retain the deterministic auxiliary guide trace.
+public static bool gv_directReflectionEndpointValid = false;
+public static float3 gv_directReflectionEndpoint = float3(0.0, 0.0, 0.0);
+public static float3 gv_directReflectionMotionPrev = float3(0.0, 0.0, 0.0);
 // Transmission replaces the ordinary guide tuple with the visible destination, so RR's specular inputs
 // (specular albedo + reflection MV) need the foreground glass/water interface kept separately. This is
 // the surface the reflection physically lives on; for an opaque primary hit it is that hit itself.
@@ -87,22 +93,27 @@ public float2 specularReflectionMotion(SpecSurface surface, float3 primaryDir,
     float3 surfacePos = surface.camRel + worldPush.camOffset;
     float3 n = normalize(surface.normal);
     float3 specDir = reflect(primaryDir, n);
-    // biasNormal is a closest-hit normal, already unit length, and only its sign matters here.
-    traceGuide(CULL_SECONDARY,
-            offsetSurfaceOrigin(surfacePos, surface.biasNormal, specDir, SURF_BIAS),
-            RAY_TMIN, specDir, 10000.0,
-            max(length(surface.camRel) * primaryConeSpread, RAY_CONE_MIN_WIDTH),
-            max(primaryConeSpread, RAY_CONE_MIN_SPREAD));
 
     float3 reflectedHit;
     float3 reflectedMotionPrev;
-    if (payload.hitT > 0.0) {
-        reflectedHit = surfacePos + specDir * payload.hitT;
-        reflectedMotionPrev = payloadMaterial() == MATERIAL_OPAQUE
-                ? payload.motionPrev : float3(0.0, 0.0, 0.0);
+    if (gv_directReflectionEndpointValid) {
+        reflectedHit = gv_directReflectionEndpoint;
+        reflectedMotionPrev = gv_directReflectionMotionPrev;
     } else {
-        reflectedHit = surfacePos + specDir * 1.0e6;
-        reflectedMotionPrev = float3(0.0, 0.0, 0.0);
+        // biasNormal is a closest-hit normal, already unit length, and only its sign matters here.
+        traceGuide(CULL_SECONDARY,
+                offsetSurfaceOrigin(surfacePos, surface.biasNormal, specDir, SURF_BIAS),
+                RAY_TMIN, specDir, 10000.0,
+                max(length(surface.camRel) * primaryConeSpread, RAY_CONE_MIN_WIDTH),
+                max(primaryConeSpread, RAY_CONE_MIN_SPREAD));
+        if (payload.hitT > 0.0) {
+            reflectedHit = surfacePos + specDir * payload.hitT;
+            reflectedMotionPrev = payloadMaterial() == MATERIAL_OPAQUE
+                    ? payload.motionPrev : float3(0.0, 0.0, 0.0);
+        } else {
+            reflectedHit = surfacePos + specDir * 1.0e6;
+            reflectedMotionPrev = float3(0.0, 0.0, 0.0);
+        }
     }
     float3 previousN = length(surface.previousNormal) >= 0.5
             ? normalize(surface.previousNormal) : n;
@@ -129,7 +140,8 @@ public void setTransmissionGuide(float3 hitCamRel, float3 motionPrev, float3 nor
 public void resolveTransmissionGuide(float3 surfacePos, float3 transmittedDir,
                               float3 surfaceBiasNormal,
                               float currentIor, float rayBias,
-                              float rayConeWidth, float rayConeSpread) {
+                              float rayConeWidth, float rayConeSpread,
+                              float3 guideFilter) {
     if (dot(transmittedDir, transmittedDir) <= 0.0) return;
 
     float3 direction = normalize(transmittedDir);
@@ -142,7 +154,8 @@ public void resolveTransmissionGuide(float3 surfacePos, float3 transmittedDir,
                 rayConeWidth, rayConeSpread);
         if (payload.hitT <= 0.0) {
             setTransmissionGuide((ro + direction * 1.0e6) - worldPush.camOffset,
-                    float3(0.0, 0.0, 0.0), float3(0.0, 0.0, 0.0), 1.0, SKY_DIFF_ALBEDO);
+                    float3(0.0, 0.0, 0.0), float3(0.0, 0.0, 0.0), 1.0,
+                    guideFilter * SKY_DIFF_ALBEDO);
             return;
         }
 
@@ -155,11 +168,18 @@ public void resolveTransmissionGuide(float3 surfacePos, float3 transmittedDir,
                     ? payload.albedo
                     : payload.albedo * (1.0 - clamp(payloadMetalness(), 0.0, 1.0));
             setTransmissionGuide(interfacePos - worldPush.camOffset, payload.motionPrev,
-                    payload.normal, endpointRoughness, endpointAlbedo);
+                    payload.normal, endpointRoughness, guideFilter * endpointAlbedo);
             return;
         }
 
         if (material != MATERIAL_WATER && material != MATERIAL_DIELECTRIC) return;
+
+        // The closest-hit shader has already alpha-blended stained-glass texture/tint toward white.
+        // Count each dielectric volume once on entry; applying it again at the exit face would square a
+        // single block's filter. Water uses payload.albedo to parameterize Beer extinction instead.
+        if (material == MATERIAL_DIELECTRIC && payloadDielectricEntering()) {
+            guideFilter *= payload.albedo;
+        }
 
         // Mirror the radiance path's refraction. Absorption inside the crossed media is deliberately NOT
         // folded into the albedo guide: RR demodulates by albedo, and a distance-dependent attenuation

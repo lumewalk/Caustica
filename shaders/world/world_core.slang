@@ -86,8 +86,12 @@ public static const float MIRROR_ALPHA_MAX = 4.0e-4; // LabPBR perceptual smooth
 // Above this the specular lobe is too broad for a single mirrored reprojection to describe, so the
 // reflection MV is left at zero and RR falls back to the ordinary MV.
 public static const float SPEC_MOTION_ALPHA_MAX = 0.25; // perceptual smoothness <= 0.5
+
+public bool isDeltaAlpha(float roughness) {
+    return clamp(roughness, 0.0, 1.0) <= MIRROR_ALPHA_MAX;
+}
+
 public static const uint MAX_TRANSMISSION_GUIDE_HITS = 8u;
 // Continuations one sample may carry: the camera segment, plus the reflection branch a primary
 // dielectric splits off. Raising this needs a real queue, which is what the continuation buffer is for.
 public static const uint MAX_PATH_SEGMENTS = 2u;
-

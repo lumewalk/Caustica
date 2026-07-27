@@ -22,7 +22,10 @@ import water;
 import trace;
 import guides;
 
-public PathSegment tracePrimary(PathSegment seg, bool captureGuides, out bool alive) {
+public PathSegment tracePrimary(PathSegment seg, bool captureGuides, bool allowSplit,
+                                DevicePtr<PackedPathSegment> queue,
+                                uint splitRecord,
+                                out uint nextRecord, out bool alive) {
     float3 ro = seg.ro;
     float3 rd = seg.rd;
     float3 throughput = seg.throughput;
@@ -31,20 +34,28 @@ public PathSegment tracePrimary(PathSegment seg, bool captureGuides, out bool al
     float rayConeSpread = max(seg.rayConeSpread, RAY_CONE_MIN_SPREAD);
     uint seed = seg.seed;
     bool showCelestial = seg.showCelestial;
-    int diffuseDepth = seg.diffuseDepth;
     int maxBounces = int(worldPush.maxBounces);
-    int rrStart = maxBounces <= 3 ? 1 : 2;
     bool waterWaves = (worldPush.flags & 16u) != 0u;
+    bool awaitingDirectReflectionEndpoint = false;
+    if (captureGuides) {
+        gv_directReflectionEndpointValid = false;
+    }
+    nextRecord = PATH_NO_NEXT;
     alive = false;
 
     for (int bounce = seg.bounce; bounce <= maxBounces; ++bounce) {
         PathSegment terminal = makePathSegment(ro, rd, throughput, medium,
-                                               rayConeWidth, rayConeSpread, seed, bounce, diffuseDepth,
+                                               rayConeWidth, rayConeSpread, seed, bounce,
                                                showCelestial, false, false);
         traceRadianceReordered(bounce == 0 ? CULL_PRIMARY : CULL_SECONDARY,
                                ro, 0.0, rd, 10000.0, showCelestial, rayConeWidth, rayConeSpread);
 
         if (payload.hitT < 0.0) {
+            if (awaitingDirectReflectionEndpoint) {
+                gv_directReflectionEndpointValid = true;
+                gv_directReflectionEndpoint = ro + rd * 1.0e6;
+                gv_directReflectionMotionPrev = float3(0.0, 0.0, 0.0);
+            }
             if (bounce == 0 && captureGuides) {
                 gv_normal = float3(0.0, 0.0, 0.0);
                 gv_albedo = SKY_DIFF_ALBEDO;
@@ -63,6 +74,14 @@ public PathSegment tracePrimary(PathSegment seg, bool captureGuides, out bool al
         float3 hitPos = ro + rd * payload.hitT;
         uint material = payloadMaterial();
         if (material != MATERIAL_WATER && material != MATERIAL_DIELECTRIC) {
+            float rough = material == MATERIAL_PARTICLE
+                    ? 1.0 : clamp(payloadRoughness(), 0.0, 1.0);
+            bool exactSpecular = material == MATERIAL_OPAQUE && isDeltaAlpha(rough);
+            rough = exactSpecular ? 0.0 : rough;
+            float metal = material == MATERIAL_PARTICLE
+                    ? 0.0 : clamp(payloadMetalness(), 0.0, 1.0);
+            float3 diffAlb = material == MATERIAL_PARTICLE
+                    ? float3(payload.albedo) : float3(payload.albedo) * (1.0 - metal);
             if (bounce == 0 && captureGuides) {
                 gv_normal = n;
                 gv_hitCamRel = hitPos - worldPush.camOffset;
@@ -75,16 +94,39 @@ public PathSegment tracePrimary(PathSegment seg, bool captureGuides, out bool al
                     gv_spec = makeSpecSurface(gv_hitCamRel, n, 1.0,
                                               float3(0.0, 0.0, 0.0));
                 } else {
-                    float rough = clamp(payloadRoughness(), 0.0, 1.0);
-                    rough = rough <= MIRROR_ALPHA_MAX ? 0.0 : rough;
-                    float metal = clamp(payloadMetalness(), 0.0, 1.0);
-                    float3 diffAlb = payload.albedo * (1.0 - metal);
                     float3 v = -rd;
                     gv_albedo = diffAlb;
                     gv_rough = rough;
                     gv_spec = makeSpecSurface(gv_hitCamRel, n, rough,
                                               rrSpecularAlbedo(payload.f0, rough, dot(n, v)));
                 }
+            }
+
+            // A non-emissive pure delta mirror is primary transport. Consume it here so the reflected
+            // feature remains outside Pass B's indirect-hit budget. Mixed diffuse+specular and emissive
+            // surfaces remain terminal in Pass B.
+            bool pureDeltaMirror = exactSpecular
+                    && luminance(diffAlb) <= 1.0e-6
+                    && payloadEmission() <= 0.0;
+            if (pureDeltaMirror) {
+                awaitingDirectReflectionEndpoint = false; // a mirror chain needs the fallback guide trace
+                if (any(medium.current.extinction > 0.0)) {
+                    throughput *= exp(-medium.current.extinction * payload.hitT);
+                }
+                rayConeWidth = max(rayConeWidth + rayConeSpread * max(payload.hitT, 0.0),
+                        RAY_CONE_MIN_WIDTH);
+                float3 v = -rd;
+                throughput *= fresnelSchlick(clamp(dot(n, v), 0.0, 1.0), payload.f0);
+                rd = reflect(rd, n);
+                ro = offsetSurfaceOrigin(hitPos, n, rd, SURF_BIAS);
+                showCelestial = true;
+                continue;
+            }
+            if (awaitingDirectReflectionEndpoint) {
+                gv_directReflectionEndpointValid = true;
+                gv_directReflectionEndpoint = hitPos;
+                gv_directReflectionMotionPrev = material == MATERIAL_OPAQUE
+                        ? float3(payload.motionPrev) : float3(0.0, 0.0, 0.0);
             }
             alive = true;
             return terminal;
@@ -99,6 +141,11 @@ public PathSegment tracePrimary(PathSegment seg, bool captureGuides, out bool al
                            RAY_CONE_MIN_WIDTH);
 
         bool isWater = material == MATERIAL_WATER;
+        if (awaitingDirectReflectionEndpoint) {
+            // A second dielectric makes this a multi-interface/stochastic endpoint; retain the
+            // deterministic reflection-guide trace instead of reusing a noisy radiance leaf.
+            awaitingDirectReflectionEndpoint = false;
+        }
         bool entering = payloadDielectricEntering();
         float3 geometricNormal = n;
         float3 previousNormal = n;
@@ -142,8 +189,43 @@ public PathSegment tracePrimary(PathSegment seg, bool captureGuides, out bool al
             if (dot(transmittedDir, transmittedDir) > 0.0) {
                 resolveTransmissionGuide(hitPos, transmittedDir, geometricNormal,
                                          entering ? entered.ior : medium.outer.ior,
-                                         transmitBias, rayConeWidth, rayConeSpread);
+                                         transmitBias, rayConeWidth, rayConeSpread,
+                                         !isWater && entering
+                                                 ? float3(payload.albedo)
+                                                 : float3(1.0, 1.0, 1.0));
             }
+        }
+
+        // M2 splits once at the first non-TIR visually-primary Fresnel interface. The transmitted
+        // continuation is written to device memory BEFORE the reflection trace begins, so it cannot
+        // become a live range spanning traversal. The caller reloads and walks it only after this leaf's
+        // terminal record has itself been written.
+        bool splitEligible = allowSplit
+                && dot(transmittedDir, transmittedDir) > 0.0
+                && F > 0.0 && F < 1.0;
+        if (splitEligible) {
+            MediumStack transmittedMedium = medium;
+            if (entering) {
+                mediumPush(transmittedMedium, entered);
+            } else {
+                mediumPop(transmittedMedium);
+            }
+            float3 deferredDir = normalize(transmittedDir);
+            PathSegment deferred = makePathSegment(
+                    offsetSurfaceOrigin(hitPos, geometricNormal, deferredDir, transmitBias),
+                    deferredDir, throughput * (1.0 - F), transmittedMedium,
+                    rayConeWidth, rayConeSpread, seed, bounce + 1,
+                    true, false, false);
+            queue[splitRecord] = packPathSegment(deferred, true, PATH_NO_NEXT);
+            nextRecord = splitRecord;
+            throughput *= F;
+            seed ^= 0xa511e9b3u;
+            rd = reflect(rd, n);
+            ro = offsetSurfaceOrigin(hitPos, geometricNormal, rd, SURF_BIAS);
+            showCelestial = true;
+            awaitingDirectReflectionEndpoint = captureGuides && bounce == 0;
+            allowSplit = false;
+            continue;
         }
 
         if (rndf(seed) < F) {
@@ -162,13 +244,6 @@ public PathSegment tracePrimary(PathSegment seg, bool captureGuides, out bool al
             }
         }
         showCelestial = true;
-        if (bounce >= rrStart) {
-            float q = clamp(max(throughput.r, max(throughput.g, throughput.b)), 0.02, 1.0);
-            if (rndf(seed) > q) {
-                return terminal;
-            }
-            throughput /= q;
-        }
     }
     return seg;
 }
@@ -196,18 +271,40 @@ void main() {
             : airMedium());
     uint spp = max(worldPush.spp, 1u);
     uint pixelIndex = dispatchIndex.y * dimensions.x + dispatchIndex.x;
+    uint baseRecordCount = dimensions.x * dimensions.y * spp;
+    uint splitRecord = baseRecordCount + pixelIndex;
     DevicePtr<PackedPathSegment> queue = DevicePtr<PackedPathSegment>(pc.pathQueueAddr);
 
     for (uint s = 0u; s < spp; ++s) {
         seed = pcg(seed);
-        PathSegment camera = makePathSegment(origin, dir, float3(1.0, 1.0, 1.0),
-                cameraMedium, 0.0, rayConeSpread, seed, 0, 0, true, false, false);
-        bool alive;
-        PathSegment terminal = tracePrimary(camera, s == 0u, alive);
-        // Store immediately: no continuation remains live across writeGuides or another primary trace.
-        queue[pixelIndex * spp + s] = packPathSegment(terminal, pixelIndex, s, alive);
-        if (s == 0u) {
-            writeGuides(pix, dir, jndc, size, rayConeSpread);
+        PathSegment current = makePathSegment(origin, dir, float3(1.0, 1.0, 1.0),
+                cameraMedium, 0.0, rayConeSpread, seed, 0, true, false, false);
+        uint recordIndex = pixelIndex * spp + s;
+        bool captureGuides = s == 0u;
+        // The variance-reduction split is a per-pixel expense, not a per-sample expense. Additional
+        // SPP samples retain the unbiased stochastic Fresnel choice, bounding this invocation to one
+        // secondary leaf for the pixel regardless of SPP.
+        bool allowSplit = s == 0u;
+        [loop]
+        for (uint leaf = 0u; leaf < 2u; ++leaf) {
+            uint nextRecord;
+            bool alive;
+            PathSegment terminal = tracePrimary(current, captureGuides, allowSplit,
+                    queue, splitRecord, nextRecord, alive);
+            // Store the completed leaf immediately. If it split, only a uint link—not the deferred
+            // PathSegment—survived its traces; the branch itself is reloaded below.
+            queue[recordIndex] = packPathSegment(terminal, alive, nextRecord);
+            if (captureGuides) {
+                writeGuides(pix, dir, jndc, size, rayConeSpread);
+                captureGuides = false;
+            }
+            if (nextRecord == PATH_NO_NEXT) {
+                break;
+            }
+            bool deferredValid;
+            current = unpackPathSegment(queue[nextRecord], deferredValid);
+            recordIndex = nextRecord;
+            allowSplit = false;
         }
     }
 

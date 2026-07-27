@@ -57,11 +57,9 @@ public float3 tracePath(PathSegment seg, uint2 pix, uint sampleIndex) {
     // diffuse-sampled continuation rays — those are already covered by the sun NEE, so the tiny disc
     // would be a double-counted firefly. Reset true on every specular/water bounce, false on a diffuse one.
     bool showCelestial = seg.showCelestial;
-    // Number of surfaces this path has SHADED so far, as distinct from `bounce`, which also counts
-    // dielectric interfaces. Glass and water continue without shading anything, so a wall behind a pane
-    // is bounce 1 but diffuseDepth 0 — visually primary, and it must be treated as such. See
-    // RIS_MAX_DIFFUSE_DEPTH.
-    int diffuseDepth = seg.diffuseDepth;
+    // Pass B treats every hit it sees as one indirect-depth step, regardless of material or selected
+    // continuation lobe. Pass A's primary/interface prefix is outside this budget.
+    int indirectDepth = 0;
     for (int bounce = seg.bounce; bounce <= maxBounces; bounce++) {
         // Radiance SBT records run any-hit only for true alpha cutout. Translucent/water go straight to
         // closest-hit for dielectric handling. Geometry is double-sided; the chit flips the normal.
@@ -90,6 +88,7 @@ public float3 tracePath(PathSegment seg, uint2 pix, uint sampleIndex) {
         float3 hitPos = ro + rd * payload.hitT;
         rayConeWidth = max(rayConeWidth + rayConeSpread * max(payload.hitT, 0.0), RAY_CONE_MIN_WIDTH);
         uint material = payloadMaterial();
+        int hitDepth = indirectDepth++;
 
         // ---- Dielectric interface: water, stained glass, ice. ONE handler and one behaviour — every
         // dielectric is a volume. Fresnel from the relative index across the face, then reflect or
@@ -187,10 +186,10 @@ public float3 tracePath(PathSegment seg, uint2 pix, uint sampleIndex) {
             // RIS direct lighting from block emitters (lava, glowstone, torches, ...) — same reservoir
             // sampler as terrain/entities, but two-sided: a billboard has no back face, so light
             // striking either side of the quad should still land (matches the sun/moon NEE above).
-            if (risOn && diffuseDepth <= int(RIS_MAX_DIFFUSE_DEPTH)) {
+            if (risOn && hitDepth <= int(RIS_MAX_INDIRECT_DEPTH)) {
                 float3 v = -rd;
                 Reservoir r = risInitial(hitPos, n, v, rd, albedo, float3(0.0, 0.0, 0.0), 1.0,
-                                         true, 0.0, uint(diffuseDepth), seed, proposalSeed);
+                                         true, 0.0, uint(hitDepth), seed, proposalSeed);
                 float3 risVis;
                 L += throughput * shadeReservoir(r, hitPos, n, v, rd, albedo, float3(0.0, 0.0, 0.0), 1.0,
                                                  true, 0.0, risVis);
@@ -204,7 +203,6 @@ public float3 tracePath(PathSegment seg, uint2 pix, uint sampleIndex) {
             rd = cosineDir(n, seed);
             rayConeSpread = max(rayConeSpread, RAY_CONE_DIFFUSE_SPREAD);
             showCelestial = false; // diffuse receiver: direct sun/moon was handled by NEE above
-            diffuseDepth++;        // a billboard is a shaded surface, unlike the dielectric branches
             continue;
         }
 
@@ -220,7 +218,7 @@ public float3 tracePath(PathSegment seg, uint2 pix, uint sampleIndex) {
         // Unresolvably tight lobes become exact delta mirrors; everything else keeps its authored value.
         // Snapping to 0 also propagates into the guide buffers, which is what tells RR to hold the
         // reflection sharp instead of accumulating it as a glossy lobe.
-        bool exactSpecular = rough <= MIRROR_ALPHA_MAX;
+        bool exactSpecular = isDeltaAlpha(rough);
         rough = exactSpecular ? 0.0 : rough;
         float3 diffAlb = albedo * (1.0 - metal);
         float3 F0 = payload.f0;
@@ -238,7 +236,7 @@ public float3 tracePath(PathSegment seg, uint2 pix, uint sampleIndex) {
         // One gate drives both the RIS call below and the direct-hit emission suppression here. They must
         // agree: gateEmitter exists only because RIS already accounted for this emitter, so a bounce where
         // RIS is skipped must also gather emission directly or that light is lost outright.
-        bool risActive = risOn && diffuseDepth <= int(RIS_MAX_DIFFUSE_DEPTH);
+        bool risActive = risOn && hitDepth <= int(RIS_MAX_INDIRECT_DEPTH);
         bool gateEmitter = risActive && payloadEmitterInList();
         if (emission > 0.0 && (!gateEmitter || showCelestial)) {
             L += throughput * albedo * emission;
@@ -281,14 +279,12 @@ public float3 tracePath(PathSegment seg, uint2 pix, uint sampleIndex) {
         // RIS direct lighting from block emitters (single-frame only, no temporal reservoir reuse).
         // Front lobe + SSS backlighting are resampled together and share ONE shadow ray — a light can
         // only be in front of n or behind it, never both, so combining them into one target function is
-        // exact, not an approximation. The SSS term is gated off past MAX_SSS_DIFFUSE_DEPTH by passing
-        // sss=0 there (falls back to plain front-only RIS). Keyed on diffuseDepth, not `bounce`, for the
-        // same reason as RIS_MAX_DIFFUSE_DEPTH above: leaves seen through a window are still the first
-        // surface this path has shaded, and should still backlight.
+        // exact, not an approximation. The SSS term is gated off past MAX_SSS_INDIRECT_DEPTH by passing
+        // sss=0 there (falls back to plain front-only RIS).
         if (risActive) {
-            float activeSss = diffuseDepth <= MAX_SSS_DIFFUSE_DEPTH ? sss : 0.0;
+            float activeSss = hitDepth <= MAX_SSS_INDIRECT_DEPTH ? sss : 0.0;
             Reservoir r = risInitial(hitPos, n, v, rd, diffAlb, F0, rough, false, activeSss,
-                                     uint(diffuseDepth), seed, proposalSeed);
+                                     uint(hitDepth), seed, proposalSeed);
             float3 risVis;
             L += throughput * shadeReservoir(r, hitPos, n, v, rd, diffAlb, F0, rough, false,
                                              activeSss, risVis);
@@ -299,7 +295,7 @@ public float3 tracePath(PathSegment seg, uint2 pix, uint sampleIndex) {
         // through them toward the light source). Shadow ray fires from the back face to avoid
         // self-occlusion. cosT = dot(lightDir, rd): rd tracks the ray toward the sun when the sun is
         // behind the slab, giving cosT ≈ 1 → forward-scatter peak.
-        if (sss > 0.0 && diffuseDepth <= MAX_SSS_DIFFUSE_DEPTH) {
+        if (sss > 0.0 && hitDepth <= MAX_SSS_INDIRECT_DEPTH) {
             float backNdl = max(0.0, dot(-n, lightDir));
             if (backNdl > 0.0) {
                 VisibilityResult shadowBack = visibility(hitPos - n * SURF_BIAS, lightDir, 10000.0);
@@ -316,11 +312,6 @@ public float3 tracePath(PathSegment seg, uint2 pix, uint sampleIndex) {
                 }
             }
         }
-
-        // Every shading term for this surface is now accounted for, so it counts toward the shaded depth.
-        // The dielectric branches above return before reaching here, which is exactly the distinction
-        // between this and `bounce`.
-        diffuseDepth++;
 
         // Indirect continuation: importance-sample the diffuse OR the GGX specular lobe, chosen by their
         // relative reflectance.
@@ -383,10 +374,19 @@ void main() {
     ConstPtr<PackedPathSegment> queue = ConstPtr<PackedPathSegment>(pc.pathQueueAddr);
     float3 frameRadiance = float3(0.0, 0.0, 0.0);
     for (uint s = 0u; s < spp; ++s) {
-        bool valid;
-        PathSegment segment = unpackPathSegment(queue[pixelIndex * spp + s], valid);
-        if (valid) {
-            frameRadiance += tracePath(segment, uint2(pix), s);
+        uint recordIndex = pixelIndex * spp + s;
+        // [loop]
+        for (uint leaf = 0u; leaf < 2u; ++leaf) {
+            PackedPathSegment packed = queue[recordIndex];
+            bool valid;
+            PathSegment segment = unpackPathSegment(packed, valid);
+            if (valid) {
+                frameRadiance += tracePath(segment, uint2(pix), s + leaf * spp);
+            }
+            if (packed.nextRecord == PATH_NO_NEXT) {
+                break;
+            }
+            recordIndex = packed.nextRecord;
         }
     }
     outImage[pix] = float4(frameRadiance / float(spp), 1.0);
