@@ -2,6 +2,7 @@ package dev.comfyfluffy.caustica.rt;
 
 import dev.comfyfluffy.caustica.rt.accel.RtBuffer;
 import dev.comfyfluffy.caustica.rt.accel.RtImage;
+import dev.comfyfluffy.caustica.rt.gen.PathReservoirData;
 import dev.comfyfluffy.caustica.rt.pipeline.RtPathTemporalPipeline;
 import java.nio.ByteBuffer;
 import org.lwjgl.vulkan.VK10;
@@ -16,7 +17,7 @@ import org.lwjgl.vulkan.VkCommandBuffer;
  */
 final class RtPathReservoirHistory {
     static final int SLOT_COUNT = 2;
-    static final int BYTES_PER_RESERVOIR = 64;
+    static final int BYTES_PER_RESERVOIR = PathReservoirData.BYTE_SIZE;
 
     record Frame(long generation, int writeSlot, int previousSlot, boolean previousAvailable) {
         int finalSlot() {

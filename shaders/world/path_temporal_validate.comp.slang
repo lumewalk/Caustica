@@ -27,7 +27,8 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID) {
 
     // 0 current empty, 1 first frame/reset, 2 surface reprojection reject, 3 previous empty,
     // 4 generation mismatch, 5 depth mismatch, 6 transport mismatch, 7 topology mismatch,
-    // 8 footprint mismatch, 9 strictly compatible and ready for future replay/shift evaluation.
+    // 8 footprint mismatch, 9 strictly compatible and ready for future replay/shift evaluation,
+    // 10 replay ABI mismatch.
     uint debugState = current.weights.y > 0.0 && current.sampleRadianceTarget.w > 0.0 ? 1u : 0u;
     bool historyAvailable = (pc.historyFlags & 8u) != 0u
             && pc.pathReservoirPreviousAddr != 0u;
@@ -63,7 +64,10 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID) {
                     float footprintRatio = max(currentFootprint, previousFootprint)
                             / min(currentFootprint, previousFootprint);
 
-                    if (currentGeneration != expectedGeneration
+                    if (current.replay.z != PATH_REPLAY_VERSION
+                            || previous.replay.z != PATH_REPLAY_VERSION) {
+                        debugState = 10u;
+                    } else if (currentGeneration != expectedGeneration
                             || previousGeneration != expectedGeneration) {
                         debugState = 4u;
                     } else if (currentDepth != previousDepth) {
@@ -93,6 +97,7 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID) {
         else if (debugState == 6u) color = float3(0.95, 0.30, 0.04); // transport mismatch
         else if (debugState == 7u) color = float3(0.15, 0.35, 0.95); // topology mismatch
         else if (debugState == 8u) color = float3(0.55, 0.10, 0.95); // footprint mismatch
+        else if (debugState == 10u) color = float3(0.05, 0.85, 0.95); // replay ABI mismatch
         else color = float3(0.05, 0.95, 0.20);                       // strict compatibility accepted
         debugColor[pixel] = float4(color, 1.0);
     }

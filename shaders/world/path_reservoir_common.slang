@@ -10,11 +10,15 @@ public static const uint PATH_TRANSPORT_DIFFUSE = 1u;
 public static const uint PATH_TRANSPORT_GLOSSY = 2u;
 public static const uint PATH_TRANSPORT_DELTA = 4u;
 public static const uint PATH_TRANSPORT_TRANSMISSION = 8u;
+// Increment whenever replay metadata or RNG interpretation changes. Temporal reuse must reject
+// reservoirs produced by a different contract instead of trying to replay an incompatible path.
+public static const uint PATH_REPLAY_VERSION = 1u;
 
 public struct PathTraceResult {
     public float3 radiance;
     public uint depth;
     public uint topologyKey;
+    public uint replaySeed;
     public uint replayState;
     public uint transportMask;
     public float footprint;
@@ -30,6 +34,7 @@ public PathReservoir pathReservoirEmpty() {
     reservoir.proposalShift = float4(1.0, 1.0, 1.0, 0.0);
     reservoir.weights = float4(0.0);
     reservoir.identity = uint4(0u);
+    reservoir.replay = uint4(0u);
     return reservoir;
 }
 
@@ -73,6 +78,10 @@ public void pathReservoirUpdate(inout PathReservoir reservoir,
                 max(candidate.footprint, 1.0e-5), asfloat(candidate.replayState));
         reservoir.identity = uint4(sampleId, pathKey, candidate.topologyKey,
                 pathPackMetadata(historyGeneration, candidate.depth, candidate.transportMask));
+        // Storage-only replay contract. The current estimator deliberately does not consume this lane;
+        // a later path-replay stage will validate the version before reconstructing the selected path.
+        reservoir.replay = uint4(candidate.replaySeed, candidate.replayState,
+                PATH_REPLAY_VERSION, candidate.depth);
     }
 
     reservoir.weights.x = nextWeightSum;

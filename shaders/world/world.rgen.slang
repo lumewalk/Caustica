@@ -42,6 +42,7 @@ public PathTraceResult tracePath(PathSegment seg, uint2 pix, uint sampleIndex, b
     // produces independent lighting/BSDF paths from the shared terminal continuation.
     uint seed = seg.seed ^ sampleIndex * 2246822519u;
     seed = pcg(seed);
+    uint replaySeed = seed;
     // Topology must describe transport structure, not the random seed. Temporal admission compares
     // this key across frames; seed/sample identity lives separately in sampleId and replayState.
     uint topologyKey = captureMetadata ? pathHash(0x91E10DA5u ^ uint(seg.bounce)) : 0u;
@@ -425,6 +426,7 @@ public PathTraceResult tracePath(PathSegment seg, uint2 pix, uint sampleIndex, b
     result.radiance = L;
     result.depth = uint(max(indirectDepth, 0));
     result.topologyKey = topologyKey;
+    result.replaySeed = replaySeed;
     result.replayState = seed;
     result.transportMask = transportMask;
     result.footprint = max(rayConeWidth, RAY_CONE_MIN_WIDTH);
@@ -474,6 +476,7 @@ void main() {
         float3 sampleRadiance = float3(0.0);
         uint sampleDepth = 0u;
         uint sampleTopology = pathHash(0x7F4A7C15u);
+        uint sampleReplaySeed = 0u;
         uint sampleReplayState = 0u;
         uint sampleTransportMask = 0u;
         float sampleFootprint = RAY_CONE_MIN_WIDTH;
@@ -482,6 +485,9 @@ void main() {
             PackedPathSegment packed = queue[recordIndex];
             PathSegment segment = unpackPathSegment(packed);
             PathTraceResult traced = tracePath(segment, uint2(pix), s + leaf * spp, true);
+            if (leaf == 0u) {
+                sampleReplaySeed = traced.replaySeed;
+            }
             sampleRadiance += traced.radiance;
             sampleDepth = max(sampleDepth, traced.depth);
             sampleTopology = pathTopologyStep(sampleTopology,
@@ -499,6 +505,7 @@ void main() {
         candidate.radiance = sampleRadiance;
         candidate.depth = sampleDepth;
         candidate.topologyKey = sampleTopology;
+        candidate.replaySeed = sampleReplaySeed;
         candidate.replayState = sampleReplayState;
         candidate.transportMask = sampleTransportMask;
         candidate.footprint = sampleFootprint;
