@@ -34,20 +34,22 @@ final class RtMaterialLayoutTest {
 
     @Test
     void reflectedWorldPushConstantsIncludeLightBuffersAndDebugView() {
-        // 12 uint64_t addresses + frame/debug/history uints, rounded to the reflected 8-byte alignment.
-        assertEquals(112, WorldPushConstantsData.BYTE_SIZE);
+        // 13 uint64_t addresses + frame/debug/history/generation uints.
+        assertEquals(120, WorldPushConstantsData.BYTE_SIZE);
         ByteBuffer data = ByteBuffer.allocateDirect(WorldPushConstantsData.BYTE_SIZE)
                 .order(ByteOrder.nativeOrder());
         new WorldPushConstantsData(1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L, 10L, 11L, 12L,
-                13, 14, 15).write(data);
+                13L, 14, 15, 16, 17).write(data);
         assertEquals(4L, data.getLong(24));  // materialTableAddr
         assertEquals(5L, data.getLong(32));  // lightBufAddr
         assertEquals(9L, data.getLong(64));  // lightGridSpanAddr (last of the light-buffer addresses)
         assertEquals(10L, data.getLong(72)); // pathQueueAddr
         assertEquals(11L, data.getLong(80)); // directReservoirAddr
         assertEquals(12L, data.getLong(88)); // pathReservoirAddr
-        assertEquals(13, data.getInt(96));   // frameIndex
-        assertEquals(14, data.getInt(100));  // debugView
-        assertEquals(15, data.getInt(104));  // historyFlags
+        assertEquals(13L, data.getLong(96)); // pathReservoirPreviousAddr
+        assertEquals(14, data.getInt(104));  // frameIndex
+        assertEquals(15, data.getInt(108));  // debugView
+        assertEquals(16, data.getInt(112));  // historyFlags
+        assertEquals(17, data.getInt(116));  // historyGeneration
     }
 }

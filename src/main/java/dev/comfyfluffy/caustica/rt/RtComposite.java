@@ -1108,11 +1108,14 @@ public final class RtComposite {
                     terrain.lightGridSpanBufferAddress(), continuationQueue.deviceAddress,
                     directReservoirs.finalBuffer(reservoirFrame).deviceAddress,
                     restirPt ? pathReservoirs.finalBuffer(pathReservoirFrame).deviceAddress : 0L,
+                    restirPt && pathReservoirFrame.previousAvailable()
+                            ? pathReservoirs.previousBuffer(pathReservoirFrame).deviceAddress : 0L,
                     (int) frameCounter, debugView,
                     (reservoirFrame.previousAvailable() ? 1 : 0)
                             | (restirDirect ? 2 : 0)
                             | (restirPt ? 4 : 0)
-                            | (restirPt && pathReservoirFrame.previousAvailable() ? 8 : 0)).write(pushConstants);
+                            | (restirPt && pathReservoirFrame.previousAvailable() ? 8 : 0),
+                    restirPt ? (int) pathReservoirFrame.generation() : 0).write(pushConstants);
             try (RtFrameStats.Scope ignoredTrace = RtFrameStats.FRAME.stage("frame.trace")) {
                 try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd, "world primary trace");
                      RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage("frame.tracePrimary")) {

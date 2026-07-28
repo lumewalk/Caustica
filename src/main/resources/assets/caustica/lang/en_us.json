@@ -62,6 +62,7 @@
 	"caustica.options.rt.debugView.10": "ReSTIR Temporal Reuse",
 	"caustica.options.rt.debugView.11": "ReSTIR Spatial Reuse",
 	"caustica.options.rt.debugView.12": "ReSTIR Direct Resolve",
+	"caustica.options.rt.debugView.13": "ReSTIR PT Candidate",
 	"caustica.options.rt.restirDirect": "ReSTIR Direct Lighting",
 	"caustica.options.rt.restirDirect.tooltip": "Replace valid first-interface emitter lighting with the temporal/spatial ReSTIR reservoir.",
 	"caustica.options.rt.restirPt": "ReSTIR PT Experimental Storage",

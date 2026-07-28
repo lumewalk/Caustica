@@ -28,10 +28,12 @@ public struct WorldPushConstants {
     public uint64_t lightGridSpanAddr;   // packed weighted section spans referenced by cell headers
     public uint64_t pathQueueAddr;       // packed primary -> indirect continuation records
     public uint64_t directReservoirAddr; // finalized per-pixel ReSTIR DI reservoirs
-    public uint64_t pathReservoirAddr;   // current ping-pong ReSTIR PT path-reservoir slot (0 = disabled)
+    public uint64_t pathReservoirAddr;   // current ReSTIR PT path-reservoir write slot (0 = disabled)
+    public uint64_t pathReservoirPreviousAddr; // generation-matched history slot (0 = unavailable)
     public uint frameIndex;
     public uint debugView;
     public uint historyFlags;            // bit0 direct history, bit1 direct replacement, bit2 PT storage, bit3 PT history
+    public uint historyGeneration;       // low 24 bits are packed into path-sample compatibility metadata
 };
 
 // Block-breaking overlay entry: xyz = breaking block position (rebased, same space as gl_WorldRay*),
@@ -136,9 +138,9 @@ public struct DirectReservoir {
 // being validated against RtPathReservoirReference.
 //
 // sampleRadianceTarget = {unshadowed RGB contribution, target density}
-// proposalShift = {proposal density, shift Jacobian, path footprint, reserved}
+// proposalShift = {proposal density, shift Jacobian, path footprint, replay RNG state as float bits}
 // weights = {accumulated weight, effective M, final W, confidence}
-// identity = {sample id, path/queue key, topology key, packed geometry/material epoch}
+// identity = {sample id, path/queue key, topology key, packed generation/depth/transport class}
 public struct PathReservoir {
     public float4 sampleRadianceTarget;
     public float4 proposalShift;
