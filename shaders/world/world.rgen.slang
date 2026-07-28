@@ -54,6 +54,12 @@ public PathTraceResult tracePathSeeded(PathSegment seg, uint2 pix, bool captureM
     uint continuationProposalEvents = 0u;
     float rouletteProposalPdf = 1.0;
     uint rouletteProposalEvents = 0u;
+    float3 canonicalRadiance = float3(0.0);
+    bool canonicalValid = false;
+    float canonicalContinuationProposalPdf = 1.0;
+    uint canonicalContinuationProposalEvents = 0u;
+    float canonicalRouletteProposalPdf = 1.0;
+    uint canonicalRouletteProposalEvents = 0u;
     int maxBounces = int(worldPush.maxBounces);
     int rrStart = maxBounces <= 3 ? 1 : 2;
     // RIS emitter NEE: direct lighting from block emitters is active when lights are published and the
@@ -101,6 +107,10 @@ public PathTraceResult tracePathSeeded(PathSegment seg, uint2 pix, bool captureM
             // packed show-celestial flag decides whether this path segment may see the bright disc.
             float3 sky = payload.albedo;
             L += throughput * sky; // escaped to sky
+            if (!canonicalValid) {
+                canonicalRadiance = throughput * sky;
+                canonicalValid = true;
+            }
             if (captureMetadata) {
                 topologyKey = pathTopologyStep(topologyKey, 0xF001u);
             }
@@ -189,6 +199,10 @@ public PathTraceResult tracePathSeeded(PathSegment seg, uint2 pix, bool captureM
             if (chooseReflection) {
                 pathAccumulateProposal(continuationProposalPdf, continuationProposalEvents,
                         max(F, 1.0e-20));
+                if (!canonicalValid) {
+                    pathAccumulateProposal(canonicalContinuationProposalPdf,
+                            canonicalContinuationProposalEvents, max(F, 1.0e-20));
+                }
                 transportMask |= PATH_TRANSPORT_DELTA;
                 if (captureMetadata) topologyKey = pathTopologyStep(topologyKey, 0xD101u);
                 rd = reflect(rd, n);
@@ -197,6 +211,10 @@ public PathTraceResult tracePathSeeded(PathSegment seg, uint2 pix, bool captureM
                 if (dot(transmittedDir, transmittedDir) <= 0.0) break; // TIR with F < 1 cannot happen
                 pathAccumulateProposal(continuationProposalPdf, continuationProposalEvents,
                         max(1.0 - F, 1.0e-20));
+                if (!canonicalValid) {
+                    pathAccumulateProposal(canonicalContinuationProposalPdf,
+                            canonicalContinuationProposalEvents, max(1.0 - F, 1.0e-20));
+                }
                 transportMask |= PATH_TRANSPORT_TRANSMISSION;
                 if (captureMetadata) topologyKey = pathTopologyStep(topologyKey, 0xD102u);
                 rd = normalize(transmittedDir);
@@ -215,6 +233,10 @@ public PathTraceResult tracePathSeeded(PathSegment seg, uint2 pix, bool captureM
                 bool survive = rndf(seed) <= q;
                 pathAccumulateProposal(rouletteProposalPdf, rouletteProposalEvents,
                         survive ? q : 1.0 - q);
+                if (!canonicalValid) {
+                    pathAccumulateProposal(canonicalRouletteProposalPdf,
+                            canonicalRouletteProposalEvents, survive ? q : 1.0 - q);
+                }
                 if (!survive) {
                     if (captureMetadata) topologyKey = pathTopologyStep(topologyKey, 0xE102u);
                     break;
@@ -271,6 +293,11 @@ public PathTraceResult tracePathSeeded(PathSegment seg, uint2 pix, bool captureM
             rd = cosineDir(n, seed);
             pathAccumulateProposal(continuationProposalPdf, continuationProposalEvents,
                     max(abs(dot(n, rd)) * INV_PI, 1.0e-20));
+            if (!canonicalValid) {
+                pathAccumulateProposal(canonicalContinuationProposalPdf,
+                        canonicalContinuationProposalEvents,
+                        max(abs(dot(n, rd)) * INV_PI, 1.0e-20));
+            }
             transportMask |= PATH_TRANSPORT_DIFFUSE;
             if (captureMetadata) topologyKey = pathTopologyStep(topologyKey, 0xC101u);
             rayConeSpread = max(rayConeSpread, RAY_CONE_DIFFUSE_SPREAD);
@@ -305,6 +332,10 @@ public PathTraceResult tracePathSeeded(PathSegment seg, uint2 pix, bool captureM
         // Emission is already the full HDR strength (EMISSIVE_STRENGTH baseline * any override
         // multiplier baked in Java at material-compile time — see MaterialHeader.features packing).
         float emission = payloadEmission();
+        if (!canonicalValid && emission > 0.0) {
+            canonicalRadiance = throughput * albedo * emission;
+            canonicalValid = true;
+        }
         // One gate drives both the RIS call below and the direct-hit emission suppression here. They must
         // agree: gateEmitter exists only because RIS already accounted for this emitter, so a bounce where
         // RIS is skipped must also gather emission directly or that light is lost outright.
@@ -405,6 +436,10 @@ public PathTraceResult tracePathSeeded(PathSegment seg, uint2 pix, bool captureM
                 l = reflect(rd, n);
                 pathAccumulateProposal(continuationProposalPdf, continuationProposalEvents,
                         max(ps, 1.0e-20));
+                if (!canonicalValid) {
+                    pathAccumulateProposal(canonicalContinuationProposalPdf,
+                            canonicalContinuationProposalEvents, max(ps, 1.0e-20));
+                }
                 throughput *= fresnelSchlick(clamp(dot(n, v), 0.0, 1.0), F0) / ps;
                 transportMask |= PATH_TRANSPORT_DELTA;
                 if (captureMetadata) topologyKey = pathTopologyStep(topologyKey, 0xB101u);
@@ -418,6 +453,11 @@ public PathTraceResult tracePathSeeded(PathSegment seg, uint2 pix, bool captureM
                 float directionalPdf = ggxVndfReflectionPdf(n, v, h, rough);
                 pathAccumulateProposal(continuationProposalPdf, continuationProposalEvents,
                         max(ps * directionalPdf, 1.0e-20));
+                if (!canonicalValid) {
+                    pathAccumulateProposal(canonicalContinuationProposalPdf,
+                            canonicalContinuationProposalEvents,
+                            max(ps * directionalPdf, 1.0e-20));
+                }
                 // VNDF + separable Smith ⇒ weight = F · G2/G1(v) = F · G1(l); divide by the lobe pdf ps.
                 float3 F = fresnelSchlick(max(0.0, dot(v, h)), F0);
                 throughput *= F * ggxG1(ndl2, rough) / ps;
@@ -434,6 +474,11 @@ public PathTraceResult tracePathSeeded(PathSegment seg, uint2 pix, bool captureM
             rd = cosineDir(n, seed);
             pathAccumulateProposal(continuationProposalPdf, continuationProposalEvents,
                     max((1.0 - ps) * abs(dot(n, rd)) * INV_PI, 1.0e-20));
+            if (!canonicalValid) {
+                pathAccumulateProposal(canonicalContinuationProposalPdf,
+                        canonicalContinuationProposalEvents,
+                        max((1.0 - ps) * abs(dot(n, rd)) * INV_PI, 1.0e-20));
+            }
             transportMask |= PATH_TRANSPORT_DIFFUSE;
             if (captureMetadata) topologyKey = pathTopologyStep(topologyKey, 0xB103u);
             rayConeSpread = max(rayConeSpread, RAY_CONE_DIFFUSE_SPREAD);
@@ -446,6 +491,10 @@ public PathTraceResult tracePathSeeded(PathSegment seg, uint2 pix, bool captureM
             bool survive = rndf(seed) <= q;
             pathAccumulateProposal(rouletteProposalPdf, rouletteProposalEvents,
                     survive ? q : 1.0 - q);
+            if (!canonicalValid) {
+                pathAccumulateProposal(canonicalRouletteProposalPdf,
+                        canonicalRouletteProposalEvents, survive ? q : 1.0 - q);
+            }
             if (!survive) {
                 if (captureMetadata) topologyKey = pathTopologyStep(topologyKey, 0xE202u);
                 break;
@@ -470,6 +519,12 @@ public PathTraceResult tracePathSeeded(PathSegment seg, uint2 pix, bool captureM
     result.rouletteProposalPdf = rouletteProposalPdf;
     result.continuationProposalEvents = continuationProposalEvents;
     result.rouletteProposalEvents = rouletteProposalEvents;
+    result.canonicalRadiance = canonicalRadiance;
+    result.canonicalValid = canonicalValid ? 1u : 0u;
+    result.canonicalContinuationProposalPdf = canonicalContinuationProposalPdf;
+    result.canonicalRouletteProposalPdf = canonicalRouletteProposalPdf;
+    result.canonicalContinuationProposalEvents = canonicalContinuationProposalEvents;
+    result.canonicalRouletteProposalEvents = canonicalRouletteProposalEvents;
     return result;
 }
 
@@ -540,6 +595,12 @@ void main() {
         uint sampleContinuationProposalEvents = 0u;
         float sampleRouletteProposalPdf = 1.0;
         uint sampleRouletteProposalEvents = 0u;
+        float3 sampleCanonicalRadiance = float3(0.0);
+        uint sampleCanonicalValid = 0u;
+        float sampleCanonicalContinuationProposalPdf = 1.0;
+        uint sampleCanonicalContinuationProposalEvents = 0u;
+        float sampleCanonicalRouletteProposalPdf = 1.0;
+        uint sampleCanonicalRouletteProposalEvents = 0u;
         uint recordIndex = pixelIndex;
         for (uint leaf = 0u; leaf < MAX_PATH_SEGMENTS; ++leaf) {
             PackedPathSegment packed = queue[recordIndex];
@@ -569,6 +630,14 @@ void main() {
             sampleRouletteProposalPdf = pathCombineProposal(
                     sampleRouletteProposalPdf, traced.rouletteProposalPdf);
             sampleRouletteProposalEvents += traced.rouletteProposalEvents;
+            if (sampleCanonicalValid == 0u && traced.canonicalValid != 0u) {
+                sampleCanonicalRadiance = traced.canonicalRadiance;
+                sampleCanonicalValid = 1u;
+                sampleCanonicalContinuationProposalPdf = traced.canonicalContinuationProposalPdf;
+                sampleCanonicalContinuationProposalEvents = traced.canonicalContinuationProposalEvents;
+                sampleCanonicalRouletteProposalPdf = traced.canonicalRouletteProposalPdf;
+                sampleCanonicalRouletteProposalEvents = traced.canonicalRouletteProposalEvents;
+            }
             if (packed.nextRecord == PATH_NO_NEXT) {
                 break;
             }
@@ -591,6 +660,12 @@ void main() {
         candidate.rouletteProposalPdf = sampleRouletteProposalPdf;
         candidate.continuationProposalEvents = sampleContinuationProposalEvents;
         candidate.rouletteProposalEvents = sampleRouletteProposalEvents;
+        candidate.canonicalRadiance = sampleCanonicalRadiance;
+        candidate.canonicalValid = sampleCanonicalValid;
+        candidate.canonicalContinuationProposalPdf = sampleCanonicalContinuationProposalPdf;
+        candidate.canonicalRouletteProposalPdf = sampleCanonicalRouletteProposalPdf;
+        candidate.canonicalContinuationProposalEvents = sampleCanonicalContinuationProposalEvents;
+        candidate.canonicalRouletteProposalEvents = sampleCanonicalRouletteProposalEvents;
         uint sampleId = pathHash(worldPush.frameIndex * 2654435761u
                 ^ pixelIndex * 2246822519u ^ s * 3266489917u);
         pathReservoirUpdate(pathReservoir, candidate, sampleId, pixelIndex,

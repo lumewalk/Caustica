@@ -109,8 +109,9 @@ identity) over a raw transient primitive index where practical.
 Reservoir storage is double-buffered. The first implementation favors clarity
 and validation over minimum byte size; packing follows only after captures
 identify the real bandwidth and memory pressure.
-The current seven-lane path record is 112 B/pixel/slot; its final lane keeps
-light, continuation, and roulette PDF products separate from the shift Jacobian.
+The current eight-lane path record is 128 B/pixel/slot; its proposal lane keeps
+light-selection, canonical continuation, and roulette PDF products separate from
+the shift Jacobian, and the final lane stores one replayable sky/emissive endpoint.
 
 ### Path Sample and Reservoir
 

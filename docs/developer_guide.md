@@ -103,11 +103,12 @@ at 1280x673 and 295.6 MiB at 1920x1009. This intentionally favors inspectable
 ReSTIR/GRIS semantics over packing until profiling identifies real bandwidth
 or residency pressure.
 
-The path-reservoir ABI is currently 112 bytes per pixel per slot. Its replay-control
+The path-reservoir ABI is currently 128 bytes per pixel per slot. Its replay-control
 lane stores the two wavefront segment seed pairs, segment count, replay version, and
 terminal-state hashes; the additional proposal-components lane captures light,
-continuation, and roulette PDF products plus event counters. Two path-history slots
-therefore use about 184.0 MiB at 1280x673 and 413.8 MiB at 1920x1009. This is
+continuation, and roulette PDF products plus event counters, while the canonical
+radiance lane stores one replayable sky/emissive endpoint. Two path-history slots
+therefore use about 210.3 MiB at 1280x673 and 473.0 MiB at 1920x1009. This is
 intentional: replay correctness is being established before any packing or compression pass.
 
 ## Linux

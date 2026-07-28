@@ -12,7 +12,7 @@ public static const uint PATH_TRANSPORT_DELTA = 4u;
 public static const uint PATH_TRANSPORT_TRANSMISSION = 8u;
 // Increment whenever replay metadata or RNG interpretation changes. Temporal reuse must reject
 // reservoirs produced by a different contract instead of trying to replay an incompatible path.
-public static const uint PATH_REPLAY_VERSION = 3u;
+public static const uint PATH_REPLAY_VERSION = 4u;
 
 public struct PathTraceResult {
     public float3 radiance;
@@ -32,6 +32,12 @@ public struct PathTraceResult {
     public float rouletteProposalPdf;
     public uint continuationProposalEvents;
     public uint rouletteProposalEvents;
+    public float3 canonicalRadiance;
+    public uint canonicalValid;
+    public float canonicalContinuationProposalPdf;
+    public float canonicalRouletteProposalPdf;
+    public uint canonicalContinuationProposalEvents;
+    public uint canonicalRouletteProposalEvents;
 };
 
 // A complete screen-owned sample can contain both continuation records emitted by Pass A. Keep its
@@ -53,6 +59,12 @@ public struct PathCandidate {
     public float rouletteProposalPdf;
     public uint continuationProposalEvents;
     public uint rouletteProposalEvents;
+    public float3 canonicalRadiance;
+    public uint canonicalValid;
+    public float canonicalContinuationProposalPdf;
+    public float canonicalRouletteProposalPdf;
+    public uint canonicalContinuationProposalEvents;
+    public uint canonicalRouletteProposalEvents;
 };
 
 public float pathLuminance(float3 color) {
@@ -68,6 +80,7 @@ public PathReservoir pathReservoirEmpty() {
     reservoir.replay = uint4(0u);
     reservoir.replayControl = uint4(0u);
     reservoir.proposalComponents = float4(0.0, 0.0, 0.0, 0.0);
+    reservoir.canonicalRadianceTarget = float4(0.0);
     return reservoir;
 }
 
@@ -130,10 +143,15 @@ public void pathReservoirUpdate(inout PathReservoir reservoir,
                 max(candidate.footprint, 1.0e-5), asfloat(candidate.replayState));
         reservoir.proposalComponents = float4(
                 candidate.lightProposalPdf,
-                candidate.continuationProposalPdf,
-                candidate.rouletteProposalPdf,
+                candidate.canonicalContinuationProposalPdf,
+                candidate.canonicalRouletteProposalPdf,
                 asfloat(pathPackProposalEvents(candidate.lightProposalEvents,
-                        candidate.continuationProposalEvents, candidate.rouletteProposalEvents)));
+                        candidate.canonicalContinuationProposalEvents,
+                        candidate.canonicalRouletteProposalEvents)));
+        float3 canonicalRadiance = max(candidate.canonicalRadiance, float3(0.0));
+        float canonicalTarget = candidate.canonicalValid != 0u
+                ? max(pathLuminance(canonicalRadiance), 0.0) : 0.0;
+        reservoir.canonicalRadianceTarget = float4(canonicalRadiance, canonicalTarget);
         reservoir.identity = uint4(sampleId, pathKey, candidate.topologyKey,
                 pathPackMetadata(historyGeneration, candidate.depth, candidate.transportMask));
         // Storage-only replay contract. The current estimator deliberately does not consume this lane;

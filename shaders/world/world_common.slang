@@ -138,23 +138,25 @@ public struct DirectReservoir {
 // Clarity-first ReSTIR PT path-reservoir contract. The record is intentionally independent from the
 // transient 48-byte continuation queue: one path sample may outlive a queue record and must retain the
 // unshadowed contribution, density terms, shift footprint, and replay identity needed by a future GRIS
-// reconnection pass. Seven aligned lanes keep the first GPU substrate explicit while the estimator is still
+// reconnection pass. Eight aligned lanes keep the first GPU substrate explicit while the estimator is still
 // being validated against RtPathReservoirReference.
 //
 // sampleRadianceTarget = {unshadowed RGB contribution, target density}
 // proposalShift = {bootstrap proposal density, shift Jacobian, path footprint, replay RNG state as float bits}
-// proposalComponents = {light PDF product, continuation PDF product, roulette PDF product,
-//                       packed light/continuation/roulette event counters as float bits}
+// proposalComponents = {light-selection PDF product, canonical continuation PDF product,
+//                       canonical roulette PDF product, packed event counters as float bits}
 // weights = {accumulated weight, effective M, final W, confidence}
 // identity = {sample id, path/queue key, topology key, packed generation/depth/transport class}
 // replay = {segment0 path seed, segment0 light-proposal seed,
 //           segment1 path seed, segment1 light-proposal seed}
 // replayControl = {replay ABI version, segment count, terminal path-state hash,
 //                  terminal light-proposal-state hash}
+// canonicalRadianceTarget = {one replayable sky/emissive endpoint RGB, endpoint target density}
 public struct PathReservoir {
     public float4 sampleRadianceTarget;
     public float4 proposalShift;
     public float4 proposalComponents;
+    public float4 canonicalRadianceTarget;
     public float4 weights;
     public uint4 identity;
     public uint4 replay;
