@@ -10,7 +10,7 @@ package dev.comfyfluffy.caustica.rt;
  * the seeded replay diagnostic and the future shift/reconnection stages.</p>
  */
 final class RtPathReplayReference {
-    static final int REPLAY_VERSION = 5;
+    static final int REPLAY_VERSION = 6;
     static final int MAX_SEGMENTS = 2;
     static final int MISMATCH_EMPTY = 1 << 0;
     static final int MISMATCH_ABI = 1 << 1;

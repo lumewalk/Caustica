@@ -60,6 +60,9 @@ public PathTraceResult tracePathSeeded(PathSegment seg, uint2 pix, bool captureM
     uint canonicalContinuationProposalEvents = 0u;
     float canonicalRouletteProposalPdf = 1.0;
     uint canonicalRouletteProposalEvents = 0u;
+    float3 reconnectionVertex = float3(0.0);
+    bool reconnectionValid = false;
+    uint reconnectionDepth = 0u;
     int maxBounces = int(worldPush.maxBounces);
     int rrStart = maxBounces <= 3 ? 1 : 2;
     // RIS emitter NEE: direct lighting from block emitters is active when lights are published and the
@@ -130,6 +133,11 @@ public PathTraceResult tracePathSeeded(PathSegment seg, uint2 pix, bool captureM
         rayConeWidth = max(rayConeWidth + rayConeSpread * max(payload.hitT, 0.0), RAY_CONE_MIN_WIDTH);
         uint material = payloadMaterial();
         int hitDepth = indirectDepth++;
+        if (captureMetadata && !reconnectionValid && hitDepth == 1) {
+            reconnectionVertex = hitPos;
+            reconnectionValid = true;
+            reconnectionDepth = uint(hitDepth);
+        }
         if (captureMetadata) {
             topologyKey = pathTopologyStep(topologyKey,
                     (material & 0xFFu) | ((uint(hitDepth) & 0xFFu) << 8u));
@@ -525,6 +533,9 @@ public PathTraceResult tracePathSeeded(PathSegment seg, uint2 pix, bool captureM
     result.canonicalRouletteProposalPdf = canonicalRouletteProposalPdf;
     result.canonicalContinuationProposalEvents = canonicalContinuationProposalEvents;
     result.canonicalRouletteProposalEvents = canonicalRouletteProposalEvents;
+    result.reconnectionVertex = reconnectionVertex;
+    result.reconnectionValid = reconnectionValid ? 1u : 0u;
+    result.reconnectionDepth = reconnectionDepth;
     return result;
 }
 
@@ -607,6 +618,9 @@ void main() {
         uint sampleCanonicalContinuationProposalEvents = 0u;
         float sampleCanonicalRouletteProposalPdf = 1.0;
         uint sampleCanonicalRouletteProposalEvents = 0u;
+        float3 sampleReconnectionVertex = float3(0.0);
+        uint sampleReconnectionValid = 0u;
+        uint sampleReconnectionDepth = 0u;
         uint recordIndex = pixelIndex;
         for (uint leaf = 0u; leaf < MAX_PATH_SEGMENTS; ++leaf) {
             PackedPathSegment packed = queue[recordIndex];
@@ -643,6 +657,9 @@ void main() {
                 sampleCanonicalContinuationProposalEvents = traced.canonicalContinuationProposalEvents;
                 sampleCanonicalRouletteProposalPdf = traced.canonicalRouletteProposalPdf;
                 sampleCanonicalRouletteProposalEvents = traced.canonicalRouletteProposalEvents;
+                sampleReconnectionVertex = traced.reconnectionVertex;
+                sampleReconnectionValid = traced.reconnectionValid;
+                sampleReconnectionDepth = traced.reconnectionDepth;
             }
             if (packed.nextRecord == PATH_NO_NEXT) {
                 break;
@@ -672,13 +689,16 @@ void main() {
         candidate.canonicalRouletteProposalPdf = sampleCanonicalRouletteProposalPdf;
         candidate.canonicalContinuationProposalEvents = sampleCanonicalContinuationProposalEvents;
         candidate.canonicalRouletteProposalEvents = sampleCanonicalRouletteProposalEvents;
+        candidate.reconnectionVertex = sampleReconnectionVertex;
+        candidate.reconnectionValid = sampleReconnectionValid;
+        candidate.reconnectionDepth = sampleReconnectionDepth;
         uint sampleId = pathHash(worldPush.frameIndex * 2654435761u
                 ^ pixelIndex * 2246822519u ^ s * 3266489917u);
         uint canonicalStatus = pathReservoirUpdate(pathReservoir, candidate, sampleId, pixelIndex,
                 pc.historyGeneration, selectionSeed, canonicalMode);
         if (canonicalMode) {
             // Averaging categorical colors across SPP exposes the local admission ratio without
-            // allocating another persistent buffer or changing the 128-byte PathReservoir ABI.
+            // allocating another persistent buffer or changing the 144-byte PathReservoir ABI.
             canonicalDebugColor += pathCanonicalCandidateDebugColor(canonicalStatus);
         }
     }

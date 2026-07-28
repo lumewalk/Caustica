@@ -16,7 +16,8 @@ public static const uint PATH_TRANSPORT_DELTA = 4u;
 public static const uint PATH_TRANSPORT_TRANSMISSION = 8u;
 // Increment whenever replay metadata or RNG interpretation changes. Temporal reuse must reject
 // reservoirs produced by a different contract instead of trying to replay an incompatible path.
-public static const uint PATH_REPLAY_VERSION = 5u;
+public static const uint PATH_REPLAY_VERSION = 6u;
+public static const uint PATH_RECONNECTION_VALID = 1u;
 public static const uint PATH_CANONICAL_MODE_FLAG = 16u;
 public static const uint PATH_PROPOSAL_CANONICAL_VALID = 1u << 30u;
 public static const uint PATH_PROPOSAL_RESERVED_MASK = 1u << 31u;
@@ -76,6 +77,9 @@ public struct PathTraceResult {
     public float canonicalRouletteProposalPdf;
     public uint canonicalContinuationProposalEvents;
     public uint canonicalRouletteProposalEvents;
+    public float3 reconnectionVertex;
+    public uint reconnectionValid;
+    public uint reconnectionDepth;
 };
 
 // A complete screen-owned sample can contain both continuation records emitted by Pass A. Keep its
@@ -103,6 +107,9 @@ public struct PathCandidate {
     public float canonicalRouletteProposalPdf;
     public uint canonicalContinuationProposalEvents;
     public uint canonicalRouletteProposalEvents;
+    public float3 reconnectionVertex;
+    public uint reconnectionValid;
+    public uint reconnectionDepth;
 };
 
 // Aggregate returned by a seeded replay of the same queue chain used by the selected candidate.
@@ -129,6 +136,9 @@ public struct PathReplayAggregate {
     public float canonicalRouletteProposalPdf;
     public uint canonicalContinuationProposalEvents;
     public uint canonicalRouletteProposalEvents;
+    public float3 reconnectionVertex;
+    public uint reconnectionValid;
+    public uint reconnectionDepth;
 };
 
 public PathReplayAggregate pathReplayAggregateEmpty() {
@@ -153,6 +163,9 @@ public PathReplayAggregate pathReplayAggregateEmpty() {
     aggregate.canonicalRouletteProposalPdf = 1.0;
     aggregate.canonicalContinuationProposalEvents = 0u;
     aggregate.canonicalRouletteProposalEvents = 0u;
+    aggregate.reconnectionVertex = float3(0.0);
+    aggregate.reconnectionValid = 0u;
+    aggregate.reconnectionDepth = 0u;
     return aggregate;
 }
 
@@ -185,6 +198,9 @@ public void pathReplayAccumulate(inout PathReplayAggregate aggregate,
         aggregate.canonicalContinuationProposalEvents = traced.canonicalContinuationProposalEvents;
         aggregate.canonicalRouletteProposalPdf = traced.canonicalRouletteProposalPdf;
         aggregate.canonicalRouletteProposalEvents = traced.canonicalRouletteProposalEvents;
+        aggregate.reconnectionVertex = traced.reconnectionVertex;
+        aggregate.reconnectionValid = traced.reconnectionValid;
+        aggregate.reconnectionDepth = traced.reconnectionDepth;
     }
 }
 
@@ -197,6 +213,12 @@ public bool pathReplayColorMatches(float3 expected, float3 actual) {
     return all(pathReplayFloatMatches(expected.r, actual.r)
             && pathReplayFloatMatches(expected.g, actual.g)
             && pathReplayFloatMatches(expected.b, actual.b));
+}
+
+public bool pathReplayPositionMatches(float3 expected, float3 actual) {
+    return all(pathReplayFloatMatches(expected.x, actual.x)
+            && pathReplayFloatMatches(expected.y, actual.y)
+            && pathReplayFloatMatches(expected.z, actual.z));
 }
 
 public uint pathReplayCompare(PathReservoir reservoir, PathReplayAggregate replay) {
@@ -249,6 +271,16 @@ public uint pathReplayCompare(PathReservoir reservoir, PathReplayAggregate repla
     if (replayMetadata != storedMetadata) {
         mismatch |= PATH_REPLAY_METADATA_MISMATCH;
     }
+    uint packedReconnection = asuint(reservoir.reconnectionVertex.w);
+    bool storedReconnectionValid = (packedReconnection & PATH_RECONNECTION_VALID) != 0u;
+    uint storedReconnectionDepth = (packedReconnection >> 1u) & 0xFu;
+    if (storedReconnectionValid != (replay.reconnectionValid != 0u)
+            || (storedReconnectionValid
+                    && (!pathReplayPositionMatches(replay.reconnectionVertex,
+                            reservoir.reconnectionVertex.xyz)
+                        || replay.reconnectionDepth != storedReconnectionDepth))) {
+        mismatch |= PATH_REPLAY_METADATA_MISMATCH;
+    }
     return mismatch;
 }
 
@@ -283,6 +315,7 @@ public PathReservoir pathReservoirEmpty() {
     reservoir.identity = uint4(0u);
     reservoir.replay = uint4(0u);
     reservoir.replayControl = uint4(0u);
+    reservoir.reconnectionVertex = float4(0.0);
     reservoir.proposalComponents = float4(0.0, 0.0, 0.0, 0.0);
     reservoir.canonicalRadianceTarget = float4(0.0);
     return reservoir;
@@ -320,6 +353,11 @@ public uint pathPackProposalEvents(uint lightEvents, uint continuationEvents, ui
             | (min(continuationEvents, 1023u) << 10u)
             | (min(rouletteEvents, 1023u) << 20u)
             | (canonicalValid ? PATH_PROPOSAL_CANONICAL_VALID : 0u);
+}
+
+public uint pathPackReconnectionMetadata(uint depth, bool valid) {
+    return (valid ? PATH_RECONNECTION_VALID : 0u)
+            | ((min(depth, 15u) & 0xFu) << 1u);
 }
 
 public bool pathCanonicalEndpointConsistent(PathReservoir reservoir) {
@@ -460,6 +498,9 @@ public uint pathReservoirUpdate(inout PathReservoir reservoir,
         reservoir.replayControl = uint4(PATH_REPLAY_VERSION,
                 min(candidate.replaySegmentCount, MAX_PATH_SEGMENTS),
                 candidate.replayState, candidate.proposalReplayState);
+        reservoir.reconnectionVertex = float4(candidate.reconnectionVertex,
+                asfloat(pathPackReconnectionMetadata(candidate.reconnectionDepth,
+                        candidate.reconnectionValid != 0u)));
     }
 
     reservoir.weights.x = nextWeightSum;
@@ -495,6 +536,9 @@ public PathCandidate pathCandidateFromReplay(PathReplayAggregate replay,
     candidate.canonicalRouletteProposalPdf = replay.canonicalRouletteProposalPdf;
     candidate.canonicalContinuationProposalEvents = replay.canonicalContinuationProposalEvents;
     candidate.canonicalRouletteProposalEvents = replay.canonicalRouletteProposalEvents;
+    candidate.reconnectionVertex = replay.reconnectionVertex;
+    candidate.reconnectionValid = replay.reconnectionValid;
+    candidate.reconnectionDepth = replay.reconnectionDepth;
     return candidate;
 }
 
@@ -572,6 +616,9 @@ public uint pathReservoirTemporalMerge(inout PathReservoir receiver,
         receiver.replayControl = uint4(PATH_REPLAY_VERSION,
                 min(shifted.replaySegmentCount, MAX_PATH_SEGMENTS),
                 shifted.replayState, shifted.proposalReplayState);
+        receiver.reconnectionVertex = float4(shifted.reconnectionVertex,
+                asfloat(pathPackReconnectionMetadata(shifted.reconnectionDepth,
+                        shifted.reconnectionValid != 0u)));
         status |= PATH_TEMPORAL_HISTORY_SELECTED;
     }
     receiver.weights.x = nextWeightSum;

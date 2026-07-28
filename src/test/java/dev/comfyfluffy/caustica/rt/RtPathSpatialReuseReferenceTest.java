@@ -3,7 +3,9 @@ package dev.comfyfluffy.caustica.rt;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 final class RtPathSpatialReuseReferenceTest {
     private static RtPathSpatialReuseReference.Surface surface(
@@ -43,5 +45,18 @@ final class RtPathSpatialReuseReferenceTest {
         assertThrows(IllegalArgumentException.class,
                 () -> new RtPathSpatialReuseReference.Surface(
                         1L, 0.9, 0.0, 1, 1L, 1, Double.NaN));
+    }
+
+    @Test
+    void persistentReconnectionLaneSelectsAndPacksTheSecondPathHit() {
+        assertFalse(RtPathSpatialReuseReference.captureReconnectionAtDepth(0));
+        assertTrue(RtPathSpatialReuseReference.captureReconnectionAtDepth(1));
+        assertFalse(RtPathSpatialReuseReference.captureReconnectionAtDepth(2));
+
+        int packed = RtPathSpatialReuseReference.packReconnectionMetadata(1, true);
+        assertTrue(RtPathSpatialReuseReference.reconnectionValid(packed));
+        assertEquals(1, RtPathSpatialReuseReference.reconnectionDepth(packed));
+        assertThrows(IllegalArgumentException.class,
+                () -> RtPathSpatialReuseReference.packReconnectionMetadata(-1, true));
     }
 }

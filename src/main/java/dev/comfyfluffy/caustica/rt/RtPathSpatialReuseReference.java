@@ -10,6 +10,8 @@ final class RtPathSpatialReuseReference {
     static final double NORMAL_COSINE_THRESHOLD = 0.85;
     static final double RELATIVE_DEPTH_THRESHOLD = 0.10;
     static final double MAX_FOOTPRINT_RATIO = 4.0;
+    static final int RECONNECTION_HIT_DEPTH = 1;
+    static final int RECONNECTION_VALID = 1;
 
     enum Decision {
         ACCEPTED,
@@ -87,6 +89,25 @@ final class RtPathSpatialReuseReference {
                 / Math.min(receiver.footprint(), source.footprint());
         return footprintRatio <= MAX_FOOTPRINT_RATIO
                 ? Decision.ACCEPTED : Decision.FOOTPRINT_MISMATCH;
+    }
+
+    static boolean captureReconnectionAtDepth(int hitDepth) {
+        return hitDepth == RECONNECTION_HIT_DEPTH;
+    }
+
+    static int packReconnectionMetadata(int depth, boolean valid) {
+        if (depth < 0) {
+            throw new IllegalArgumentException("reconnection depth must be non-negative");
+        }
+        return (valid ? RECONNECTION_VALID : 0) | ((Math.min(depth, 15) & 0xF) << 1);
+    }
+
+    static boolean reconnectionValid(int packedMetadata) {
+        return (packedMetadata & RECONNECTION_VALID) != 0;
+    }
+
+    static int reconnectionDepth(int packedMetadata) {
+        return (packedMetadata >>> 1) & 0xF;
     }
 
     private static boolean positiveFinite(double value) {
