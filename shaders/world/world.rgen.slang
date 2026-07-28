@@ -545,9 +545,10 @@ void main() {
     worldPush = ConstPtr<WorldPush>(pc.worldPushAddr)[0];
     bool pathDebug = pc.debugView == PATH_DEBUG_VIEW;
     bool pathTemporalDebug = pc.debugView == PATH_TEMPORAL_DEBUG_VIEW;
+    bool pathReplayDebug = pc.debugView == PATH_REPLAY_DEBUG_VIEW;
     bool canonicalMode = (pc.historyFlags & PATH_CANONICAL_MODE_FLAG) != 0u;
     bool pathCapture = (pc.historyFlags & 4u) != 0u && pc.pathReservoirAddr != 0;
-    if (pc.debugView != 0u && !pathDebug && !pathTemporalDebug) {
+    if (pc.debugView != 0u && !pathDebug && !pathTemporalDebug && !pathReplayDebug) {
         return; // pass A owns guide visualization output
     }
     uint2 dispatchIndex = DispatchRaysIndex().xy;
@@ -555,7 +556,7 @@ void main() {
     int2 pix = int2(dispatchIndex);
     uint spp = max(worldPush.spp, 1u);
     uint pixelIndex = dispatchIndex.y * dimensions.x + dispatchIndex.x;
-    if ((pathDebug || pathTemporalDebug) && !pathCapture) {
+    if ((pathDebug || pathTemporalDebug || pathReplayDebug) && !pathCapture) {
         outImage[pix] = float4(1.0, 0.0, 1.0, 1.0); // setting disabled / storage unavailable
         return;
     }
@@ -679,9 +680,55 @@ void main() {
         }
     }
     DevicePtr<PathReservoir>(pc.pathReservoirAddr)[pixelIndex] = pathReservoir;
+    if (pathReplayDebug) {
+        uint replayMismatch = PATH_REPLAY_EMPTY;
+        if (pathReservoir.weights.y > 0.0) {
+            replayMismatch = PATH_REPLAY_ABI_MISMATCH;
+        }
+        if (pathReservoir.weights.y > 0.0
+                && pathReservoir.replayControl.x == PATH_REPLAY_VERSION
+                && pathReservoir.replayControl.y >= 1u
+                && pathReservoir.replayControl.y <= MAX_PATH_SEGMENTS
+                && (pathReservoir.replayControl.y == MAX_PATH_SEGMENTS
+                        || all(pathReservoir.replay.zw == uint2(0u)))) {
+            PathReplayAggregate replay = pathReplayAggregateEmpty();
+            uint expectedSegments = pathReservoir.replayControl.y;
+            uint recordIndex = pathReservoir.identity.y;
+            bool chainComplete = true;
+            for (uint leaf = 0u; leaf < MAX_PATH_SEGMENTS; ++leaf) {
+                if (leaf >= expectedSegments || recordIndex == PATH_NO_NEXT) {
+                    break;
+                }
+                PackedPathSegment packed = queue[recordIndex];
+                PathSegment segment = unpackPathSegment(packed);
+                uint replaySeed = leaf == 0u
+                        ? pathReservoir.replay.x : pathReservoir.replay.z;
+                uint proposalReplaySeed = leaf == 0u
+                        ? pathReservoir.replay.y : pathReservoir.replay.w;
+                PathTraceResult traced = tracePathSeeded(
+                        segment, uint2(pix), true, replaySeed, proposalReplaySeed);
+                pathReplayAccumulate(replay, traced, leaf);
+                if (leaf + 1u == expectedSegments) {
+                    chainComplete = packed.nextRecord == PATH_NO_NEXT;
+                    break;
+                }
+                if (packed.nextRecord == PATH_NO_NEXT) {
+                    chainComplete = false;
+                    break;
+                }
+                recordIndex = packed.nextRecord;
+            }
+            if (!chainComplete || replay.replaySegmentCount != expectedSegments) {
+                replayMismatch = PATH_REPLAY_SEGMENT_MISMATCH;
+            } else {
+                replayMismatch = pathReplayCompare(pathReservoir, replay);
+            }
+        }
+        outImage[pix] = float4(pathReplayDebugColor(replayMismatch), 1.0);
+    }
     // View 14 is written by path_temporal_validate after this pass. Leaving outImage untouched here
     // prevents an intermediate radiance image from leaking into the diagnostic if that pass changes.
-    if (!pathTemporalDebug) {
+    if (!pathTemporalDebug && !pathReplayDebug) {
         outImage[pix] = float4(pathDebug
                 ? (canonicalMode
                         ? canonicalDebugColor / float(spp)

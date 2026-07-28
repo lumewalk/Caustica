@@ -3,6 +3,7 @@ import sampling_core;
 
 public static const uint PATH_DEBUG_VIEW = 13u;
 public static const uint PATH_TEMPORAL_DEBUG_VIEW = 14u;
+public static const uint PATH_REPLAY_DEBUG_VIEW = 15u;
 public static const uint PATH_GENERATION_MASK = 0x00FFFFFFu;
 public static const float PATH_MAX_FOOTPRINT_RATIO = 4.0;
 
@@ -25,6 +26,18 @@ public static const uint PATH_CANONICAL_ZERO_TARGET = 3u;
 public static const uint PATH_CANONICAL_INVALID_CONTINUATION_PDF = 4u;
 public static const uint PATH_CANONICAL_INVALID_ROULETTE_PDF = 5u;
 public static const uint PATH_CANONICAL_INVALID_PROPOSAL = 6u;
+
+// Replay diagnostic mismatch bits. A pixel may expose more than one independent mismatch; the
+// debug color adds one channel per category instead of hiding the root cause behind one enum.
+public static const uint PATH_REPLAY_EMPTY = 1u << 0u;
+public static const uint PATH_REPLAY_ABI_MISMATCH = 1u << 1u;
+public static const uint PATH_REPLAY_SEGMENT_MISMATCH = 1u << 2u;
+public static const uint PATH_REPLAY_PATH_STATE_MISMATCH = 1u << 3u;
+public static const uint PATH_REPLAY_PROPOSAL_STATE_MISMATCH = 1u << 4u;
+public static const uint PATH_REPLAY_TOPOLOGY_MISMATCH = 1u << 5u;
+public static const uint PATH_REPLAY_ENDPOINT_MISMATCH = 1u << 6u;
+public static const uint PATH_REPLAY_PROPOSAL_MISMATCH = 1u << 7u;
+public static const uint PATH_REPLAY_METADATA_MISMATCH = 1u << 8u;
 
 public struct PathTraceResult {
     public float3 radiance;
@@ -78,6 +91,172 @@ public struct PathCandidate {
     public uint canonicalContinuationProposalEvents;
     public uint canonicalRouletteProposalEvents;
 };
+
+// Aggregate returned by a seeded replay of the same queue chain used by the selected candidate.
+// Keeping this shape separate from PathCandidate makes the comparison explicit and prevents the
+// replay diagnostic from accidentally feeding a second reservoir update.
+public struct PathReplayAggregate {
+    public float3 radiance;
+    public uint depth;
+    public uint topologyKey;
+    public uint replayState;
+    public uint proposalReplayState;
+    public uint replaySegmentCount;
+    public uint transportMask;
+    public float footprint;
+    public float lightProposalPdf;
+    public uint lightProposalEvents;
+    public float continuationProposalPdf;
+    public float rouletteProposalPdf;
+    public uint continuationProposalEvents;
+    public uint rouletteProposalEvents;
+    public float3 canonicalRadiance;
+    public uint canonicalValid;
+    public float canonicalContinuationProposalPdf;
+    public float canonicalRouletteProposalPdf;
+    public uint canonicalContinuationProposalEvents;
+    public uint canonicalRouletteProposalEvents;
+};
+
+public PathReplayAggregate pathReplayAggregateEmpty() {
+    PathReplayAggregate aggregate;
+    aggregate.radiance = float3(0.0);
+    aggregate.depth = 0u;
+    aggregate.topologyKey = pathHash(0x7F4A7C15u);
+    aggregate.replayState = 0u;
+    aggregate.proposalReplayState = 0u;
+    aggregate.replaySegmentCount = 0u;
+    aggregate.transportMask = 0u;
+    aggregate.footprint = 1.0e-5;
+    aggregate.lightProposalPdf = 1.0;
+    aggregate.lightProposalEvents = 0u;
+    aggregate.continuationProposalPdf = 1.0;
+    aggregate.rouletteProposalPdf = 1.0;
+    aggregate.continuationProposalEvents = 0u;
+    aggregate.rouletteProposalEvents = 0u;
+    aggregate.canonicalRadiance = float3(0.0);
+    aggregate.canonicalValid = 0u;
+    aggregate.canonicalContinuationProposalPdf = 1.0;
+    aggregate.canonicalRouletteProposalPdf = 1.0;
+    aggregate.canonicalContinuationProposalEvents = 0u;
+    aggregate.canonicalRouletteProposalEvents = 0u;
+    return aggregate;
+}
+
+public void pathReplayAccumulate(inout PathReplayAggregate aggregate,
+                                 PathTraceResult traced, uint leaf) {
+    aggregate.replaySegmentCount = leaf + 1u;
+    aggregate.radiance += traced.radiance;
+    aggregate.depth = max(aggregate.depth, traced.depth);
+    aggregate.topologyKey = pathTopologyStep(aggregate.topologyKey,
+            traced.topologyKey ^ leaf * 668265263u);
+    aggregate.replayState = pathHash(
+            aggregate.replayState ^ traced.replayState ^ leaf * 374761393u);
+    aggregate.proposalReplayState = pathHash(
+            aggregate.proposalReplayState ^ traced.proposalReplayState ^ leaf * 1103515245u);
+    aggregate.transportMask |= traced.transportMask;
+    aggregate.footprint = max(aggregate.footprint, traced.footprint);
+    aggregate.lightProposalPdf = pathCombineProposal(
+            aggregate.lightProposalPdf, traced.lightProposalPdf);
+    aggregate.lightProposalEvents += traced.lightProposalEvents;
+    aggregate.continuationProposalPdf = pathCombineProposal(
+            aggregate.continuationProposalPdf, traced.continuationProposalPdf);
+    aggregate.continuationProposalEvents += traced.continuationProposalEvents;
+    aggregate.rouletteProposalPdf = pathCombineProposal(
+            aggregate.rouletteProposalPdf, traced.rouletteProposalPdf);
+    aggregate.rouletteProposalEvents += traced.rouletteProposalEvents;
+    if (aggregate.canonicalValid == 0u && traced.canonicalValid != 0u) {
+        aggregate.canonicalRadiance = traced.canonicalRadiance;
+        aggregate.canonicalValid = 1u;
+        aggregate.canonicalContinuationProposalPdf = traced.canonicalContinuationProposalPdf;
+        aggregate.canonicalContinuationProposalEvents = traced.canonicalContinuationProposalEvents;
+        aggregate.canonicalRouletteProposalPdf = traced.canonicalRouletteProposalPdf;
+        aggregate.canonicalRouletteProposalEvents = traced.canonicalRouletteProposalEvents;
+    }
+}
+
+public bool pathReplayFloatMatches(float expected, float actual) {
+    float tolerance = max(1.0e-5, max(abs(expected), abs(actual)) * 1.0e-4);
+    return isfinite(expected) && isfinite(actual) && abs(expected - actual) <= tolerance;
+}
+
+public bool pathReplayColorMatches(float3 expected, float3 actual) {
+    return all(pathReplayFloatMatches(expected.r, actual.r)
+            && pathReplayFloatMatches(expected.g, actual.g)
+            && pathReplayFloatMatches(expected.b, actual.b));
+}
+
+public uint pathReplayCompare(PathReservoir reservoir, PathReplayAggregate replay) {
+    uint mismatch = 0u;
+    uint segmentCount = reservoir.replayControl.y;
+    if (reservoir.replayControl.x != PATH_REPLAY_VERSION
+            || segmentCount < 1u || segmentCount > MAX_PATH_SEGMENTS
+            || (segmentCount < MAX_PATH_SEGMENTS && any(reservoir.replay.zw != uint2(0u)))) {
+        mismatch |= PATH_REPLAY_ABI_MISMATCH;
+    }
+    if (replay.replaySegmentCount != segmentCount) {
+        mismatch |= PATH_REPLAY_SEGMENT_MISMATCH;
+    }
+    if (replay.replayState != reservoir.replayControl.z) {
+        mismatch |= PATH_REPLAY_PATH_STATE_MISMATCH;
+    }
+    if (replay.proposalReplayState != reservoir.replayControl.w) {
+        mismatch |= PATH_REPLAY_PROPOSAL_STATE_MISMATCH;
+    }
+    if (replay.topologyKey != reservoir.identity.z) {
+        mismatch |= PATH_REPLAY_TOPOLOGY_MISMATCH;
+    }
+    if (replay.canonicalValid == 0u
+            || !pathReplayColorMatches(replay.canonicalRadiance,
+                    reservoir.canonicalRadianceTarget.xyz)
+            || !pathReplayFloatMatches(pathLuminance(replay.canonicalRadiance),
+                    reservoir.canonicalRadianceTarget.w)) {
+        mismatch |= PATH_REPLAY_ENDPOINT_MISMATCH;
+    }
+    uint packedEvents = asuint(reservoir.proposalComponents.w);
+    uint expectedCanonicalValid = (packedEvents & PATH_PROPOSAL_CANONICAL_VALID) != 0u ? 1u : 0u;
+    if (!pathReplayFloatMatches(replay.lightProposalPdf, reservoir.proposalComponents.x)
+            || !pathReplayFloatMatches(replay.canonicalContinuationProposalPdf,
+                    reservoir.proposalComponents.y)
+            || !pathReplayFloatMatches(replay.canonicalRouletteProposalPdf,
+                    reservoir.proposalComponents.z)
+            || ((replay.canonicalValid != 0u ? 1u : 0u) != expectedCanonicalValid)
+            || ((packedEvents & 1023u)
+                    != min(replay.lightProposalEvents, 1023u))
+            || (((packedEvents >> 10u) & 1023u)
+                    != min(replay.canonicalContinuationProposalEvents, 1023u))
+            || (((packedEvents >> 20u) & 1023u)
+                    != min(replay.canonicalRouletteProposalEvents, 1023u))
+            || (packedEvents & PATH_PROPOSAL_RESERVED_MASK) != 0u) {
+        mismatch |= PATH_REPLAY_PROPOSAL_MISMATCH;
+    }
+    uint storedMetadata = reservoir.identity.w;
+    uint replayMetadata = pathPackMetadata(storedMetadata & PATH_GENERATION_MASK,
+            replay.depth, replay.transportMask);
+    if (replayMetadata != storedMetadata) {
+        mismatch |= PATH_REPLAY_METADATA_MISMATCH;
+    }
+    return mismatch;
+}
+
+public float3 pathReplayDebugColor(uint mismatch) {
+    if ((mismatch & PATH_REPLAY_EMPTY) != 0u) {
+        return float3(0.0);
+    }
+    if (mismatch == 0u) {
+        return float3(0.05, 0.95, 0.20); // exact seeded replay
+    }
+    float3 color = float3(0.0);
+    if ((mismatch & PATH_REPLAY_ABI_MISMATCH) != 0u) color += float3(0.05, 0.85, 0.95);
+    if ((mismatch & PATH_REPLAY_SEGMENT_MISMATCH) != 0u) color += float3(0.55, 0.10, 0.95);
+    if ((mismatch & PATH_REPLAY_PATH_STATE_MISMATCH) != 0u) color += float3(0.95, 0.05, 0.05);
+    if ((mismatch & PATH_REPLAY_PROPOSAL_STATE_MISMATCH) != 0u) color += float3(0.95, 0.30, 0.04);
+    if ((mismatch & PATH_REPLAY_TOPOLOGY_MISMATCH) != 0u) color += float3(0.15, 0.35, 0.95);
+    if ((mismatch & PATH_REPLAY_ENDPOINT_MISMATCH) != 0u) color += float3(1.00, 0.12, 0.55);
+    if ((mismatch & PATH_REPLAY_PROPOSAL_MISMATCH) != 0u) color += float3(0.95, 0.72, 0.04);
+    if ((mismatch & PATH_REPLAY_METADATA_MISMATCH) != 0u) color += float3(0.80, 0.80, 0.80);
+    return min(color, float3(1.0));
+}
 
 public float pathLuminance(float3 color) {
     return dot(color, float3(0.2126, 0.7152, 0.0722));

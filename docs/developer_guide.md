@@ -111,6 +111,10 @@ canonical-endpoint validity bit), while the canonical radiance lane stores one
 replayable sky/emissive endpoint. Two path-history slots
 therefore use about 210.3 MiB at 1280x673 and 473.0 MiB at 1920x1009. This is
 intentional: replay correctness is being established before any packing or compression pass.
+Debug view 15 is an opt-in seeded replay evaluator: it re-traces the selected reservoir's stored
+segment seeds and color-codes independent mismatches in terminal path/proposal state, topology,
+endpoint, proposal components, metadata, and replay ABI. It does not feed the estimator or alter
+the normal render.
 
 ## Linux
 

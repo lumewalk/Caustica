@@ -131,7 +131,12 @@ canonical path representation:
 The current wavefront replay contract is deliberately stricter than a final GRIS shift:
 replay version, segment count, transport RNG state, and light-proposal RNG state must all
 match before a path is considered replay-compatible. The shader-independent
-`RtPathReplayReference` test is the authority for this admission rule. A future reconnection
+`RtPathReplayReference` test is the authority for this admission rule. Debug view 15 performs an
+opt-in seeded replay of the selected reservoir path using the stored seed pairs and compares the
+reconstructed terminal states, topology, endpoint, proposal lane, and packed metadata. Its green
+output means an exact replay; red/orange/cyan/blue/magenta/yellow channels identify path-state,
+proposal-state, ABI, topology/metadata, endpoint, and proposal-lane mismatches respectively.
+A future reconnection
 mapping may relax the identity checks only together with a measured Jacobian/PDF mapping and
 new reference tests; it must not silently treat the two RNG streams as one seed.
 
