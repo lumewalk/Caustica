@@ -4,8 +4,11 @@ import sampling_core;
 public static const uint PATH_DEBUG_VIEW = 13u;
 public static const uint PATH_TEMPORAL_DEBUG_VIEW = 14u;
 public static const uint PATH_REPLAY_DEBUG_VIEW = 15u;
+public static const uint PATH_TEMPORAL_MERGE_DEBUG_VIEW = 16u;
 public static const uint PATH_GENERATION_MASK = 0x00FFFFFFu;
 public static const float PATH_MAX_FOOTPRINT_RATIO = 4.0;
+public static const float PATH_TEMPORAL_MAX_SOURCE_COUNT = 8.0;
+public static const float PATH_IDENTITY_SHIFT_JACOBIAN = 1.0;
 
 public static const uint PATH_TRANSPORT_DIFFUSE = 1u;
 public static const uint PATH_TRANSPORT_GLOSSY = 2u;
@@ -38,6 +41,16 @@ public static const uint PATH_REPLAY_TOPOLOGY_MISMATCH = 1u << 5u;
 public static const uint PATH_REPLAY_ENDPOINT_MISMATCH = 1u << 6u;
 public static const uint PATH_REPLAY_PROPOSAL_MISMATCH = 1u << 7u;
 public static const uint PATH_REPLAY_METADATA_MISMATCH = 1u << 8u;
+
+// Temporal merge diagnostic bits. The first five bits explain a rejected history sample;
+// accepted merges add MERGED and optionally HISTORY_SELECTED.
+public static const uint PATH_TEMPORAL_CURRENT_EMPTY = 1u << 0u;
+public static const uint PATH_TEMPORAL_HISTORY_EMPTY = 1u << 1u;
+public static const uint PATH_TEMPORAL_REPLAY_REJECT = 1u << 2u;
+public static const uint PATH_TEMPORAL_COMPATIBILITY_REJECT = 1u << 3u;
+public static const uint PATH_TEMPORAL_FOOTPRINT_REJECT = 1u << 4u;
+public static const uint PATH_TEMPORAL_MERGED = 1u << 5u;
+public static const uint PATH_TEMPORAL_HISTORY_SELECTED = 1u << 6u;
 
 public struct PathTraceResult {
     public float3 radiance;
@@ -325,6 +338,14 @@ public bool pathCanonicalEndpointConsistent(PathReservoir reservoir) {
     return abs(expectedTarget - storedTarget) <= tolerance;
 }
 
+public uint pathMetadataDepth(uint metadata) {
+    return (metadata >> 24u) & 0xFu;
+}
+
+public uint pathMetadataTransport(uint metadata) {
+    return (metadata >> 28u) & 0xFu;
+}
+
 public uint pathCanonicalCandidateStatus(PathCandidate candidate) {
     if (candidate.canonicalValid == 0u) {
         return PATH_CANONICAL_NO_ENDPOINT;
@@ -448,6 +469,144 @@ public uint pathReservoirUpdate(inout PathReservoir reservoir,
             ? nextWeightSum / (nextM * selectedTarget) : 0.0;
     reservoir.weights.w = selectedTarget > 0.0 ? min(nextM * 0.25, 1.0) : 0.0;
     return canonicalStatus;
+}
+
+public PathCandidate pathCandidateFromReplay(PathReplayAggregate replay,
+                                              PathReservoir source) {
+    PathCandidate candidate;
+    candidate.radiance = replay.radiance;
+    candidate.depth = replay.depth;
+    candidate.topologyKey = replay.topologyKey;
+    candidate.replaySeeds = source.replay;
+    candidate.replayState = replay.replayState;
+    candidate.proposalReplayState = replay.proposalReplayState;
+    candidate.replaySegmentCount = replay.replaySegmentCount;
+    candidate.transportMask = replay.transportMask;
+    candidate.footprint = replay.footprint;
+    candidate.lightProposalPdf = replay.lightProposalPdf;
+    candidate.lightProposalEvents = replay.lightProposalEvents;
+    candidate.continuationProposalPdf = replay.continuationProposalPdf;
+    candidate.rouletteProposalPdf = replay.rouletteProposalPdf;
+    candidate.continuationProposalEvents = replay.continuationProposalEvents;
+    candidate.rouletteProposalEvents = replay.rouletteProposalEvents;
+    candidate.canonicalRadiance = replay.canonicalRadiance;
+    candidate.canonicalValid = replay.canonicalValid;
+    candidate.canonicalContinuationProposalPdf = replay.canonicalContinuationProposalPdf;
+    candidate.canonicalRouletteProposalPdf = replay.canonicalRouletteProposalPdf;
+    candidate.canonicalContinuationProposalEvents = replay.canonicalContinuationProposalEvents;
+    candidate.canonicalRouletteProposalEvents = replay.canonicalRouletteProposalEvents;
+    return candidate;
+}
+
+public uint pathReservoirTemporalMerge(inout PathReservoir receiver,
+                                       PathReservoir source,
+                                       PathCandidate shifted,
+                                       uint pathKey,
+                                       uint historyGeneration,
+                                       inout uint selectionSeed) {
+    uint status = 0u;
+    if (receiver.weights.y <= 0.0 || receiver.sampleRadianceTarget.w <= 0.0) {
+        status |= PATH_TEMPORAL_CURRENT_EMPTY;
+    }
+    if (source.weights.y <= 0.0 || source.sampleRadianceTarget.w <= 0.0
+            || source.weights.z <= 0.0 || shifted.canonicalValid == 0u) {
+        return status | PATH_TEMPORAL_HISTORY_EMPTY;
+    }
+
+    uint sourceMetadata = source.identity.w;
+    uint shiftedMetadata = pathPackMetadata(sourceMetadata & PATH_GENERATION_MASK,
+            shifted.depth, shifted.transportMask);
+    if (shifted.topologyKey != source.identity.z
+            || shiftedMetadata != sourceMetadata) {
+        return status | PATH_TEMPORAL_COMPATIBILITY_REJECT;
+    }
+    float sourceFootprint = max(source.proposalShift.z, 1.0e-5);
+    float shiftedFootprint = max(shifted.footprint, 1.0e-5);
+    float sourceFootprintRatio = max(sourceFootprint, shiftedFootprint)
+            / min(sourceFootprint, shiftedFootprint);
+    if (sourceFootprintRatio > PATH_MAX_FOOTPRINT_RATIO) {
+        return status | PATH_TEMPORAL_FOOTPRINT_REJECT;
+    }
+    if (receiver.weights.y > 0.0) {
+        uint receiverMetadata = receiver.identity.w;
+        if (receiver.identity.z != shifted.topologyKey
+                || pathMetadataDepth(receiverMetadata) != shifted.depth
+                || pathMetadataTransport(receiverMetadata) != (shifted.transportMask & 0xFu)) {
+            return status | PATH_TEMPORAL_COMPATIBILITY_REJECT;
+        }
+        float receiverFootprint = max(receiver.proposalShift.z, 1.0e-5);
+        float receiverFootprintRatio = max(receiverFootprint, shiftedFootprint)
+                / min(receiverFootprint, shiftedFootprint);
+        if (receiverFootprintRatio > PATH_MAX_FOOTPRINT_RATIO) {
+            return status | PATH_TEMPORAL_FOOTPRINT_REJECT;
+        }
+    }
+
+    float sourceCount = min(source.weights.y, PATH_TEMPORAL_MAX_SOURCE_COUNT);
+    float mergeTarget = max(pathLuminance(shifted.canonicalRadiance), 0.0);
+    float mergeWeight = mergeTarget * source.weights.z * sourceCount
+            * PATH_IDENTITY_SHIFT_JACOBIAN;
+    float nextWeightSum = min(receiver.weights.x + mergeWeight, 1.0e30);
+    float nextM = min(receiver.weights.y + sourceCount, 16777216.0);
+    bool selectHistory = mergeWeight > 0.0
+            && (receiver.weights.x <= 0.0
+                    || rndf(selectionSeed) < mergeWeight / nextWeightSum);
+    if (selectHistory) {
+        receiver.sampleRadianceTarget = float4(max(shifted.canonicalRadiance, float3(0.0)),
+                mergeTarget);
+        receiver.proposalShift = float4(1.0, 1.0, shiftedFootprint,
+                asfloat(shifted.replayState));
+        receiver.proposalComponents = float4(
+                shifted.lightProposalPdf,
+                shifted.canonicalContinuationProposalPdf,
+                shifted.canonicalRouletteProposalPdf,
+                asfloat(pathPackProposalEvents(shifted.lightProposalEvents,
+                        shifted.canonicalContinuationProposalEvents,
+                        shifted.canonicalRouletteProposalEvents,
+                        shifted.canonicalValid != 0u)));
+        receiver.canonicalRadianceTarget = float4(max(shifted.canonicalRadiance, float3(0.0)),
+                mergeTarget);
+        receiver.identity = uint4(source.identity.x, pathKey, shifted.topologyKey,
+                pathPackMetadata(historyGeneration, shifted.depth, shifted.transportMask));
+        receiver.replay = shifted.replaySeeds;
+        receiver.replayControl = uint4(PATH_REPLAY_VERSION,
+                min(shifted.replaySegmentCount, MAX_PATH_SEGMENTS),
+                shifted.replayState, shifted.proposalReplayState);
+        status |= PATH_TEMPORAL_HISTORY_SELECTED;
+    }
+    receiver.weights.x = nextWeightSum;
+    receiver.weights.y = nextM;
+    float selectedTarget = receiver.sampleRadianceTarget.w;
+    receiver.weights.z = selectedTarget > 0.0 && nextM > 0.0
+            ? nextWeightSum / (nextM * selectedTarget) : 0.0;
+    receiver.weights.w = selectedTarget > 0.0 ? min(nextM * 0.25, 1.0) : 0.0;
+    return status | PATH_TEMPORAL_MERGED;
+}
+
+public float3 pathTemporalMergeDebugColor(uint status) {
+    if ((status & PATH_TEMPORAL_HISTORY_EMPTY) != 0u
+            && (status & PATH_TEMPORAL_CURRENT_EMPTY) != 0u) {
+        return float3(0.0);
+    }
+    if ((status & PATH_TEMPORAL_REPLAY_REJECT) != 0u) {
+        return float3(0.05, 0.85, 0.95);
+    }
+    if ((status & PATH_TEMPORAL_FOOTPRINT_REJECT) != 0u) {
+        return float3(0.55, 0.10, 0.95);
+    }
+    if ((status & PATH_TEMPORAL_COMPATIBILITY_REJECT) != 0u) {
+        return float3(0.15, 0.35, 0.95);
+    }
+    if ((status & PATH_TEMPORAL_HISTORY_EMPTY) != 0u) {
+        return float3(0.10, 0.10, 0.10);
+    }
+    if ((status & PATH_TEMPORAL_HISTORY_SELECTED) != 0u) {
+        return float3(0.05, 0.95, 0.20);
+    }
+    if ((status & PATH_TEMPORAL_MERGED) != 0u) {
+        return float3(0.20, 0.70, 0.35);
+    }
+    return float3(0.80, 0.65, 0.05);
 }
 
 // Diagnostic channels: red = normalized traced depth, green = selected target luminance,

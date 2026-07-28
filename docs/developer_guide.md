@@ -116,6 +116,14 @@ segment seeds and color-codes independent mismatches in terminal path/proposal s
 endpoint, proposal components, metadata, and replay ABI. It does not feed the estimator or alter
 the normal render.
 
+Debug view 16 is the opt-in path-temporal merge reference. It replays the previous same-pixel
+reservoir on the current queue, applies strict topology/depth/transport/footprint admission, caps
+the historical effective count at eight, and uses an identity shift with Jacobian one. Green means
+history was selected; darker green means the merge was accepted but the current sample remained
+selected; cyan is replay rejection; blue and purple are compatibility and footprint rejection;
+gray is empty history; black is an empty current/history pair. The merged reservoir is stored only
+for this debug history chain and is not consumed by the active image estimator.
+
 ## Linux
 
 Set `DLSS_SDK` and `VULKAN_SDK` before configuring CMake:

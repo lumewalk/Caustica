@@ -65,6 +65,7 @@
 	"caustica.options.rt.debugView.13": "ReSTIR PT Candidate",
 	"caustica.options.rt.debugView.14": "ReSTIR PT Temporal Admission",
 	"caustica.options.rt.debugView.15": "ReSTIR PT Seeded Replay",
+	"caustica.options.rt.debugView.16": "ReSTIR PT Temporal Merge",
 	"caustica.options.rt.restirDirect": "ReSTIR Direct Lighting",
 	"caustica.options.rt.restirDirect.tooltip": "Replace valid first-interface emitter lighting with the temporal/spatial ReSTIR reservoir.",
 	"caustica.options.rt.restirPt": "ReSTIR PT Experimental Storage",

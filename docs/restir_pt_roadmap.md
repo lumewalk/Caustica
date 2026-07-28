@@ -136,6 +136,14 @@ opt-in seeded replay of the selected reservoir path using the stored seed pairs 
 reconstructed terminal states, topology, endpoint, proposal lane, and packed metadata. Its green
 output means an exact replay; red/orange/cyan/blue/magenta/yellow channels identify path-state,
 proposal-state, ABI, topology/metadata, endpoint, and proposal-lane mismatches respectively.
+Debug view 16 is the first opt-in GRIS temporal merge. It uses identity temporal mapping, replays
+the historical sample on the current queue, requires an exact replay plus strict
+depth/transport/topology/footprint compatibility, caps the source effective count at eight, and
+uses an explicit unit shift Jacobian. Green means the historical sample was selected, darker green
+means the merge was accepted while the current sample remained selected, cyan is replay rejection,
+blue/purple are compatibility/footprint rejection, gray is empty history, and black means both
+reservoirs are empty. This mode updates only the path-history reference reservoir; it does not feed
+the active image estimator.
 A future reconnection
 mapping may relax the identity checks only together with a measured Jacobian/PDF mapping and
 new reference tests; it must not silently treat the two RNG streams as one seed.
@@ -278,6 +286,11 @@ Exit gate:
 - reuse diffuse and specular paths only in compatibility domains already
   covered by tests
 - keep direct-light-only and no-reuse modes for comparisons
+
+The first implementation milestone is debug view 16: an identity-map temporal merge with a unit
+Jacobian and strict seeded replay. It intentionally precedes motion-vector reprojection and
+reconnection so the GRIS weight and effective-count accounting can be validated without hiding
+mapping errors behind a more permissive shift.
 
 Exit gate:
 
