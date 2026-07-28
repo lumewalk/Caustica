@@ -1,11 +1,20 @@
 # Caustica
 
+This repository is an experimental fork of
+[ComfyFluffy/Caustica](https://github.com/ComfyFluffy/Caustica), focused on
+building a correct and extensible ReSTIR PT / ReSTIR PT Enhanced rendering
+pipeline.
+
 Caustica is an experimental ray-traced renderer for Minecraft 26.2's Vulkan backend.
 It replaces the vanilla world view with hardware ray tracing and NVIDIA DLSS
 features while keeping Minecraft's familiar UI and gameplay intact.
 
 Caustica is early software. Expect bugs, missing visual cases, and frequent
 changes while the renderer is being built.
+
+The ReSTIR PT work in this fork is under active development. Its reservoir,
+temporal-history, validation, and wavefront foundations are being implemented
+incrementally; this is not yet a complete ReSTIR PT renderer.
 
 ![Caustica ray-traced Minecraft scene](docs/gallery/2026-07-09_21.25.14.jpg)
 
