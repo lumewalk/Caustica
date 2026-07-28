@@ -435,8 +435,9 @@ public PathTraceResult tracePath(PathSegment seg, uint2 pix, uint sampleIndex, b
 void main() {
     worldPush = ConstPtr<WorldPush>(pc.worldPushAddr)[0];
     bool pathDebug = pc.debugView == PATH_DEBUG_VIEW;
+    bool pathTemporalDebug = pc.debugView == PATH_TEMPORAL_DEBUG_VIEW;
     bool pathCapture = (pc.historyFlags & 4u) != 0u && pc.pathReservoirAddr != 0;
-    if (pc.debugView != 0u && !pathDebug) {
+    if (pc.debugView != 0u && !pathDebug && !pathTemporalDebug) {
         return; // pass A owns guide visualization output
     }
     uint2 dispatchIndex = DispatchRaysIndex().xy;
@@ -444,7 +445,7 @@ void main() {
     int2 pix = int2(dispatchIndex);
     uint spp = max(worldPush.spp, 1u);
     uint pixelIndex = dispatchIndex.y * dimensions.x + dispatchIndex.x;
-    if (pathDebug && !pathCapture) {
+    if ((pathDebug || pathTemporalDebug) && !pathCapture) {
         outImage[pix] = float4(1.0, 0.0, 1.0, 1.0); // setting disabled / storage unavailable
         return;
     }
@@ -507,7 +508,11 @@ void main() {
                 pc.historyGeneration, selectionSeed);
     }
     DevicePtr<PathReservoir>(pc.pathReservoirAddr)[pixelIndex] = pathReservoir;
-    outImage[pix] = float4(pathDebug
-            ? pathReservoirDebug(pathReservoir, worldPush.maxBounces)
-            : frameRadiance / float(spp), 1.0);
+    // View 14 is written by path_temporal_validate after this pass. Leaving outImage untouched here
+    // prevents an intermediate radiance image from leaking into the diagnostic if that pass changes.
+    if (!pathTemporalDebug) {
+        outImage[pix] = float4(pathDebug
+                ? pathReservoirDebug(pathReservoir, worldPush.maxBounces)
+                : frameRadiance / float(spp), 1.0);
+    }
 }
