@@ -42,8 +42,9 @@ public PathTraceResult tracePath(PathSegment seg, uint2 pix, uint sampleIndex, b
     // produces independent lighting/BSDF paths from the shared terminal continuation.
     uint seed = seg.seed ^ sampleIndex * 2246822519u;
     seed = pcg(seed);
-    uint topologyKey = captureMetadata
-            ? pathHash(seg.seed ^ sampleIndex * 3266489917u ^ uint(seg.bounce)) : 0u;
+    // Topology must describe transport structure, not the random seed. Temporal admission compares
+    // this key across frames; seed/sample identity lives separately in sampleId and replayState.
+    uint topologyKey = captureMetadata ? pathHash(0x91E10DA5u ^ uint(seg.bounce)) : 0u;
     uint transportMask = 0u;
     float rayConeWidth = seg.rayConeWidth;
     float rayConeSpread = max(seg.rayConeSpread, RAY_CONE_MIN_SPREAD);
@@ -471,7 +472,7 @@ void main() {
     for (uint s = 0u; s < spp; ++s) {
         float3 sampleRadiance = float3(0.0);
         uint sampleDepth = 0u;
-        uint sampleTopology = pathHash(pixelIndex ^ s * 3266489917u);
+        uint sampleTopology = pathHash(0x7F4A7C15u);
         uint sampleReplayState = 0u;
         uint sampleTransportMask = 0u;
         float sampleFootprint = RAY_CONE_MIN_WIDTH;

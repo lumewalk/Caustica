@@ -1,14 +1,18 @@
 package dev.comfyfluffy.caustica.rt;
 
 import dev.comfyfluffy.caustica.rt.accel.RtBuffer;
+import dev.comfyfluffy.caustica.rt.accel.RtImage;
+import dev.comfyfluffy.caustica.rt.pipeline.RtPathTemporalPipeline;
+import java.nio.ByteBuffer;
 import org.lwjgl.vulkan.VK10;
+import org.lwjgl.vulkan.VkCommandBuffer;
 
 /**
- * Double-buffered GPU storage for future ReSTIR PT path reservoirs.
+ * Double-buffered GPU storage and temporal-admission diagnostics for ReSTIR PT path reservoirs.
  *
- * <p>This class owns allocation, generation matching, and lifetime only. Candidate generation and
- * replay/reconnection passes are deliberately not hidden here; they will consume the explicit ABI
- * address once the first secondary-bounce shader pass is ready.</p>
+ * <p>Candidate generation remains in the wavefront ray pass. This owner validates historical
+ * reprojection and strict path compatibility, while replay/reconnection and the eventual GRIS merge
+ * remain explicit later stages.</p>
  */
 final class RtPathReservoirHistory {
     static final int SLOT_COUNT = 2;
@@ -46,10 +50,12 @@ final class RtPathReservoirHistory {
 
     private final State state = new State();
     private final RtBuffer[] slots = new RtBuffer[SLOT_COUNT];
+    private RtPathTemporalPipeline temporalPipeline;
     private int width = -1;
     private int height = -1;
 
-    void ensure(RtContext ctx, int requestedWidth, int requestedHeight) {
+    void ensure(RtContext ctx, int requestedWidth, int requestedHeight,
+                RtImage receiverMotion, RtImage validationMetadata, RtImage debugColor) {
         if (ready() && width == requestedWidth && height == requestedHeight) {
             return;
         }
@@ -62,6 +68,8 @@ final class RtPathReservoirHistory {
             slots[slot] = ctx.createBuffer(bytesPerSlot, usage, false,
                     "path reservoir history slot " + slot + " " + width + "x" + height);
         }
+        temporalPipeline = RtPathTemporalPipeline.create(ctx, receiverMotion.view,
+                validationMetadata.view, debugColor.view);
         state.reset();
     }
 
@@ -74,6 +82,13 @@ final class RtPathReservoirHistory {
 
     void commit(Frame frame) {
         state.commit(frame);
+    }
+
+    void recordTemporalAdmission(VkCommandBuffer cmd, ByteBuffer pushConstants) {
+        if (temporalPipeline == null) {
+            throw new IllegalStateException("Path temporal pipeline used before allocation");
+        }
+        temporalPipeline.dispatch(cmd, width, height, pushConstants);
     }
 
     void reset() {
@@ -101,10 +116,14 @@ final class RtPathReservoirHistory {
     }
 
     boolean ready() {
-        return slots[0] != null && slots[1] != null;
+        return slots[0] != null && slots[1] != null && temporalPipeline != null;
     }
 
     void destroy() {
+        if (temporalPipeline != null) {
+            temporalPipeline.destroy();
+            temporalPipeline = null;
+        }
         for (int slot = 0; slot < SLOT_COUNT; slot++) {
             if (slots[slot] != null) {
                 slots[slot].destroy();

@@ -864,7 +864,8 @@ public final class RtComposite {
                 RtDirectReservoirHistory.BYTES_PER_RESERVOIR, reservoirBytes,
                 String.format(Locale.ROOT, "%.2f", reservoirBytes / (1024.0 * 1024.0)));
         if (restirPt) {
-            pathReservoirs.ensure(ctx, renderW, renderH);
+            pathReservoirs.ensure(ctx, renderW, renderH,
+                    gMotion, temporalValidation.metadata(), output);
             long pathReservoirBytes = pathReservoirs.allocatedBytes();
             CausticaMod.LOGGER.info(
                     "RT path reservoirs: render={}x{}, slots={}, stride={} B, bytes={}, gpuMiB={}",
@@ -1137,6 +1138,15 @@ public final class RtComposite {
             }
             gpuFrameStats.markTemporalValidation(gpuStats, cmd);
             VulkanCommandEncoder.memoryBarrier(cmd, stack); // validation writes visible; guide reads complete
+            if (restirPt) {
+                try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd,
+                             "path temporal admission");
+                     RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage(
+                             "frame.pathTemporalAdmission")) {
+                    pathReservoirs.recordTemporalAdmission(cmd, pushConstants);
+                }
+                VulkanCommandEncoder.memoryBarrier(cmd, stack);
+            }
             try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd, "direct reservoir initialize");
                  RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage("frame.reservoirInit")) {
                 directReservoirs.recordInitialize(cmd, reservoirFrame);

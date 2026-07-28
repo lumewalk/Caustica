@@ -1,8 +1,10 @@
 import world_common;
-import math;
 import sampling_core;
 
 public static const uint PATH_DEBUG_VIEW = 13u;
+public static const uint PATH_TEMPORAL_DEBUG_VIEW = 14u;
+public static const uint PATH_GENERATION_MASK = 0x00FFFFFFu;
+public static const float PATH_MAX_FOOTPRINT_RATIO = 4.0;
 
 public static const uint PATH_TRANSPORT_DIFFUSE = 1u;
 public static const uint PATH_TRANSPORT_GLOSSY = 2u;
@@ -17,6 +19,10 @@ public struct PathTraceResult {
     public uint transportMask;
     public float footprint;
 };
+
+public float pathLuminance(float3 color) {
+    return dot(color, float3(0.2126, 0.7152, 0.0722));
+}
 
 public PathReservoir pathReservoirEmpty() {
     PathReservoir reservoir;
@@ -37,7 +43,7 @@ public uint pathTopologyStep(uint topology, uint eventToken) {
 }
 
 public uint pathPackMetadata(uint generation, uint depth, uint transportMask) {
-    return (generation & 0x00FFFFFFu)
+    return (generation & PATH_GENERATION_MASK)
             | ((min(depth, 15u) & 0xFu) << 24u)
             | ((transportMask & 0xFu) << 28u);
 }
@@ -52,7 +58,7 @@ public void pathReservoirUpdate(inout PathReservoir reservoir,
                                 uint historyGeneration,
                                 inout uint selectionSeed) {
     float3 radiance = max(candidate.radiance, float3(0.0));
-    float target = max(luminance(radiance), 0.0);
+    float target = max(pathLuminance(radiance), 0.0);
     float proposalDensity = 1.0;
     float candidateWeight = target / proposalDensity;
     float previousWeightSum = reservoir.weights.x;
@@ -87,5 +93,5 @@ public float3 pathReservoirDebug(PathReservoir reservoir, uint maxDepth) {
     float depth = float((metadata >> 24u) & 0xFu) / float(max(maxDepth, 1u));
     float target = reservoir.sampleRadianceTarget.w;
     float transport = float((metadata >> 28u) & 0xFu) / 15.0;
-    return float3(saturate(depth), target / (1.0 + target), transport);
+    return float3(clamp(depth, 0.0, 1.0), target / (1.0 + target), transport);
 }
