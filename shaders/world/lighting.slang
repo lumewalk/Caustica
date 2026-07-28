@@ -19,6 +19,9 @@ public struct Reservoir {
     public float W;
     public float wSum;
     public float phat;
+    // Selected light-selection PDF. This is diagnostic metadata only; the active RIS estimator
+    // continues to use the existing w = phat / sourcePdf calculation below.
+    public float proposalPdf;
 };
 
 public Reservoir resEmpty() {
@@ -31,6 +34,7 @@ public Reservoir resEmpty() {
     r.W = 0.0;
     r.wSum = 0.0;
     r.phat = 0.0;
+    r.proposalPdf = 0.0;
     return r;
 }
 
@@ -138,6 +142,7 @@ public Reservoir risInitial(float3 hitPos, float3 n, float3 v, float3 rd, float3
             r.le = le;
             r.area = area;
             r.phat = phat;
+            r.proposalPdf = sourcePdf;
         }
     }
     r.W = r.phat > 0.0 ? (r.wSum / (r.M * r.phat)) : 0.0;

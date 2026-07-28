@@ -24,6 +24,9 @@ public struct PathTraceResult {
     public uint proposalReplayState;
     public uint transportMask;
     public float footprint;
+    // Light-selection PDF capture is diagnostic until continuation-event PDFs are also recorded.
+    public float lightProposalPdf;
+    public uint lightProposalEvents;
 };
 
 // A complete screen-owned sample can contain both continuation records emitted by Pass A. Keep its
@@ -39,6 +42,8 @@ public struct PathCandidate {
     public uint replaySegmentCount;
     public uint transportMask;
     public float footprint;
+    public float lightProposalPdf;
+    public uint lightProposalEvents;
 };
 
 public float pathLuminance(float3 color) {
@@ -82,6 +87,8 @@ public void pathReservoirUpdate(inout PathReservoir reservoir,
                                 inout uint selectionSeed) {
     float3 radiance = max(candidate.radiance, float3(0.0));
     float target = max(pathLuminance(radiance), 0.0);
+    // Bootstrap weighting remains unchanged. The captured light PDF is stored separately below;
+    // it is not yet a complete path PDF because continuation-lobe factors are still absent.
     float proposalDensity = 1.0;
     float candidateWeight = target / proposalDensity;
     float previousWeightSum = reservoir.weights.x;
@@ -92,7 +99,9 @@ public void pathReservoirUpdate(inout PathReservoir reservoir,
 
     if (selectCandidate) {
         reservoir.sampleRadianceTarget = float4(radiance, target);
-        reservoir.proposalShift = float4(proposalDensity, 1.0,
+        float capturedProposalDensity = candidate.lightProposalEvents > 0u
+                ? max(candidate.lightProposalPdf, 1.0e-20) : 0.0;
+        reservoir.proposalShift = float4(capturedProposalDensity, 1.0,
                 max(candidate.footprint, 1.0e-5), asfloat(candidate.replayState));
         reservoir.identity = uint4(sampleId, pathKey, candidate.topologyKey,
                 pathPackMetadata(historyGeneration, candidate.depth, candidate.transportMask));

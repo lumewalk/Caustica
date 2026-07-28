@@ -46,6 +46,10 @@ public PathTraceResult tracePathSeeded(PathSegment seg, uint2 pix, bool captureM
     uint transportMask = 0u;
     float rayConeWidth = seg.rayConeWidth;
     float rayConeSpread = max(seg.rayConeSpread, RAY_CONE_MIN_SPREAD);
+    // Capture selected light proposal PDFs independently from the bootstrap estimator. This product
+    // is intentionally incomplete until BSDF/technique PDFs are recorded for every continuation event.
+    float lightProposalPdf = 1.0;
+    uint lightProposalEvents = 0u;
     int maxBounces = int(worldPush.maxBounces);
     int rrStart = maxBounces <= 3 ? 1 : 2;
     // RIS emitter NEE: direct lighting from block emitters is active when lights are published and the
@@ -239,6 +243,10 @@ public PathTraceResult tracePathSeeded(PathSegment seg, uint2 pix, bool captureM
                 float3 v = -rd;
                 Reservoir r = risInitial(hitPos, n, v, rd, albedo, float3(0.0, 0.0, 0.0), 1.0,
                                          true, 0.0, seed, proposalSeed);
+                if (r.proposalPdf > 0.0) {
+                    lightProposalPdf = min(lightProposalPdf * r.proposalPdf, 1.0e30);
+                    lightProposalEvents++;
+                }
                 L += throughput * shadeReservoir(r, hitPos, n, v, rd, albedo, float3(0.0, 0.0, 0.0), 1.0,
                                                  true, 0.0);
             }
@@ -334,6 +342,10 @@ public PathTraceResult tracePathSeeded(PathSegment seg, uint2 pix, bool captureM
             float activeSss = hitDepth <= MAX_SSS_INDIRECT_DEPTH ? sss : 0.0;
             Reservoir r = risInitial(hitPos, n, v, rd, diffAlb, F0, rough, false, activeSss,
                                      seed, proposalSeed);
+            if (r.proposalPdf > 0.0) {
+                lightProposalPdf = min(lightProposalPdf * r.proposalPdf, 1.0e30);
+                lightProposalEvents++;
+            }
             L += throughput * shadeReservoir(r, hitPos, n, v, rd, diffAlb, F0, rough, false,
                                              activeSss);
         }
@@ -427,6 +439,8 @@ public PathTraceResult tracePathSeeded(PathSegment seg, uint2 pix, bool captureM
     result.proposalReplayState = proposalSeed;
     result.transportMask = transportMask;
     result.footprint = max(rayConeWidth, RAY_CONE_MIN_WIDTH);
+    result.lightProposalPdf = lightProposalPdf;
+    result.lightProposalEvents = lightProposalEvents;
     return result;
 }
 
@@ -491,6 +505,8 @@ void main() {
         uint sampleReplaySegmentCount = 0u;
         uint sampleTransportMask = 0u;
         float sampleFootprint = RAY_CONE_MIN_WIDTH;
+        float sampleLightProposalPdf = 1.0;
+        uint sampleLightProposalEvents = 0u;
         uint recordIndex = pixelIndex;
         for (uint leaf = 0u; leaf < MAX_PATH_SEGMENTS; ++leaf) {
             PackedPathSegment packed = queue[recordIndex];
@@ -511,6 +527,8 @@ void main() {
                     ^ traced.proposalReplayState ^ leaf * 1103515245u);
             sampleTransportMask |= traced.transportMask;
             sampleFootprint = max(sampleFootprint, traced.footprint);
+            sampleLightProposalPdf = min(sampleLightProposalPdf * traced.lightProposalPdf, 1.0e30);
+            sampleLightProposalEvents += traced.lightProposalEvents;
             if (packed.nextRecord == PATH_NO_NEXT) {
                 break;
             }
@@ -527,6 +545,8 @@ void main() {
         candidate.replaySegmentCount = sampleReplaySegmentCount;
         candidate.transportMask = sampleTransportMask;
         candidate.footprint = sampleFootprint;
+        candidate.lightProposalPdf = sampleLightProposalPdf;
+        candidate.lightProposalEvents = sampleLightProposalEvents;
         uint sampleId = pathHash(worldPush.frameIndex * 2654435761u
                 ^ pixelIndex * 2246822519u ^ s * 3266489917u);
         pathReservoirUpdate(pathReservoir, candidate, sampleId, pixelIndex,
