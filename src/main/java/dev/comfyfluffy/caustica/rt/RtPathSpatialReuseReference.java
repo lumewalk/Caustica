@@ -41,6 +41,59 @@ final class RtPathSpatialReuseReference {
         }
     }
 
+    /** Deterministic CPU-only totals for comparing policy candidates before any GPU experiment. */
+    static final class PolicyComparisonCounters {
+        private long samples;
+        private long strictAccepted;
+        private long limitedAccepted;
+        private long topologyRescued;
+
+        void add(Surface receiver, Surface source) {
+            add(comparePolicies(receiver, source));
+        }
+
+        void add(PolicyComparison comparison) {
+            samples++;
+            if (comparison.strictDecision() == Decision.ACCEPTED) {
+                strictAccepted++;
+            }
+            if (comparison.limitedDecision() == Decision.ACCEPTED) {
+                limitedAccepted++;
+            }
+            if (comparison.topologyRescued()) {
+                topologyRescued++;
+            }
+        }
+
+        long samples() {
+            return samples;
+        }
+
+        long strictAccepted() {
+            return strictAccepted;
+        }
+
+        long limitedAccepted() {
+            return limitedAccepted;
+        }
+
+        long topologyRescued() {
+            return topologyRescued;
+        }
+
+        double strictAcceptanceRatio() {
+            return samples == 0L ? Double.NaN : (double) strictAccepted / samples;
+        }
+
+        double limitedAcceptanceRatio() {
+            return samples == 0L ? Double.NaN : (double) limitedAccepted / samples;
+        }
+
+        double topologyRescueRatio() {
+            return samples == 0L ? Double.NaN : (double) topologyRescued / samples;
+        }
+    }
+
     enum DiagnosticCategory {
         RECEIVER_EMPTY,
         ACCEPTED_RECONNECTION,

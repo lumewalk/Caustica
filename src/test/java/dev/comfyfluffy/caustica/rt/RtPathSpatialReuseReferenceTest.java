@@ -64,6 +64,27 @@ final class RtPathSpatialReuseReferenceTest {
     }
 
     @Test
+    void deterministicPolicyComparisonReportsOnlyTopologyRescues() {
+        var receiver = surface(7L, 0.95, 0.02, 2, 42L, 2, 1.0);
+        var counters = new RtPathSpatialReuseReference.PolicyComparisonCounters();
+        counters.add(receiver, surface(7L, 0.95, 0.02, 2, 42L, 2, 1.0));
+        counters.add(receiver, surface(7L, 0.95, 0.02, 2, 99L, 2, 1.0));
+        counters.add(receiver, surface(7L, 0.95, 0.02, 3, 42L, 2, 1.0));
+        counters.add(receiver, surface(7L, 0.95, 0.02, 2, 42L, 3, 1.0));
+        counters.add(receiver, surface(7L, 0.95, 0.02, 2, 42L, 2, 4.1));
+        counters.add(receiver, surface(8L, 0.95, 0.02, 2, 42L, 2, 1.0));
+        counters.add(surface(7L, 0.84, 0.02, 2, 42L, 2, 1.0), receiver);
+
+        assertEquals(7L, counters.samples());
+        assertEquals(1L, counters.strictAccepted());
+        assertEquals(2L, counters.limitedAccepted());
+        assertEquals(1L, counters.topologyRescued());
+        assertEquals(1.0 / 7.0, counters.strictAcceptanceRatio(), 1.0e-12);
+        assertEquals(2.0 / 7.0, counters.limitedAcceptanceRatio(), 1.0e-12);
+        assertEquals(1.0 / 7.0, counters.topologyRescueRatio(), 1.0e-12);
+    }
+
+    @Test
     void reconnectionJacobianUsesSolidAngleGeometryAndPssPdfRatio() {
         var geometry = new RtPathSpatialReuseReference.ReconnectionGeometry(
                 2.0, 4.0, 0.5, 0.25, 0.2, 0.4);
