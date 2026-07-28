@@ -24,6 +24,105 @@ final class RtPathSpatialReuseReference {
         FOOTPRINT_MISMATCH
     }
 
+    enum DiagnosticCategory {
+        RECEIVER_EMPTY,
+        ACCEPTED_RECONNECTION,
+        FOOTPRINT_REJECT,
+        PATH_REJECT,
+        COMPATIBLE_NO_RECONNECTION,
+        COMPATIBLE_NEIGHBOR_EMPTY,
+        SURFACE_REJECT
+    }
+
+    /**
+     * Streaming category totals for the view-17 mask. Counts are intentionally independent of
+     * resolution and frame size so a later GPU readback can compare ratios directly.
+     */
+    static final class DiagnosticCounters {
+        private final long[] counts = new long[DiagnosticCategory.values().length];
+
+        void add(DiagnosticCategory category) {
+            counts[category.ordinal()]++;
+        }
+
+        long count(DiagnosticCategory category) {
+            return counts[category.ordinal()];
+        }
+
+        long total() {
+            long total = 0L;
+            for (long count : counts) {
+                total = Math.addExact(total, count);
+            }
+            return total;
+        }
+
+        double ratio(DiagnosticCategory category) {
+            long total = total();
+            return total == 0L ? Double.NaN : (double) count(category) / total;
+        }
+    }
+
+    /**
+     * Numerically stable paired moments for receiver/source luminance measurements. The sample
+     * covariance and Pearson correlation are undefined until two finite pairs are observed; this
+     * explicit contract prevents a zero-variance batch from looking like perfect reuse.
+     */
+    static final class PairMoments {
+        private long count;
+        private double meanX;
+        private double meanY;
+        private double m2X;
+        private double m2Y;
+        private double coMoment;
+
+        void add(double x, double y) {
+            if (!Double.isFinite(x) || !Double.isFinite(y)) {
+                throw new IllegalArgumentException("paired moments require finite samples");
+            }
+            long nextCount = Math.addExact(count, 1L);
+            double deltaX = x - meanX;
+            double deltaY = y - meanY;
+            meanX += deltaX / nextCount;
+            meanY += deltaY / nextCount;
+            m2X += deltaX * (x - meanX);
+            m2Y += deltaY * (y - meanY);
+            coMoment += deltaX * (y - meanY);
+            count = nextCount;
+        }
+
+        long count() {
+            return count;
+        }
+
+        double meanX() {
+            return meanX;
+        }
+
+        double meanY() {
+            return meanY;
+        }
+
+        double varianceX() {
+            return count > 1L ? m2X / (count - 1L) : Double.NaN;
+        }
+
+        double varianceY() {
+            return count > 1L ? m2Y / (count - 1L) : Double.NaN;
+        }
+
+        double covariance() {
+            return count > 1L ? coMoment / (count - 1L) : Double.NaN;
+        }
+
+        double correlation() {
+            if (count < 2L || m2X <= 0.0 || m2Y <= 0.0) {
+                return Double.NaN;
+            }
+            return coMoment / Math.sqrt(m2X * m2Y);
+        }
+    }
+
     record Surface(long materialKey, double normalCosine, double relativeDepth,
                    int depth, long topologyKey, int transportClass, double footprint) {
         Surface {

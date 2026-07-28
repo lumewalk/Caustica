@@ -59,4 +59,48 @@ final class RtPathSpatialReuseReferenceTest {
         assertThrows(IllegalArgumentException.class,
                 () -> RtPathSpatialReuseReference.packReconnectionMetadata(-1, true));
     }
+
+    @Test
+    void pairedMomentsExposeCovarianceAndCorrelationWithoutBatchStorage() {
+        var moments = new RtPathSpatialReuseReference.PairMoments();
+        moments.add(1.0, 2.0);
+        moments.add(2.0, 4.0);
+        moments.add(3.0, 6.0);
+
+        assertEquals(3L, moments.count());
+        assertEquals(2.0, moments.meanX(), 1.0e-12);
+        assertEquals(4.0, moments.meanY(), 1.0e-12);
+        assertEquals(1.0, moments.varianceX(), 1.0e-12);
+        assertEquals(4.0, moments.varianceY(), 1.0e-12);
+        assertEquals(2.0, moments.covariance(), 1.0e-12);
+        assertEquals(1.0, moments.correlation(), 1.0e-12);
+    }
+
+    @Test
+    void covarianceContractRejectsNonFinitePairsAndZeroVarianceCorrelation() {
+        var moments = new RtPathSpatialReuseReference.PairMoments();
+        assertThrows(IllegalArgumentException.class,
+                () -> moments.add(Double.NaN, 1.0));
+        moments.add(2.0, 4.0);
+        moments.add(2.0, 8.0);
+        assertTrue(Double.isNaN(moments.correlation()));
+        assertTrue(Double.isNaN(new RtPathSpatialReuseReference.PairMoments().covariance()));
+    }
+
+    @Test
+    void diagnosticCountersProduceResolutionIndependentCategoryRatios() {
+        var counters = new RtPathSpatialReuseReference.DiagnosticCounters();
+        counters.add(RtPathSpatialReuseReference.DiagnosticCategory.ACCEPTED_RECONNECTION);
+        counters.add(RtPathSpatialReuseReference.DiagnosticCategory.ACCEPTED_RECONNECTION);
+        counters.add(RtPathSpatialReuseReference.DiagnosticCategory.PATH_REJECT);
+        counters.add(RtPathSpatialReuseReference.DiagnosticCategory.RECEIVER_EMPTY);
+
+        assertEquals(4L, counters.total());
+        assertEquals(2L, counters.count(
+                RtPathSpatialReuseReference.DiagnosticCategory.ACCEPTED_RECONNECTION));
+        assertEquals(0.5, counters.ratio(
+                RtPathSpatialReuseReference.DiagnosticCategory.ACCEPTED_RECONNECTION), 1.0e-12);
+        assertTrue(Double.isNaN(new RtPathSpatialReuseReference.DiagnosticCounters().ratio(
+                RtPathSpatialReuseReference.DiagnosticCategory.SURFACE_REJECT)));
+    }
 }
