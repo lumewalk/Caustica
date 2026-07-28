@@ -144,7 +144,7 @@ public struct DirectReservoir {
 // sampleRadianceTarget = {unshadowed RGB contribution, target density}
 // proposalShift = {bootstrap proposal density, shift Jacobian, path footprint, replay RNG state as float bits}
 // proposalComponents = {light-selection PDF product, canonical continuation PDF product,
-//                       canonical roulette PDF product, packed event counters as float bits}
+//                       canonical roulette PDF product, packed event counters + endpoint-valid bit}
 // weights = {accumulated weight, effective M, final W, confidence}
 // identity = {sample id, path/queue key, topology key, packed generation/depth/transport class}
 // replay = {segment0 path seed, segment0 light-proposal seed,

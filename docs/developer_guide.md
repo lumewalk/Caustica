@@ -106,8 +106,9 @@ or residency pressure.
 The path-reservoir ABI is currently 128 bytes per pixel per slot. Its replay-control
 lane stores the two wavefront segment seed pairs, segment count, replay version, and
 terminal-state hashes; the additional proposal-components lane captures light,
-continuation, and roulette PDF products plus event counters, while the canonical
-radiance lane stores one replayable sky/emissive endpoint. Two path-history slots
+continuation, and roulette PDF products plus event counters (including an explicit
+canonical-endpoint validity bit), while the canonical radiance lane stores one
+replayable sky/emissive endpoint. Two path-history slots
 therefore use about 210.3 MiB at 1280x673 and 473.0 MiB at 1920x1009. This is
 intentional: replay correctness is being established before any packing or compression pass.
 

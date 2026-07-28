@@ -111,7 +111,8 @@ and validation over minimum byte size; packing follows only after captures
 identify the real bandwidth and memory pressure.
 The current eight-lane path record is 128 B/pixel/slot; its proposal lane keeps
 light-selection, canonical continuation, and roulette PDF products separate from
-the shift Jacobian, and the final lane stores one replayable sky/emissive endpoint.
+the shift Jacobian. Its packed metadata includes an explicit canonical-endpoint
+validity bit, and the final lane stores one replayable sky/emissive endpoint.
 
 ### Path Sample and Reservoir
 

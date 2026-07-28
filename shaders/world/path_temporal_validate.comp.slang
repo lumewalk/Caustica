@@ -28,7 +28,7 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID) {
     // 0 current empty, 1 first frame/reset, 2 surface reprojection reject, 3 previous empty,
     // 4 generation mismatch, 5 depth mismatch, 6 transport mismatch, 7 topology mismatch,
     // 8 footprint mismatch, 9 strictly compatible and ready for future replay/shift evaluation,
-    // 10 replay ABI mismatch or inconsistent replay lanes.
+    // 10 replay ABI mismatch or inconsistent replay lanes, 11 canonical endpoint unavailable.
     uint debugState = current.weights.y > 0.0 && current.sampleRadianceTarget.w > 0.0 ? 1u : 0u;
     bool historyAvailable = (pc.historyFlags & 8u) != 0u
             && pc.pathReservoirPreviousAddr != 0u;
@@ -71,7 +71,8 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID) {
                             && (current.replayControl.y == MAX_PATH_SEGMENTS
                                     || all(current.replay.zw == uint2(0u)))
                             && all(current.proposalComponents.xyz > float3(0.0))
-                            && (asuint(current.proposalComponents.w) & 0xC0000000u) == 0u;
+                            && (asuint(current.proposalComponents.w)
+                                    & PATH_PROPOSAL_RESERVED_MASK) == 0u;
                     bool previousReplayConsistent = previous.replayControl.x == PATH_REPLAY_VERSION
                             && previous.replayControl.y >= 1u
                             && previous.replayControl.y <= MAX_PATH_SEGMENTS
@@ -79,9 +80,13 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID) {
                             && (previous.replayControl.y == MAX_PATH_SEGMENTS
                                     || all(previous.replay.zw == uint2(0u)))
                             && all(previous.proposalComponents.xyz > float3(0.0))
-                            && (asuint(previous.proposalComponents.w) & 0xC0000000u) == 0u;
+                            && (asuint(previous.proposalComponents.w)
+                                    & PATH_PROPOSAL_RESERVED_MASK) == 0u;
                     if (!currentReplayConsistent || !previousReplayConsistent) {
                         debugState = 10u;
+                    } else if (!pathCanonicalEndpointConsistent(current)
+                            || !pathCanonicalEndpointConsistent(previous)) {
+                        debugState = 11u;
                     } else if (currentGeneration != expectedGeneration
                             || previousGeneration != expectedGeneration) {
                         debugState = 4u;
@@ -113,6 +118,7 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID) {
         else if (debugState == 7u) color = float3(0.15, 0.35, 0.95); // topology mismatch
         else if (debugState == 8u) color = float3(0.55, 0.10, 0.95); // footprint mismatch
         else if (debugState == 10u) color = float3(0.05, 0.85, 0.95); // replay ABI mismatch
+        else if (debugState == 11u) color = float3(1.00, 0.12, 0.55); // no canonical endpoint
         else color = float3(0.05, 0.95, 0.20);                       // strict compatibility accepted
         debugColor[pixel] = float4(color, 1.0);
     }

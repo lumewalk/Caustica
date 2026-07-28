@@ -12,7 +12,9 @@ public static const uint PATH_TRANSPORT_DELTA = 4u;
 public static const uint PATH_TRANSPORT_TRANSMISSION = 8u;
 // Increment whenever replay metadata or RNG interpretation changes. Temporal reuse must reject
 // reservoirs produced by a different contract instead of trying to replay an incompatible path.
-public static const uint PATH_REPLAY_VERSION = 4u;
+public static const uint PATH_REPLAY_VERSION = 5u;
+public static const uint PATH_PROPOSAL_CANONICAL_VALID = 1u << 30u;
+public static const uint PATH_PROPOSAL_RESERVED_MASK = 1u << 31u;
 
 public struct PathTraceResult {
     public float3 radiance;
@@ -110,10 +112,28 @@ public void pathAccumulateProposal(inout float product, inout uint events, float
     events++;
 }
 
-public uint pathPackProposalEvents(uint lightEvents, uint continuationEvents, uint rouletteEvents) {
+public uint pathPackProposalEvents(uint lightEvents, uint continuationEvents, uint rouletteEvents,
+                                   bool canonicalValid) {
     return min(lightEvents, 1023u)
             | (min(continuationEvents, 1023u) << 10u)
-            | (min(rouletteEvents, 1023u) << 20u);
+            | (min(rouletteEvents, 1023u) << 20u)
+            | (canonicalValid ? PATH_PROPOSAL_CANONICAL_VALID : 0u);
+}
+
+public bool pathCanonicalEndpointConsistent(PathReservoir reservoir) {
+    uint packedEvents = asuint(reservoir.proposalComponents.w);
+    if ((packedEvents & PATH_PROPOSAL_CANONICAL_VALID) == 0u
+            || (packedEvents & PATH_PROPOSAL_RESERVED_MASK) != 0u) {
+        return false;
+    }
+    float3 radiance = reservoir.canonicalRadianceTarget.xyz;
+    float storedTarget = reservoir.canonicalRadianceTarget.w;
+    if (!all(radiance >= float3(0.0)) || !(storedTarget >= 0.0)) {
+        return false;
+    }
+    float expectedTarget = pathLuminance(radiance);
+    float tolerance = max(1.0e-5, expectedTarget * 1.0e-4);
+    return abs(expectedTarget - storedTarget) <= tolerance;
 }
 
 // Initial per-pixel RIS update. The traced path is already an importance-weighted Monte-Carlo
@@ -147,7 +167,8 @@ public void pathReservoirUpdate(inout PathReservoir reservoir,
                 candidate.canonicalRouletteProposalPdf,
                 asfloat(pathPackProposalEvents(candidate.lightProposalEvents,
                         candidate.canonicalContinuationProposalEvents,
-                        candidate.canonicalRouletteProposalEvents)));
+                        candidate.canonicalRouletteProposalEvents,
+                        candidate.canonicalValid != 0u)));
         float3 canonicalRadiance = max(candidate.canonicalRadiance, float3(0.0));
         float canonicalTarget = candidate.canonicalValid != 0u
                 ? max(pathLuminance(canonicalRadiance), 0.0) : 0.0;
