@@ -545,6 +545,7 @@ void main() {
     worldPush = ConstPtr<WorldPush>(pc.worldPushAddr)[0];
     bool pathDebug = pc.debugView == PATH_DEBUG_VIEW;
     bool pathTemporalDebug = pc.debugView == PATH_TEMPORAL_DEBUG_VIEW;
+    bool canonicalMode = (pc.historyFlags & PATH_CANONICAL_MODE_FLAG) != 0u;
     bool pathCapture = (pc.historyFlags & 4u) != 0u && pc.pathReservoirAddr != 0;
     if (pc.debugView != 0u && !pathDebug && !pathTemporalDebug) {
         return; // pass A owns guide visualization output
@@ -669,7 +670,7 @@ void main() {
         uint sampleId = pathHash(worldPush.frameIndex * 2654435761u
                 ^ pixelIndex * 2246822519u ^ s * 3266489917u);
         pathReservoirUpdate(pathReservoir, candidate, sampleId, pixelIndex,
-                pc.historyGeneration, selectionSeed);
+                pc.historyGeneration, selectionSeed, canonicalMode);
     }
     DevicePtr<PathReservoir>(pc.pathReservoirAddr)[pixelIndex] = pathReservoir;
     // View 14 is written by path_temporal_validate after this pass. Leaving outImage untouched here

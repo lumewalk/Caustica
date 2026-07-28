@@ -32,7 +32,7 @@ public struct WorldPushConstants {
     public uint64_t pathReservoirPreviousAddr; // generation-matched history slot (0 = unavailable)
     public uint frameIndex;
     public uint debugView;
-    public uint historyFlags;            // bit0 direct history, bit1 direct replacement, bit2 PT storage, bit3 PT history
+    public uint historyFlags;            // bit0 direct history, bit1 replacement, bit2 PT storage, bit3 PT history, bit4 canonical debug capture
     public uint historyGeneration;       // low 24 bits are packed into path-sample compatibility metadata
 };
 

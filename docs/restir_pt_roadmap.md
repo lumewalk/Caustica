@@ -139,6 +139,10 @@ PDF capture is the current contract boundary. `RtPathPdfReference` treats techni
 continuous directional density, and delta mass as separate events. The GPU now records those
 components, but the active path estimator still keeps its bootstrap proposal density because one
 candidate currently sums NEE and continuation radiance rather than representing one canonical path.
+Debug view 13 opts into a storage-only canonical candidate capture: candidates without a recorded
+sky/emissive endpoint are skipped, and the continuation/roulette PDF product becomes the first
+path-only proposal-density check. Normal rendering and debug view 14 remain on the bootstrap
+capture until this mode has its own image and temporal comparisons.
 
 ## Delivery Phases
 

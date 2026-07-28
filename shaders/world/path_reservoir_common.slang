@@ -13,6 +13,7 @@ public static const uint PATH_TRANSPORT_TRANSMISSION = 8u;
 // Increment whenever replay metadata or RNG interpretation changes. Temporal reuse must reject
 // reservoirs produced by a different contract instead of trying to replay an incompatible path.
 public static const uint PATH_REPLAY_VERSION = 5u;
+public static const uint PATH_CANONICAL_MODE_FLAG = 16u;
 public static const uint PATH_PROPOSAL_CANONICAL_VALID = 1u << 30u;
 public static const uint PATH_PROPOSAL_RESERVED_MASK = 1u << 31u;
 
@@ -144,12 +145,22 @@ public void pathReservoirUpdate(inout PathReservoir reservoir,
                                 uint sampleId,
                                 uint pathKey,
                                 uint historyGeneration,
-                                inout uint selectionSeed) {
-    float3 radiance = max(candidate.radiance, float3(0.0));
+                                inout uint selectionSeed,
+                                bool canonicalMode) {
+    if (canonicalMode && candidate.canonicalValid == 0u) {
+        return;
+    }
+    float3 radiance = canonicalMode
+            ? max(candidate.canonicalRadiance, float3(0.0))
+            : max(candidate.radiance, float3(0.0));
     float target = max(pathLuminance(radiance), 0.0);
-    // Bootstrap weighting remains unchanged. Proposal components are stored separately below; they
-    // are not yet a complete path PDF because the current candidate still sums multiple estimators.
-    float proposalDensity = 1.0;
+    // The regular capture remains bootstrap-weighted because its candidate still sums multiple
+    // estimators. The opt-in canonical debug mode has one endpoint and uses its continuation and
+    // roulette products as the first path-only proposal-density contract.
+    float proposalDensity = canonicalMode
+            ? pathCombineProposal(candidate.canonicalContinuationProposalPdf,
+                    candidate.canonicalRouletteProposalPdf)
+            : 1.0;
     float candidateWeight = target / proposalDensity;
     float previousWeightSum = reservoir.weights.x;
     float nextWeightSum = min(previousWeightSum + candidateWeight, 1.0e30);
