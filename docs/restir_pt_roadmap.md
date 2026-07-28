@@ -142,7 +142,13 @@ candidate currently sums NEE and continuation radiance rather than representing 
 Debug view 13 opts into a storage-only canonical candidate capture: candidates without a recorded
 sky/emissive endpoint are skipped, and the continuation/roulette PDF product becomes the first
 path-only proposal-density check. Normal rendering and debug view 14 remain on the bootstrap
-capture until this mode has its own image and temporal comparisons.
+capture until this mode has its own image and temporal comparisons. The view now exposes
+per-sample admission diagnostics without changing the `PathReservoir` ABI: green is admitted,
+magenta is a missing endpoint, blue is a valid zero-target endpoint, red is invalid radiance,
+cyan is an invalid continuation PDF, orange is an invalid roulette PDF, and yellow is an invalid
+combined proposal/importance weight. Colors are averaged across SPP so the view also shows the
+local admission ratio. Canonical candidates are rejected before PDF division, keeping invalid
+values out of the reservoir; normal rendering and view 14 do not consume this diagnostic path.
 
 ## Delivery Phases
 

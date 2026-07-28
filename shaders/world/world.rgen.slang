@@ -580,6 +580,7 @@ void main() {
 
     PathReservoir pathReservoir = pathReservoirEmpty();
     uint selectionSeed = pathHash(pixelIndex ^ worldPush.frameIndex * 747796405u ^ 2891336453u);
+    float3 canonicalDebugColor = float3(0.0);
     for (uint s = 0u; s < spp; ++s) {
         float3 sampleRadiance = float3(0.0);
         uint sampleDepth = 0u;
@@ -669,15 +670,22 @@ void main() {
         candidate.canonicalRouletteProposalEvents = sampleCanonicalRouletteProposalEvents;
         uint sampleId = pathHash(worldPush.frameIndex * 2654435761u
                 ^ pixelIndex * 2246822519u ^ s * 3266489917u);
-        pathReservoirUpdate(pathReservoir, candidate, sampleId, pixelIndex,
+        uint canonicalStatus = pathReservoirUpdate(pathReservoir, candidate, sampleId, pixelIndex,
                 pc.historyGeneration, selectionSeed, canonicalMode);
+        if (canonicalMode) {
+            // Averaging categorical colors across SPP exposes the local admission ratio without
+            // allocating another persistent buffer or changing the 128-byte PathReservoir ABI.
+            canonicalDebugColor += pathCanonicalCandidateDebugColor(canonicalStatus);
+        }
     }
     DevicePtr<PathReservoir>(pc.pathReservoirAddr)[pixelIndex] = pathReservoir;
     // View 14 is written by path_temporal_validate after this pass. Leaving outImage untouched here
     // prevents an intermediate radiance image from leaking into the diagnostic if that pass changes.
     if (!pathTemporalDebug) {
         outImage[pix] = float4(pathDebug
-                ? pathReservoirDebug(pathReservoir, worldPush.maxBounces)
+                ? (canonicalMode
+                        ? canonicalDebugColor / float(spp)
+                        : pathReservoirDebug(pathReservoir, worldPush.maxBounces))
                 : frameRadiance / float(spp), 1.0);
     }
 }

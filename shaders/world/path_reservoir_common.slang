@@ -16,6 +16,15 @@ public static const uint PATH_REPLAY_VERSION = 5u;
 public static const uint PATH_CANONICAL_MODE_FLAG = 16u;
 public static const uint PATH_PROPOSAL_CANONICAL_VALID = 1u << 30u;
 public static const uint PATH_PROPOSAL_RESERVED_MASK = 1u << 31u;
+// Debug-view 13 admission states. These numeric values are mirrored by
+// RtPathCanonicalReference so shader and CPU diagnostics stay deterministic.
+public static const uint PATH_CANONICAL_ACCEPTED = 0u;
+public static const uint PATH_CANONICAL_NO_ENDPOINT = 1u;
+public static const uint PATH_CANONICAL_INVALID_RADIANCE = 2u;
+public static const uint PATH_CANONICAL_ZERO_TARGET = 3u;
+public static const uint PATH_CANONICAL_INVALID_CONTINUATION_PDF = 4u;
+public static const uint PATH_CANONICAL_INVALID_ROULETTE_PDF = 5u;
+public static const uint PATH_CANONICAL_INVALID_PROPOSAL = 6u;
 
 public struct PathTraceResult {
     public float3 radiance;
@@ -137,18 +146,77 @@ public bool pathCanonicalEndpointConsistent(PathReservoir reservoir) {
     return abs(expectedTarget - storedTarget) <= tolerance;
 }
 
+public uint pathCanonicalCandidateStatus(PathCandidate candidate) {
+    if (candidate.canonicalValid == 0u) {
+        return PATH_CANONICAL_NO_ENDPOINT;
+    }
+    if (!all(isfinite(candidate.canonicalRadiance))
+            || !all(candidate.canonicalRadiance >= float3(0.0))) {
+        return PATH_CANONICAL_INVALID_RADIANCE;
+    }
+    float target = pathLuminance(candidate.canonicalRadiance);
+    if (!isfinite(target) || target < 0.0) {
+        return PATH_CANONICAL_INVALID_RADIANCE;
+    }
+    if (target == 0.0) {
+        return PATH_CANONICAL_ZERO_TARGET;
+    }
+    if (!isfinite(candidate.canonicalContinuationProposalPdf)
+            || candidate.canonicalContinuationProposalPdf <= 0.0) {
+        return PATH_CANONICAL_INVALID_CONTINUATION_PDF;
+    }
+    if (!isfinite(candidate.canonicalRouletteProposalPdf)
+            || candidate.canonicalRouletteProposalPdf <= 0.0) {
+        return PATH_CANONICAL_INVALID_ROULETTE_PDF;
+    }
+    float proposalDensity = pathCombineProposal(candidate.canonicalContinuationProposalPdf,
+            candidate.canonicalRouletteProposalPdf);
+    float candidateWeight = target / proposalDensity;
+    if (!isfinite(proposalDensity) || proposalDensity <= 0.0
+            || !isfinite(candidateWeight) || candidateWeight <= 0.0) {
+        return PATH_CANONICAL_INVALID_PROPOSAL;
+    }
+    return PATH_CANONICAL_ACCEPTED;
+}
+
+public float3 pathCanonicalCandidateDebugColor(uint status) {
+    if (status == PATH_CANONICAL_ACCEPTED) {
+        return float3(0.05, 0.95, 0.20); // admitted
+    }
+    if (status == PATH_CANONICAL_NO_ENDPOINT) {
+        return float3(1.00, 0.12, 0.55); // no sky/emissive endpoint
+    }
+    if (status == PATH_CANONICAL_INVALID_RADIANCE) {
+        return float3(0.95, 0.05, 0.05); // non-finite or negative radiance/target
+    }
+    if (status == PATH_CANONICAL_ZERO_TARGET) {
+        return float3(0.10, 0.25, 1.00); // valid black/zero-target endpoint
+    }
+    if (status == PATH_CANONICAL_INVALID_CONTINUATION_PDF) {
+        return float3(0.05, 0.85, 0.95); // continuation PDF
+    }
+    if (status == PATH_CANONICAL_INVALID_ROULETTE_PDF) {
+        return float3(0.95, 0.30, 0.04); // roulette PDF
+    }
+    return float3(0.95, 0.72, 0.04); // combined proposal or importance weight
+}
+
 // Initial per-pixel RIS update. The traced path is already an importance-weighted Monte-Carlo
 // estimator, so this bootstrap stage uses an effective proposal density of one. A later replay pass
 // will replace it with decomposed path PDFs before any temporal or spatial path reuse is allowed.
-public void pathReservoirUpdate(inout PathReservoir reservoir,
+public uint pathReservoirUpdate(inout PathReservoir reservoir,
                                 PathCandidate candidate,
                                 uint sampleId,
                                 uint pathKey,
                                 uint historyGeneration,
                                 inout uint selectionSeed,
                                 bool canonicalMode) {
-    if (canonicalMode && candidate.canonicalValid == 0u) {
-        return;
+    uint canonicalStatus = PATH_CANONICAL_ACCEPTED;
+    if (canonicalMode) {
+        canonicalStatus = pathCanonicalCandidateStatus(candidate);
+        if (canonicalStatus != PATH_CANONICAL_ACCEPTED) {
+            return canonicalStatus;
+        }
     }
     float3 radiance = canonicalMode
             ? max(candidate.canonicalRadiance, float3(0.0))
@@ -200,6 +268,7 @@ public void pathReservoirUpdate(inout PathReservoir reservoir,
     reservoir.weights.z = selectedTarget > 0.0 && nextM > 0.0
             ? nextWeightSum / (nextM * selectedTarget) : 0.0;
     reservoir.weights.w = selectedTarget > 0.0 ? min(nextM * 0.25, 1.0) : 0.0;
+    return canonicalStatus;
 }
 
 // Diagnostic channels: red = normalized traced depth, green = selected target luminance,
