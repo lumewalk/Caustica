@@ -12,7 +12,7 @@ public static const uint PATH_TRANSPORT_DELTA = 4u;
 public static const uint PATH_TRANSPORT_TRANSMISSION = 8u;
 // Increment whenever replay metadata or RNG interpretation changes. Temporal reuse must reject
 // reservoirs produced by a different contract instead of trying to replay an incompatible path.
-public static const uint PATH_REPLAY_VERSION = 1u;
+public static const uint PATH_REPLAY_VERSION = 2u;
 
 public struct PathTraceResult {
     public float3 radiance;
@@ -20,6 +20,23 @@ public struct PathTraceResult {
     public uint topologyKey;
     public uint replaySeed;
     public uint replayState;
+    public uint proposalReplaySeed;
+    public uint proposalReplayState;
+    public uint transportMask;
+    public float footprint;
+};
+
+// A complete screen-owned sample can contain both continuation records emitted by Pass A. Keep its
+// persistent replay inputs separate from the per-segment trace result so later replay/shift code has an
+// explicit contract and does not need to reinterpret a transient queue record.
+public struct PathCandidate {
+    public float3 radiance;
+    public uint depth;
+    public uint topologyKey;
+    public uint4 replaySeeds;
+    public uint replayState;
+    public uint proposalReplayState;
+    public uint replaySegmentCount;
     public uint transportMask;
     public float footprint;
 };
@@ -35,6 +52,7 @@ public PathReservoir pathReservoirEmpty() {
     reservoir.weights = float4(0.0);
     reservoir.identity = uint4(0u);
     reservoir.replay = uint4(0u);
+    reservoir.replayControl = uint4(0u);
     return reservoir;
 }
 
@@ -57,7 +75,7 @@ public uint pathPackMetadata(uint generation, uint depth, uint transportMask) {
 // estimator, so this bootstrap stage uses an effective proposal density of one. A later replay pass
 // will replace it with decomposed path PDFs before any temporal or spatial path reuse is allowed.
 public void pathReservoirUpdate(inout PathReservoir reservoir,
-                                PathTraceResult candidate,
+                                PathCandidate candidate,
                                 uint sampleId,
                                 uint pathKey,
                                 uint historyGeneration,
@@ -80,8 +98,10 @@ public void pathReservoirUpdate(inout PathReservoir reservoir,
                 pathPackMetadata(historyGeneration, candidate.depth, candidate.transportMask));
         // Storage-only replay contract. The current estimator deliberately does not consume this lane;
         // a later path-replay stage will validate the version before reconstructing the selected path.
-        reservoir.replay = uint4(candidate.replaySeed, candidate.replayState,
-                PATH_REPLAY_VERSION, candidate.depth);
+        reservoir.replay = candidate.replaySeeds;
+        reservoir.replayControl = uint4(PATH_REPLAY_VERSION,
+                min(candidate.replaySegmentCount, MAX_PATH_SEGMENTS),
+                candidate.replayState, candidate.proposalReplayState);
     }
 
     reservoir.weights.x = nextWeightSum;

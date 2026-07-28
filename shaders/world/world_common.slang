@@ -117,6 +117,10 @@ public struct LightGridSpan {
     public float accept;
 };
 
+// One sample may carry the ordinary continuation plus one branch split at the primary dielectric.
+// This is shared by queue construction and the persistent random-replay contract.
+public static const uint MAX_PATH_SEGMENTS = 2u;
+
 // Clarity-first persistent ReSTIR DI record. This deliberately stays unpacked until captures prove
 // reservoir bandwidth or residency is a real bottleneck. Five aligned lanes make the semantic contract
 // explicit and give later GRIS work a stable seam without reusing the transient megakernel Reservoir.
@@ -134,20 +138,24 @@ public struct DirectReservoir {
 // Clarity-first ReSTIR PT path-reservoir contract. The record is intentionally independent from the
 // transient 48-byte continuation queue: one path sample may outlive a queue record and must retain the
 // unshadowed contribution, density terms, shift footprint, and replay identity needed by a future GRIS
-// reconnection pass. Five aligned lanes keep the first GPU substrate explicit while the estimator is still
+// reconnection pass. Six aligned lanes keep the first GPU substrate explicit while the estimator is still
 // being validated against RtPathReservoirReference.
 //
 // sampleRadianceTarget = {unshadowed RGB contribution, target density}
 // proposalShift = {proposal density, shift Jacobian, path footprint, replay RNG state as float bits}
 // weights = {accumulated weight, effective M, final W, confidence}
 // identity = {sample id, path/queue key, topology key, packed generation/depth/transport class}
-// replay = {initial RNG seed, terminal RNG state, replay ABI version, traced depth}
+// replay = {segment0 path seed, segment0 light-proposal seed,
+//           segment1 path seed, segment1 light-proposal seed}
+// replayControl = {replay ABI version, segment count, terminal path-state hash,
+//                  terminal light-proposal-state hash}
 public struct PathReservoir {
     public float4 sampleRadianceTarget;
     public float4 proposalShift;
     public float4 weights;
     public uint4 identity;
     public uint4 replay;
+    public uint4 replayControl;
 };
 
 // TerrainPrim.flags bit 0: this emissive quad is in the light buffer (RtLightCollector membership).

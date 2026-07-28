@@ -64,10 +64,18 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID) {
                     float footprintRatio = max(currentFootprint, previousFootprint)
                             / min(currentFootprint, previousFootprint);
 
-                    bool currentReplayConsistent = current.replay.z == PATH_REPLAY_VERSION
-                            && asuint(current.proposalShift.w) == current.replay.y;
-                    bool previousReplayConsistent = previous.replay.z == PATH_REPLAY_VERSION
-                            && asuint(previous.proposalShift.w) == previous.replay.y;
+                    bool currentReplayConsistent = current.replayControl.x == PATH_REPLAY_VERSION
+                            && current.replayControl.y >= 1u
+                            && current.replayControl.y <= MAX_PATH_SEGMENTS
+                            && asuint(current.proposalShift.w) == current.replayControl.z
+                            && (current.replayControl.y == MAX_PATH_SEGMENTS
+                                    || all(current.replay.zw == uint2(0u)));
+                    bool previousReplayConsistent = previous.replayControl.x == PATH_REPLAY_VERSION
+                            && previous.replayControl.y >= 1u
+                            && previous.replayControl.y <= MAX_PATH_SEGMENTS
+                            && asuint(previous.proposalShift.w) == previous.replayControl.z
+                            && (previous.replayControl.y == MAX_PATH_SEGMENTS
+                                    || all(previous.replay.zw == uint2(0u)));
                     if (!currentReplayConsistent || !previousReplayConsistent) {
                         debugState = 10u;
                     } else if (currentGeneration != expectedGeneration

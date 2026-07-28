@@ -33,16 +33,13 @@ import lighting;
 import direct_reservoir_common;
 import path_reservoir_common;
 
-public PathTraceResult tracePath(PathSegment seg, uint2 pix, uint sampleIndex, bool captureMetadata) {
+public PathTraceResult tracePathSeeded(PathSegment seg, uint2 pix, bool captureMetadata,
+                                       uint replaySeed, uint proposalReplaySeed) {
     float3 L = float3(0.0, 0.0, 0.0);
     float3 ro = seg.ro;
     float3 rd = seg.rd;
     float3 throughput = seg.throughput;
-    // Pass A is fixed at one sample per pixel. Decorrelate each Pass B resample here so configured SPP
-    // produces independent lighting/BSDF paths from the shared terminal continuation.
-    uint seed = seg.seed ^ sampleIndex * 2246822519u;
-    seed = pcg(seed);
-    uint replaySeed = seed;
+    uint seed = replaySeed;
     // Topology must describe transport structure, not the random seed. Temporal admission compares
     // this key across frames; seed/sample identity lives separately in sampleId and replayState.
     uint topologyKey = captureMetadata ? pathHash(0x91E10DA5u ^ uint(seg.bounce)) : 0u;
@@ -58,9 +55,7 @@ public PathTraceResult tracePath(PathSegment seg, uint2 pix, uint sampleIndex, b
     // there is a real presampled RIS tile buffer; direct sharing made tile-shaped lighting noise visible.
     // Measured: making a 16x16 tile share this seed recovers at most 1.3ms, so a future pool should share
     // the POOL rather than the seed — the win is in removing dependent loads, not in coherence.
-    uint proposalSeed = pix.x * 1973u + pix.y * 9277u + 26699u
-            ^ worldPush.frameIndex * 2654435761u ^ sampleIndex * 2246822519u;
-    proposalSeed = pcg(proposalSeed);
+    uint proposalSeed = proposalReplaySeed;
     // The medium the segment starts in. For the camera segment that is water when the eye is submerged
     // (so the first ray already carries the right relative index and absorption); for a segment split off
     // a dielectric it is whatever the parent was travelling through.
@@ -428,9 +423,23 @@ public PathTraceResult tracePath(PathSegment seg, uint2 pix, uint sampleIndex, b
     result.topologyKey = topologyKey;
     result.replaySeed = replaySeed;
     result.replayState = seed;
+    result.proposalReplaySeed = proposalReplaySeed;
+    result.proposalReplayState = proposalSeed;
     result.transportMask = transportMask;
     result.footprint = max(rayConeWidth, RAY_CONE_MIN_WIDTH);
     return result;
+}
+
+// Normal rendering derives independent RNG streams from the transient segment/sample identity. Random
+// replay bypasses only this derivation and calls tracePathSeeded with the stored pair; all transport,
+// light proposals, and roulette decisions then execute through the exact same implementation.
+public PathTraceResult tracePath(PathSegment seg, uint2 pix, uint sampleIndex, bool captureMetadata) {
+    uint replaySeed = seg.seed ^ sampleIndex * 2246822519u;
+    replaySeed = pcg(replaySeed);
+    uint proposalReplaySeed = pix.x * 1973u + pix.y * 9277u + 26699u
+            ^ worldPush.frameIndex * 2654435761u ^ sampleIndex * 2246822519u;
+    proposalReplaySeed = pcg(proposalReplaySeed);
+    return tracePathSeeded(seg, pix, captureMetadata, replaySeed, proposalReplaySeed);
 }
 
 [shader("raygeneration")]
@@ -476,8 +485,10 @@ void main() {
         float3 sampleRadiance = float3(0.0);
         uint sampleDepth = 0u;
         uint sampleTopology = pathHash(0x7F4A7C15u);
-        uint sampleReplaySeed = 0u;
+        uint4 sampleReplaySeeds = uint4(0u);
         uint sampleReplayState = 0u;
+        uint sampleProposalReplayState = 0u;
+        uint sampleReplaySegmentCount = 0u;
         uint sampleTransportMask = 0u;
         float sampleFootprint = RAY_CONE_MIN_WIDTH;
         uint recordIndex = pixelIndex;
@@ -486,13 +497,18 @@ void main() {
             PathSegment segment = unpackPathSegment(packed);
             PathTraceResult traced = tracePath(segment, uint2(pix), s + leaf * spp, true);
             if (leaf == 0u) {
-                sampleReplaySeed = traced.replaySeed;
+                sampleReplaySeeds.xy = uint2(traced.replaySeed, traced.proposalReplaySeed);
+            } else {
+                sampleReplaySeeds.zw = uint2(traced.replaySeed, traced.proposalReplaySeed);
             }
+            sampleReplaySegmentCount = leaf + 1u;
             sampleRadiance += traced.radiance;
             sampleDepth = max(sampleDepth, traced.depth);
             sampleTopology = pathTopologyStep(sampleTopology,
                     traced.topologyKey ^ leaf * 668265263u);
             sampleReplayState = pathHash(sampleReplayState ^ traced.replayState ^ leaf * 374761393u);
+            sampleProposalReplayState = pathHash(sampleProposalReplayState
+                    ^ traced.proposalReplayState ^ leaf * 1103515245u);
             sampleTransportMask |= traced.transportMask;
             sampleFootprint = max(sampleFootprint, traced.footprint);
             if (packed.nextRecord == PATH_NO_NEXT) {
@@ -501,12 +517,14 @@ void main() {
             recordIndex = packed.nextRecord;
         }
         frameRadiance += sampleRadiance;
-        PathTraceResult candidate;
+        PathCandidate candidate;
         candidate.radiance = sampleRadiance;
         candidate.depth = sampleDepth;
         candidate.topologyKey = sampleTopology;
-        candidate.replaySeed = sampleReplaySeed;
+        candidate.replaySeeds = sampleReplaySeeds;
         candidate.replayState = sampleReplayState;
+        candidate.proposalReplayState = sampleProposalReplayState;
+        candidate.replaySegmentCount = sampleReplaySegmentCount;
         candidate.transportMask = sampleTransportMask;
         candidate.footprint = sampleFootprint;
         uint sampleId = pathHash(worldPush.frameIndex * 2654435761u

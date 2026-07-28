@@ -95,7 +95,3 @@ public static const float SPEC_MOTION_ALPHA_MAX = 0.25; // perceptual smoothness
 public bool isDeltaAlpha(float roughness) {
     return clamp(roughness, 0.0, 1.0) <= MIRROR_ALPHA_MAX;
 }
-
-// Continuations one sample may carry: the camera segment, plus the reflection branch a primary
-// dielectric splits off. Raising this needs a real queue, which is what the continuation buffer is for.
-public static const uint MAX_PATH_SEGMENTS = 2u;
