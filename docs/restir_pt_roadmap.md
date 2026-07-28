@@ -131,6 +131,11 @@ match before a path is considered replay-compatible. The shader-independent
 mapping may relax the identity checks only together with a measured Jacobian/PDF mapping and
 new reference tests; it must not silently treat the two RNG streams as one seed.
 
+PDF capture is the next contract boundary. `RtPathPdfReference` treats technique selection,
+continuous directional density, and delta mass as separate events. Until the shader records all
+events (including continuation-lobe selection), the active path estimator keeps its bootstrap
+proposal density and does not claim ReSTIR PT correctness.
+
 ## Delivery Phases
 
 ### Phase 0 — Wavefront Integration Baseline
