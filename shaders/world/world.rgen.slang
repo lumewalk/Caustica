@@ -558,10 +558,11 @@ void main() {
     bool pathTemporalDebug = pc.debugView == PATH_TEMPORAL_DEBUG_VIEW;
     bool pathReplayDebug = pc.debugView == PATH_REPLAY_DEBUG_VIEW;
     bool pathTemporalMergeDebug = pc.debugView == PATH_TEMPORAL_MERGE_DEBUG_VIEW;
+    bool pathSpatialDebug = pc.debugView == PATH_SPATIAL_DEBUG_VIEW;
     bool canonicalMode = (pc.historyFlags & PATH_CANONICAL_MODE_FLAG) != 0u;
     bool pathCapture = (pc.historyFlags & 4u) != 0u && pc.pathReservoirAddr != 0;
     if (pc.debugView != 0u && !pathDebug && !pathTemporalDebug && !pathReplayDebug
-            && !pathTemporalMergeDebug) {
+            && !pathTemporalMergeDebug && !pathSpatialDebug) {
         return; // pass A owns guide visualization output
     }
     uint2 dispatchIndex = DispatchRaysIndex().xy;
@@ -569,7 +570,7 @@ void main() {
     int2 pix = int2(dispatchIndex);
     uint spp = max(worldPush.spp, 1u);
     uint pixelIndex = dispatchIndex.y * dimensions.x + dispatchIndex.x;
-    if ((pathDebug || pathTemporalDebug || pathReplayDebug || pathTemporalMergeDebug)
+    if ((pathDebug || pathTemporalDebug || pathReplayDebug || pathTemporalMergeDebug || pathSpatialDebug)
             && !pathCapture) {
         outImage[pix] = float4(1.0, 0.0, 1.0, 1.0); // setting disabled / storage unavailable
         return;
@@ -815,7 +816,7 @@ void main() {
     }
     // View 14 is written by path_temporal_validate after this pass. Leaving outImage untouched here
     // prevents an intermediate radiance image from leaking into the diagnostic if that pass changes.
-    if (!pathTemporalDebug && !pathReplayDebug && !pathTemporalMergeDebug) {
+    if (!pathTemporalDebug && !pathReplayDebug && !pathTemporalMergeDebug && !pathSpatialDebug) {
         outImage[pix] = float4(pathDebug
                 ? (canonicalMode
                         ? canonicalDebugColor / float(spp)

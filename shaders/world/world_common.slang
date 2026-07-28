@@ -138,7 +138,7 @@ public struct DirectReservoir {
 // Clarity-first ReSTIR PT path-reservoir contract. The record is intentionally independent from the
 // transient 48-byte continuation queue: one path sample may outlive a queue record and must retain the
 // unshadowed contribution, density terms, shift footprint, and replay identity needed by a future GRIS
-// reconnection pass. Eight aligned lanes keep the first GPU substrate explicit while the estimator is still
+// reconnection pass. Nine aligned lanes keep the first GPU substrate explicit while the estimator is still
 // being validated against RtPathReservoirReference.
 //
 // sampleRadianceTarget = {unshadowed RGB contribution, target density}

@@ -56,7 +56,8 @@ final class RtPathReservoirHistory {
     private int height = -1;
 
     void ensure(RtContext ctx, int requestedWidth, int requestedHeight,
-                RtImage receiverMotion, RtImage validationMetadata, RtImage debugColor) {
+                RtImage receiverMotion, RtImage validationMetadata, RtImage debugColor,
+                RtImage receiverPositionMaterial, RtImage receiverNormalRoughness) {
         if (ready() && width == requestedWidth && height == requestedHeight) {
             return;
         }
@@ -70,7 +71,8 @@ final class RtPathReservoirHistory {
                     "path reservoir history slot " + slot + " " + width + "x" + height);
         }
         temporalPipeline = RtPathTemporalPipeline.create(ctx, receiverMotion.view,
-                validationMetadata.view, debugColor.view);
+                validationMetadata.view, debugColor.view,
+                receiverPositionMaterial.view, receiverNormalRoughness.view);
         state.reset();
     }
 

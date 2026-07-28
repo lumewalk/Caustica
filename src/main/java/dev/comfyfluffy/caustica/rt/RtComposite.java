@@ -865,7 +865,8 @@ public final class RtComposite {
                 String.format(Locale.ROOT, "%.2f", reservoirBytes / (1024.0 * 1024.0)));
         if (restirPt) {
             pathReservoirs.ensure(ctx, renderW, renderH,
-                    gMotion, temporalValidation.metadata(), output);
+                    gMotion, temporalValidation.metadata(), output,
+                    gRestirPositionMaterial, gRestirNormalRoughness);
             long pathReservoirBytes = pathReservoirs.allocatedBytes();
             CausticaMod.LOGGER.info(
                     "RT path reservoirs: render={}x{}, slots={}, stride={} B, bytes={}, gpuMiB={}",
@@ -1116,7 +1117,8 @@ public final class RtComposite {
                             | (restirDirect ? 2 : 0)
                             | (restirPt ? 4 : 0)
                             | (restirPt && pathReservoirFrame.previousAvailable() ? 8 : 0)
-                            | (restirPt && (debugView == 13 || debugView == 15 || debugView == 16) ? 16 : 0),
+                            | (restirPt && (debugView == 13 || debugView == 15 || debugView == 16
+                                    || debugView == 17) ? 16 : 0),
                     restirPt ? (int) pathReservoirFrame.generation() : 0).write(pushConstants);
             try (RtFrameStats.Scope ignoredTrace = RtFrameStats.FRAME.stage("frame.trace")) {
                 try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd, "world primary trace");

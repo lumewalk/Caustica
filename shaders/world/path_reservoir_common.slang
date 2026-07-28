@@ -5,8 +5,13 @@ public static const uint PATH_DEBUG_VIEW = 13u;
 public static const uint PATH_TEMPORAL_DEBUG_VIEW = 14u;
 public static const uint PATH_REPLAY_DEBUG_VIEW = 15u;
 public static const uint PATH_TEMPORAL_MERGE_DEBUG_VIEW = 16u;
+public static const uint PATH_SPATIAL_DEBUG_VIEW = 17u;
 public static const uint PATH_GENERATION_MASK = 0x00FFFFFFu;
 public static const float PATH_MAX_FOOTPRINT_RATIO = 4.0;
+public static const uint PATH_SPATIAL_SAMPLE_COUNT = 8u;
+public static const float PATH_SPATIAL_RADIUS = 16.0;
+public static const float PATH_SPATIAL_NORMAL_COS = 0.85;
+public static const float PATH_SPATIAL_RELATIVE_DEPTH = 0.10;
 public static const float PATH_TEMPORAL_MAX_SOURCE_COUNT = 8.0;
 public static const float PATH_IDENTITY_SHIFT_JACOBIAN = 1.0;
 

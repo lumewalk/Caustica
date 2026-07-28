@@ -30,7 +30,7 @@ import org.lwjgl.vulkan.VkWriteDescriptorSet;
 /** GPU temporal-admission diagnostics for path reservoirs; it deliberately performs no GRIS merge. */
 public final class RtPathTemporalPipeline {
     private static final String SHADER_DIR = "/caustica/rt/";
-    private static final int IMAGE_COUNT = 3;
+    private static final int IMAGE_COUNT = 5;
 
     private final RtContext ctx;
     private final long descriptorSetLayout;
@@ -51,7 +51,9 @@ public final class RtPathTemporalPipeline {
     }
 
     public static RtPathTemporalPipeline create(RtContext ctx, long receiverMotionView,
-                                                long validationMetadataView, long debugColorView) {
+                                                long validationMetadataView, long debugColorView,
+                                                long receiverPositionMaterialView,
+                                                long receiverNormalRoughnessView) {
         VkDevice vk = ctx.vk();
         try (MemoryStack stack = MemoryStack.stackPush()) {
             VkDescriptorSetLayoutBinding.Buffer bindings =
@@ -116,7 +118,8 @@ public final class RtPathTemporalPipeline {
             VK10.vkDestroyShaderModule(vk, module, null);
 
             bindImages(vk, stack, descriptorSet,
-                    receiverMotionView, validationMetadataView, debugColorView);
+                    receiverMotionView, validationMetadataView, debugColorView,
+                    receiverPositionMaterialView, receiverNormalRoughnessView);
             return new RtPathTemporalPipeline(ctx, descriptorSetLayout, descriptorPool,
                     descriptorSet, pipelineLayout, pipeline);
         }
@@ -147,8 +150,10 @@ public final class RtPathTemporalPipeline {
 
     private static void bindImages(VkDevice vk, MemoryStack stack, long set,
                                    long receiverMotionView, long validationMetadataView,
-                                   long debugColorView) {
-        long[] views = {receiverMotionView, validationMetadataView, debugColorView};
+                                   long debugColorView, long receiverPositionMaterialView,
+                                   long receiverNormalRoughnessView) {
+        long[] views = {receiverMotionView, validationMetadataView, debugColorView,
+                receiverPositionMaterialView, receiverNormalRoughnessView};
         VkDescriptorImageInfo.Buffer imageInfos = VkDescriptorImageInfo.calloc(IMAGE_COUNT, stack);
         VkWriteDescriptorSet.Buffer writes = VkWriteDescriptorSet.calloc(IMAGE_COUNT, stack);
         for (int binding = 0; binding < IMAGE_COUNT; binding++) {
