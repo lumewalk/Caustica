@@ -24,6 +24,23 @@ final class RtPathSpatialReuseReference {
         FOOTPRINT_MISMATCH
     }
 
+    /**
+     * Reference-only compatibility variants. LIMITED_TOPOLOGY keeps every existing safety
+     * condition and relaxes only exact path-topology identity; it is intentionally not wired into
+     * the GPU estimator.
+     */
+    enum AdmissionPolicy {
+        STRICT,
+        LIMITED_TOPOLOGY
+    }
+
+    record PolicyComparison(Decision strictDecision, Decision limitedDecision) {
+        boolean topologyRescued() {
+            return strictDecision == Decision.TOPOLOGY_MISMATCH
+                    && limitedDecision == Decision.ACCEPTED;
+        }
+    }
+
     enum DiagnosticCategory {
         RECEIVER_EMPTY,
         ACCEPTED_RECONNECTION,
@@ -168,6 +185,13 @@ final class RtPathSpatialReuseReference {
     }
 
     static Decision admit(Surface receiver, Surface source) {
+        return admit(receiver, source, AdmissionPolicy.STRICT);
+    }
+
+    static Decision admit(Surface receiver, Surface source, AdmissionPolicy policy) {
+        if (policy == null) {
+            throw new IllegalArgumentException("spatial admission policy is required");
+        }
         if (receiver.materialKey() != source.materialKey()) {
             return Decision.MATERIAL_MISMATCH;
         }
@@ -180,7 +204,8 @@ final class RtPathSpatialReuseReference {
         if (receiver.depth() != source.depth()) {
             return Decision.DEPTH_MISMATCH;
         }
-        if (receiver.topologyKey() != source.topologyKey()) {
+        if (policy == AdmissionPolicy.STRICT
+                && receiver.topologyKey() != source.topologyKey()) {
             return Decision.TOPOLOGY_MISMATCH;
         }
         if (receiver.transportClass() != source.transportClass()) {
@@ -190,6 +215,12 @@ final class RtPathSpatialReuseReference {
                 / Math.min(receiver.footprint(), source.footprint());
         return footprintRatio <= MAX_FOOTPRINT_RATIO
                 ? Decision.ACCEPTED : Decision.FOOTPRINT_MISMATCH;
+    }
+
+    static PolicyComparison comparePolicies(Surface receiver, Surface source) {
+        return new PolicyComparison(
+                admit(receiver, source, AdmissionPolicy.STRICT),
+                admit(receiver, source, AdmissionPolicy.LIMITED_TOPOLOGY));
     }
 
     static boolean captureReconnectionAtDepth(int hitDepth) {

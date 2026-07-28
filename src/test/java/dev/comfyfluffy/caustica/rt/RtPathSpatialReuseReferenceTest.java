@@ -10,8 +10,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 final class RtPathSpatialReuseReferenceTest {
     private static RtPathSpatialReuseReference.Surface surface(
             long material, double normalCosine, double relativeDepth, double footprint) {
+        return surface(material, normalCosine, relativeDepth, 2, 42L, 2, footprint);
+    }
+
+    private static RtPathSpatialReuseReference.Surface surface(
+            long material, double normalCosine, double relativeDepth, int depth,
+            long topology, int transport, double footprint) {
         return new RtPathSpatialReuseReference.Surface(
-                material, normalCosine, relativeDepth, 2, 42L, 2, footprint);
+                material, normalCosine, relativeDepth, depth, topology, transport, footprint);
     }
 
     @Test
@@ -27,6 +33,34 @@ final class RtPathSpatialReuseReferenceTest {
                 RtPathSpatialReuseReference.admit(surface(7L, 0.95, 0.11, 1.0), receiver));
         assertEquals(RtPathSpatialReuseReference.Decision.FOOTPRINT_MISMATCH,
                 RtPathSpatialReuseReference.admit(receiver, surface(7L, 0.95, 0.02, 4.1)));
+    }
+
+    @Test
+    void limitedTopologyPolicyOnlyRescuesTopologyMismatch() {
+        var receiver = surface(7L, 0.95, 0.02, 2, 42L, 2, 1.0);
+        var topologyMismatch = surface(7L, 0.95, 0.02, 2, 99L, 2, 1.0);
+        var depthMismatch = surface(7L, 0.95, 0.02, 3, 42L, 2, 1.0);
+        var transportMismatch = surface(7L, 0.95, 0.02, 2, 42L, 3, 1.0);
+        var footprintMismatch = surface(7L, 0.95, 0.02, 2, 42L, 2, 4.1);
+
+        assertEquals(RtPathSpatialReuseReference.Decision.TOPOLOGY_MISMATCH,
+                RtPathSpatialReuseReference.admit(receiver, topologyMismatch,
+                        RtPathSpatialReuseReference.AdmissionPolicy.STRICT));
+        assertEquals(RtPathSpatialReuseReference.Decision.ACCEPTED,
+                RtPathSpatialReuseReference.admit(receiver, topologyMismatch,
+                        RtPathSpatialReuseReference.AdmissionPolicy.LIMITED_TOPOLOGY));
+        assertTrue(RtPathSpatialReuseReference.comparePolicies(receiver, topologyMismatch)
+                .topologyRescued());
+
+        assertEquals(RtPathSpatialReuseReference.Decision.DEPTH_MISMATCH,
+                RtPathSpatialReuseReference.admit(receiver, depthMismatch,
+                        RtPathSpatialReuseReference.AdmissionPolicy.LIMITED_TOPOLOGY));
+        assertEquals(RtPathSpatialReuseReference.Decision.TRANSPORT_MISMATCH,
+                RtPathSpatialReuseReference.admit(receiver, transportMismatch,
+                        RtPathSpatialReuseReference.AdmissionPolicy.LIMITED_TOPOLOGY));
+        assertEquals(RtPathSpatialReuseReference.Decision.FOOTPRINT_MISMATCH,
+                RtPathSpatialReuseReference.admit(receiver, footprintMismatch,
+                        RtPathSpatialReuseReference.AdmissionPolicy.LIMITED_TOPOLOGY));
     }
 
     @Test
