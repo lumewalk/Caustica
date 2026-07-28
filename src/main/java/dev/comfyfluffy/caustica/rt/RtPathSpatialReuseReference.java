@@ -28,7 +28,9 @@ final class RtPathSpatialReuseReference {
         RECEIVER_EMPTY,
         ACCEPTED_RECONNECTION,
         FOOTPRINT_REJECT,
-        PATH_REJECT,
+        DEPTH_REJECT,
+        TOPOLOGY_REJECT,
+        TRANSPORT_REJECT,
         COMPATIBLE_NO_RECONNECTION,
         COMPATIBLE_NEIGHBOR_EMPTY,
         SURFACE_REJECT

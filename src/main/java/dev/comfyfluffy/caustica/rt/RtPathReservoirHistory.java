@@ -7,6 +7,7 @@ import dev.comfyfluffy.caustica.rt.accel.RtImage;
 import dev.comfyfluffy.caustica.rt.gen.PathReservoirData;
 import dev.comfyfluffy.caustica.rt.pipeline.RtPathTemporalPipeline;
 import java.nio.ByteBuffer;
+import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
 import java.util.Locale;
 import org.lwjgl.system.MemoryUtil;
@@ -23,9 +24,16 @@ import org.lwjgl.vulkan.VkCommandBuffer;
 final class RtPathReservoirHistory {
     static final int SLOT_COUNT = 2;
     static final int BYTES_PER_RESERVOIR = PathReservoirData.BYTE_SIZE;
-    static final int SPATIAL_DIAGNOSTIC_COUNTER_COUNT = 7;
+    static final int SPATIAL_DIAGNOSTIC_CATEGORY_COUNT = 9;
+    static final int SPATIAL_DIAGNOSTIC_PAIR_CURSOR_INDEX =
+            SPATIAL_DIAGNOSTIC_CATEGORY_COUNT;
+    static final int SPATIAL_DIAGNOSTIC_COUNTER_COUNT =
+            SPATIAL_DIAGNOSTIC_CATEGORY_COUNT + 1;
     static final int SPATIAL_DIAGNOSTIC_COUNTER_BYTES =
             SPATIAL_DIAGNOSTIC_COUNTER_COUNT * Integer.BYTES;
+    static final int SPATIAL_DIAGNOSTIC_PAIR_CAPACITY = 4096;
+    static final int SPATIAL_DIAGNOSTIC_PAIR_BYTES =
+            SPATIAL_DIAGNOSTIC_PAIR_CAPACITY * 2 * Float.BYTES;
 
     record Frame(long generation, int writeSlot, int previousSlot, boolean previousAvailable) {
         int finalSlot() {
@@ -60,6 +68,7 @@ final class RtPathReservoirHistory {
     private final State state = new State();
     private final RtBuffer[] slots = new RtBuffer[SLOT_COUNT];
     private RtBuffer spatialDiagnosticCounters;
+    private RtBuffer spatialDiagnosticPairs;
     private RtPathTemporalPipeline temporalPipeline;
     private boolean spatialDiagnosticsPending;
     private int width = -1;
@@ -83,10 +92,13 @@ final class RtPathReservoirHistory {
         spatialDiagnosticCounters = ctx.createBuffer(SPATIAL_DIAGNOSTIC_COUNTER_BYTES,
                 VK10.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK10.VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                 true, "path spatial diagnostic counters");
+        spatialDiagnosticPairs = ctx.createBuffer(SPATIAL_DIAGNOSTIC_PAIR_BYTES,
+                VK10.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                true, "path spatial diagnostic target pairs");
         temporalPipeline = RtPathTemporalPipeline.create(ctx, receiverMotion.view,
                 validationMetadata.view, debugColor.view,
                 receiverPositionMaterial.view, receiverNormalRoughness.view,
-                spatialDiagnosticCounters.handle);
+                spatialDiagnosticCounters.handle, spatialDiagnosticPairs.handle);
         state.reset();
     }
 
@@ -123,20 +135,40 @@ final class RtPathReservoirHistory {
         }
         ctx.waitIdle();
         spatialDiagnosticCounters.invalidate();
+        spatialDiagnosticPairs.invalidate();
         IntBuffer counters = MemoryUtil.memIntBuffer(spatialDiagnosticCounters.mapped,
                 SPATIAL_DIAGNOSTIC_COUNTER_COUNT);
-        long[] values = new long[SPATIAL_DIAGNOSTIC_COUNTER_COUNT];
+        long[] values = new long[SPATIAL_DIAGNOSTIC_CATEGORY_COUNT];
         long total = 0L;
         for (int index = 0; index < values.length; index++) {
             values[index] = Integer.toUnsignedLong(counters.get(index));
             total += values[index];
         }
+        long pairAttempts = Integer.toUnsignedLong(
+                counters.get(SPATIAL_DIAGNOSTIC_PAIR_CURSOR_INDEX));
+        int capturedPairs = (int) Math.min(pairAttempts, SPATIAL_DIAGNOSTIC_PAIR_CAPACITY);
+        FloatBuffer pairValues = MemoryUtil.memFloatBuffer(
+                spatialDiagnosticPairs.mapped, capturedPairs * 2);
+        var rawMoments = new RtPathSpatialReuseReference.PairMoments();
+        var logMoments = new RtPathSpatialReuseReference.PairMoments();
+        for (int pair = 0; pair < capturedPairs; pair++) {
+            float receiverTarget = pairValues.get(pair * 2);
+            float sourceTarget = pairValues.get(pair * 2 + 1);
+            if (!Float.isFinite(receiverTarget) || !Float.isFinite(sourceTarget)
+                    || receiverTarget < 0.0f || sourceTarget < 0.0f) {
+                continue;
+            }
+            rawMoments.add(receiverTarget, sourceTarget);
+            logMoments.add(Math.log1p(receiverTarget), Math.log1p(sourceTarget));
+        }
         if (total > 0L) {
             CausticaMod.LOGGER.info(
                     "RT path spatial categories: total={}, empty={} ({}%), admitted={} ({}%), "
-                            + "footprintReject={} ({}%), pathReject={} ({}%), "
+                            + "footprintReject={} ({}%), depthReject={} ({}%), "
+                            + "topologyReject={} ({}%), transportReject={} ({}%), "
                             + "noReconnection={} ({}%), neighborEmpty={} ({}%), "
-                            + "surfaceReject={} ({}%)",
+                            + "surfaceReject={} ({}%), pairs={}/{}, validPairs={}, "
+                            + "targetCorr={}, logTargetCorr={}",
                     total,
                     values[0], percent(values[0], total),
                     values[1], percent(values[1], total),
@@ -144,7 +176,11 @@ final class RtPathReservoirHistory {
                     values[3], percent(values[3], total),
                     values[4], percent(values[4], total),
                     values[5], percent(values[5], total),
-                    values[6], percent(values[6], total));
+                    values[6], percent(values[6], total),
+                    values[7], percent(values[7], total),
+                    values[8], percent(values[8], total),
+                    capturedPairs, pairAttempts, rawMoments.count(),
+                    metric(rawMoments.correlation()), metric(logMoments.correlation()));
         }
         spatialDiagnosticsPending = false;
     }
@@ -175,7 +211,8 @@ final class RtPathReservoirHistory {
 
     boolean ready() {
         return slots[0] != null && slots[1] != null
-                && spatialDiagnosticCounters != null && temporalPipeline != null;
+                && spatialDiagnosticCounters != null && spatialDiagnosticPairs != null
+                && temporalPipeline != null;
     }
 
     void destroy() {
@@ -186,6 +223,10 @@ final class RtPathReservoirHistory {
         if (spatialDiagnosticCounters != null) {
             spatialDiagnosticCounters.destroy();
             spatialDiagnosticCounters = null;
+        }
+        if (spatialDiagnosticPairs != null) {
+            spatialDiagnosticPairs.destroy();
+            spatialDiagnosticPairs = null;
         }
         for (int slot = 0; slot < SLOT_COUNT; slot++) {
             if (slots[slot] != null) {
@@ -201,6 +242,12 @@ final class RtPathReservoirHistory {
 
     private static String percent(long value, long total) {
         return String.format(Locale.ROOT, "%.2f", value * 100.0 / total);
+    }
+
+    private static String metric(double value) {
+        return Double.isFinite(value)
+                ? String.format(Locale.ROOT, "%.4f", value)
+                : "n/a";
     }
 
     private RtBuffer slot(int slot) {
