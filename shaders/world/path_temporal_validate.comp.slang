@@ -28,7 +28,7 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID) {
     // 0 current empty, 1 first frame/reset, 2 surface reprojection reject, 3 previous empty,
     // 4 generation mismatch, 5 depth mismatch, 6 transport mismatch, 7 topology mismatch,
     // 8 footprint mismatch, 9 strictly compatible and ready for future replay/shift evaluation,
-    // 10 replay ABI mismatch.
+    // 10 replay ABI mismatch or inconsistent replay lanes.
     uint debugState = current.weights.y > 0.0 && current.sampleRadianceTarget.w > 0.0 ? 1u : 0u;
     bool historyAvailable = (pc.historyFlags & 8u) != 0u
             && pc.pathReservoirPreviousAddr != 0u;
@@ -64,8 +64,11 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID) {
                     float footprintRatio = max(currentFootprint, previousFootprint)
                             / min(currentFootprint, previousFootprint);
 
-                    if (current.replay.z != PATH_REPLAY_VERSION
-                            || previous.replay.z != PATH_REPLAY_VERSION) {
+                    bool currentReplayConsistent = current.replay.z == PATH_REPLAY_VERSION
+                            && asuint(current.proposalShift.w) == current.replay.y;
+                    bool previousReplayConsistent = previous.replay.z == PATH_REPLAY_VERSION
+                            && asuint(previous.proposalShift.w) == previous.replay.y;
+                    if (!currentReplayConsistent || !previousReplayConsistent) {
                         debugState = 10u;
                     } else if (currentGeneration != expectedGeneration
                             || previousGeneration != expectedGeneration) {
