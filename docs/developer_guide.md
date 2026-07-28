@@ -124,6 +124,13 @@ selected; cyan is replay rejection; blue and purple are compatibility and footpr
 gray is empty history; black is an empty current/history pair. The merged reservoir is stored only
 for this debug history chain and is not consumed by the active image estimator.
 
+The next spatial-reuse reference is CPU-only until the path record carries a reconnection vertex.
+It admits a neighbor only when material, normal, relative depth, path topology/depth/transport,
+and footprint agree. Its reconnection Jacobian is the solid-angle geometry ratio followed by the
+receiver/source directional-PDF ratio in primary-sample space; a random-replay segment has unit
+Jacobian. Do not add a GPU neighbor merge by copying the direct-light pass while these terms are
+absent from `PathReservoir`.
+
 ## Linux
 
 Set `DLSS_SDK` and `VULKAN_SDK` before configuring CMake:

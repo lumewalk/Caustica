@@ -169,6 +169,15 @@ combined proposal/importance weight. Colors are averaged across SPP so the view 
 local admission ratio. Canonical candidates are rejected before PDF division, keeping invalid
 values out of the reservoir; normal rendering and view 14 do not consume this diagnostic path.
 
+Spatial path reuse has a separate reference boundary. Neighbor admission reuses the direct-light
+surface policy (material, normal, relative depth) and additionally requires path depth, topology,
+transport class, and bounded footprint. A reconnection shift cannot be enabled from the current
+128-byte record alone: the GPU record has no reconnection vertex or its geometric/PDF terms.
+The CPU reference therefore records the solid-angle Jacobian
+`|cos(theta_receiver) / cos(theta_source)| * d_source^2 / d_receiver^2` and the primary-sample
+form multiplies it by `p_receiver / p_source`; random replay contributes unit Jacobian. This
+keeps spatial admission testable without silently introducing a biased neighbor merge.
+
 ## Delivery Phases
 
 ### Phase 0 — Wavefront Integration Baseline
