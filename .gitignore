@@ -11,3 +11,8 @@ out/
 third_party/
 bin/
 /logs
+
+# Local Codex workspace, agent handoff notes, tools, caches, and task ledger.
+/.codex-work/
+/AGENTS.md
+/tasks.md
