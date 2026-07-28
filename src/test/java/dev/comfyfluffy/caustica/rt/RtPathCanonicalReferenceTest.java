@@ -35,7 +35,11 @@ final class RtPathCanonicalReferenceTest {
     @Test
     void counterPackingSaturatesAndRejectsNegativeValues() {
         int packed = RtPathCanonicalReference.packProposalEvents(5000, 2000, 3000, true);
-        assertTrue((packed & RtPathCanonicalReference.CANONICAL_VALID_BIT) != 0);
+        assertEquals(1023, RtPathCanonicalReference.lightEventCount(packed));
+        assertEquals(1023, RtPathCanonicalReference.continuationEventCount(packed));
+        assertEquals(1023, RtPathCanonicalReference.rouletteEventCount(packed));
+        assertTrue(RtPathCanonicalReference.canonicalValid(packed));
+        assertTrue(RtPathCanonicalReference.reservedBitsClear(packed));
         assertThrows(IllegalArgumentException.class,
                 () -> RtPathCanonicalReference.packProposalEvents(-1, 0, 0, true));
     }

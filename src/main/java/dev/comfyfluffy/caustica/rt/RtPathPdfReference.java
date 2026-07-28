@@ -5,9 +5,9 @@ package dev.comfyfluffy.caustica.rt;
  *
  * <p>Each event records the probability of selecting the technique and, for continuous events,
  * the directional density in one agreed measure. Delta events deliberately do not multiply a
- * directional density: their mass is represented by the technique-selection probability. The
- * current GPU path does not yet emit all of these factors, so this model is a correctness gate for
- * the future PDF capture rather than a change to the active estimator.</p>
+ * directional density: their mass is represented by the technique-selection probability.
+ * {@link RtPathCanonicalProposalReference} composes these event measures into the same canonical
+ * continuation and roulette products that the GPU stores.</p>
  */
 final class RtPathPdfReference {
     private static final double PI = 3.14159265359;

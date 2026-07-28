@@ -136,9 +136,15 @@ mapping may relax the identity checks only together with a measured Jacobian/PDF
 new reference tests; it must not silently treat the two RNG streams as one seed.
 
 PDF capture is the current contract boundary. `RtPathPdfReference` treats technique selection,
-continuous directional density, and delta mass as separate events. The GPU now records those
-components, but the active path estimator still keeps its bootstrap proposal density because one
-candidate currently sums NEE and continuation radiance rather than representing one canonical path.
+continuous directional density, and delta mass as separate events.
+`RtPathCanonicalProposalReference` composes them into the same continuation and roulette products
+stored by the GPU and independently mirrors the proposal lane, event counters, transport mask,
+float clamping, and packed-bit reinterpretation. Delta reflection/transmission use discrete
+technique mass; diffuse and glossy VNDF events use directional density; roulette uses the mass of
+the observed outcome; and a sky/emissive endpoint contributes unit measure while setting only the
+canonical-valid bit. The active path estimator still keeps its bootstrap proposal density because
+one candidate currently sums NEE and continuation radiance rather than representing one canonical
+path.
 Debug view 13 opts into a storage-only canonical candidate capture: candidates without a recorded
 sky/emissive endpoint are skipped, and the continuation/roulette PDF product becomes the first
 path-only proposal-density check. Normal rendering and debug view 14 remain on the bootstrap
