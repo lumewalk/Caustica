@@ -124,6 +124,13 @@ canonical path representation:
 - confidence/effective sample count
 - topology and epoch data needed to reject invalid reuse
 
+The current wavefront replay contract is deliberately stricter than a final GRIS shift:
+replay version, segment count, transport RNG state, and light-proposal RNG state must all
+match before a path is considered replay-compatible. The shader-independent
+`RtPathReplayReference` test is the authority for this admission rule. A future reconnection
+mapping may relax the identity checks only together with a measured Jacobian/PDF mapping and
+new reference tests; it must not silently treat the two RNG streams as one seed.
+
 ## Delivery Phases
 
 ### Phase 0 — Wavefront Integration Baseline
