@@ -10,6 +10,8 @@ package dev.comfyfluffy.caustica.rt;
  * the future PDF capture rather than a change to the active estimator.</p>
  */
 final class RtPathPdfReference {
+    private static final double PI = 3.14159265359;
+
     record Event(double techniqueProbability, double directionalDensity, boolean delta) {
         Event {
             requireFinitePositive(techniqueProbability, "technique probability");
@@ -47,6 +49,36 @@ final class RtPathPdfReference {
             throw new IllegalArgumentException("importance weight must be finite");
         }
         return weight;
+    }
+
+    static double cosineHemisphereDensity(double cosine) {
+        if (!Double.isFinite(cosine) || cosine < -1.0 || cosine > 1.0) {
+            throw new IllegalArgumentException("cosine must be finite and in [-1, 1]");
+        }
+        return Math.max(cosine, 0.0) / PI;
+    }
+
+    static double ggxVndfReflectionDensity(double normalDotView, double normalDotHalf,
+                                           double alpha) {
+        if (!Double.isFinite(normalDotView) || !Double.isFinite(normalDotHalf)
+                || normalDotView < 0.0 || normalDotView > 1.0
+                || normalDotHalf < 0.0 || normalDotHalf > 1.0) {
+            throw new IllegalArgumentException("GGX cosines must be finite and in [0, 1]");
+        }
+        if (!Double.isFinite(alpha) || alpha <= 0.0 || alpha > 1.0) {
+            throw new IllegalArgumentException("GGX alpha must be finite and in (0, 1]");
+        }
+        if (normalDotView == 0.0 || normalDotHalf == 0.0) {
+            return 0.0;
+        }
+        double alpha2 = alpha * alpha;
+        double dDenominator = normalDotHalf * normalDotHalf * (alpha2 - 1.0) + 1.0;
+        double distribution = alpha2 / (PI * dDenominator * dDenominator + 1.0e-7);
+        double masking = 2.0 * normalDotView
+                / (normalDotView
+                + Math.sqrt(alpha2 + (1.0 - alpha2) * normalDotView * normalDotView)
+                + 1.0e-7);
+        return distribution * masking / (4.0 * normalDotView);
     }
 
     private RtPathPdfReference() {

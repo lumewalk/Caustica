@@ -69,13 +69,17 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID) {
                             && current.replayControl.y <= MAX_PATH_SEGMENTS
                             && asuint(current.proposalShift.w) == current.replayControl.z
                             && (current.replayControl.y == MAX_PATH_SEGMENTS
-                                    || all(current.replay.zw == uint2(0u)));
+                                    || all(current.replay.zw == uint2(0u)))
+                            && all(current.proposalComponents.xyz > float3(0.0))
+                            && (asuint(current.proposalComponents.w) & 0xC0000000u) == 0u;
                     bool previousReplayConsistent = previous.replayControl.x == PATH_REPLAY_VERSION
                             && previous.replayControl.y >= 1u
                             && previous.replayControl.y <= MAX_PATH_SEGMENTS
                             && asuint(previous.proposalShift.w) == previous.replayControl.z
                             && (previous.replayControl.y == MAX_PATH_SEGMENTS
-                                    || all(previous.replay.zw == uint2(0u)));
+                                    || all(previous.replay.zw == uint2(0u)))
+                            && all(previous.proposalComponents.xyz > float3(0.0))
+                            && (asuint(previous.proposalComponents.w) & 0xC0000000u) == 0u;
                     if (!currentReplayConsistent || !previousReplayConsistent) {
                         debugState = 10u;
                     } else if (currentGeneration != expectedGeneration

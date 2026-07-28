@@ -9,7 +9,7 @@ package dev.comfyfluffy.caustica.rt;
  * defines the validity and compatibility rules that the future replay pass must obey.</p>
  */
 final class RtPathReplayReference {
-    static final int REPLAY_VERSION = 2;
+    static final int REPLAY_VERSION = 3;
     static final int MAX_SEGMENTS = 2;
 
     record State(int version, int segmentCount, long transportState, long proposalState) {

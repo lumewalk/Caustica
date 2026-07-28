@@ -12,7 +12,7 @@ public static const uint PATH_TRANSPORT_DELTA = 4u;
 public static const uint PATH_TRANSPORT_TRANSMISSION = 8u;
 // Increment whenever replay metadata or RNG interpretation changes. Temporal reuse must reject
 // reservoirs produced by a different contract instead of trying to replay an incompatible path.
-public static const uint PATH_REPLAY_VERSION = 2u;
+public static const uint PATH_REPLAY_VERSION = 3u;
 
 public struct PathTraceResult {
     public float3 radiance;
@@ -24,9 +24,14 @@ public struct PathTraceResult {
     public uint proposalReplayState;
     public uint transportMask;
     public float footprint;
-    // Light-selection PDF capture is diagnostic until continuation-event PDFs are also recorded.
+    // Proposal components are diagnostic until the radiance candidate is split into canonical
+    // contribution paths; the current candidate still sums NEE and continuation radiance.
     public float lightProposalPdf;
     public uint lightProposalEvents;
+    public float continuationProposalPdf;
+    public float rouletteProposalPdf;
+    public uint continuationProposalEvents;
+    public uint rouletteProposalEvents;
 };
 
 // A complete screen-owned sample can contain both continuation records emitted by Pass A. Keep its
@@ -44,6 +49,10 @@ public struct PathCandidate {
     public float footprint;
     public float lightProposalPdf;
     public uint lightProposalEvents;
+    public float continuationProposalPdf;
+    public float rouletteProposalPdf;
+    public uint continuationProposalEvents;
+    public uint rouletteProposalEvents;
 };
 
 public float pathLuminance(float3 color) {
@@ -58,6 +67,7 @@ public PathReservoir pathReservoirEmpty() {
     reservoir.identity = uint4(0u);
     reservoir.replay = uint4(0u);
     reservoir.replayControl = uint4(0u);
+    reservoir.proposalComponents = float4(0.0, 0.0, 0.0, 0.0);
     return reservoir;
 }
 
@@ -76,6 +86,23 @@ public uint pathPackMetadata(uint generation, uint depth, uint transportMask) {
             | ((transportMask & 0xFu) << 28u);
 }
 
+public float pathCombineProposal(float left, float right) {
+    if (left <= 0.0 || right <= 0.0) return 0.0;
+    float combined = left * right;
+    return combined > 0.0 ? clamp(combined, 1.0e-30, 1.0e30) : 0.0;
+}
+
+public void pathAccumulateProposal(inout float product, inout uint events, float factor) {
+    product = pathCombineProposal(product, factor);
+    events++;
+}
+
+public uint pathPackProposalEvents(uint lightEvents, uint continuationEvents, uint rouletteEvents) {
+    return min(lightEvents, 1023u)
+            | (min(continuationEvents, 1023u) << 10u)
+            | (min(rouletteEvents, 1023u) << 20u);
+}
+
 // Initial per-pixel RIS update. The traced path is already an importance-weighted Monte-Carlo
 // estimator, so this bootstrap stage uses an effective proposal density of one. A later replay pass
 // will replace it with decomposed path PDFs before any temporal or spatial path reuse is allowed.
@@ -87,8 +114,8 @@ public void pathReservoirUpdate(inout PathReservoir reservoir,
                                 inout uint selectionSeed) {
     float3 radiance = max(candidate.radiance, float3(0.0));
     float target = max(pathLuminance(radiance), 0.0);
-    // Bootstrap weighting remains unchanged. The captured light PDF is stored separately below;
-    // it is not yet a complete path PDF because continuation-lobe factors are still absent.
+    // Bootstrap weighting remains unchanged. Proposal components are stored separately below; they
+    // are not yet a complete path PDF because the current candidate still sums multiple estimators.
     float proposalDensity = 1.0;
     float candidateWeight = target / proposalDensity;
     float previousWeightSum = reservoir.weights.x;
@@ -99,10 +126,14 @@ public void pathReservoirUpdate(inout PathReservoir reservoir,
 
     if (selectCandidate) {
         reservoir.sampleRadianceTarget = float4(radiance, target);
-        float capturedProposalDensity = candidate.lightProposalEvents > 0u
-                ? max(candidate.lightProposalPdf, 1.0e-20) : 0.0;
-        reservoir.proposalShift = float4(capturedProposalDensity, 1.0,
+        reservoir.proposalShift = float4(1.0, 1.0,
                 max(candidate.footprint, 1.0e-5), asfloat(candidate.replayState));
+        reservoir.proposalComponents = float4(
+                candidate.lightProposalPdf,
+                candidate.continuationProposalPdf,
+                candidate.rouletteProposalPdf,
+                asfloat(pathPackProposalEvents(candidate.lightProposalEvents,
+                        candidate.continuationProposalEvents, candidate.rouletteProposalEvents)));
         reservoir.identity = uint4(sampleId, pathKey, candidate.topologyKey,
                 pathPackMetadata(historyGeneration, candidate.depth, candidate.transportMask));
         // Storage-only replay contract. The current estimator deliberately does not consume this lane;

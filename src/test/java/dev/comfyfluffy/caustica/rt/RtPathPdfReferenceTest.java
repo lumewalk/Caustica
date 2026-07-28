@@ -45,4 +45,15 @@ final class RtPathPdfReferenceTest {
                         new RtPathPdfReference.Event(Double.MAX_VALUE, 1.0, true),
                         new RtPathPdfReference.Event(2.0, 1.0, true)));
     }
+
+    @Test
+    void diffuseAndGgxDensitiesMatchShaderSamplingMeasures() {
+        assertEquals(1.0 / 3.14159265359,
+                RtPathPdfReference.cosineHemisphereDensity(1.0), 1.0e-12);
+        assertEquals(0.0, RtPathPdfReference.cosineHemisphereDensity(-0.25));
+        assertEquals(1.0 / (4.0 * 3.14159265359),
+                RtPathPdfReference.ggxVndfReflectionDensity(1.0, 1.0, 1.0), 1.0e-8);
+        assertEquals(0.0,
+                RtPathPdfReference.ggxVndfReflectionDensity(1.0, 0.0, 0.5));
+    }
 }

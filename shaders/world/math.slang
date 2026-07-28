@@ -26,6 +26,18 @@ public float ggxG1(float ndx, float alpha) {
     return 2.0 * ndx / (ndx + sqrt(a2 + (1.0 - a2) * ndx * ndx) + 1.0e-7);
 }
 
+// PDF of a reflected direction when the microfacet normal is sampled with the visible-normal
+// GGX/VNDF sampler below. Delta reflection is handled by the caller as a discrete event and does not
+// use this continuous density.
+public float ggxVndfReflectionPdf(float3 n, float3 v, float3 h, float alpha) {
+    float ndv = max(dot(n, v), 0.0);
+    float ndh = max(dot(n, h), 0.0);
+    if (ndv <= 0.0 || ndh <= 0.0) {
+        return 0.0;
+    }
+    return ggxD(ndh, alpha) * ggxG1(ndv, alpha) / (4.0 * ndv);
+}
+
 public float3 fresnelSchlick(float cosT, float3 f0) {
     float m = clamp(1.0 - cosT, 0.0, 1.0);
     float m2 = m * m;

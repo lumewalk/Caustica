@@ -50,6 +50,10 @@ public PathTraceResult tracePathSeeded(PathSegment seg, uint2 pix, bool captureM
     // is intentionally incomplete until BSDF/technique PDFs are recorded for every continuation event.
     float lightProposalPdf = 1.0;
     uint lightProposalEvents = 0u;
+    float continuationProposalPdf = 1.0;
+    uint continuationProposalEvents = 0u;
+    float rouletteProposalPdf = 1.0;
+    uint rouletteProposalEvents = 0u;
     int maxBounces = int(worldPush.maxBounces);
     int rrStart = maxBounces <= 3 ? 1 : 2;
     // RIS emitter NEE: direct lighting from block emitters is active when lights are published and the
@@ -183,12 +187,16 @@ public PathTraceResult tracePathSeeded(PathSegment seg, uint2 pix, bool captureM
 
             bool chooseReflection = rndf(seed) < F;
             if (chooseReflection) {
+                pathAccumulateProposal(continuationProposalPdf, continuationProposalEvents,
+                        max(F, 1.0e-20));
                 transportMask |= PATH_TRANSPORT_DELTA;
                 if (captureMetadata) topologyKey = pathTopologyStep(topologyKey, 0xD101u);
                 rd = reflect(rd, n);
                 ro = offsetSurfaceOrigin(hitPos, geometricNormal, rd, SURF_BIAS);
             } else {
                 if (dot(transmittedDir, transmittedDir) <= 0.0) break; // TIR with F < 1 cannot happen
+                pathAccumulateProposal(continuationProposalPdf, continuationProposalEvents,
+                        max(1.0 - F, 1.0e-20));
                 transportMask |= PATH_TRANSPORT_TRANSMISSION;
                 if (captureMetadata) topologyKey = pathTopologyStep(topologyKey, 0xD102u);
                 rd = normalize(transmittedDir);
@@ -204,9 +212,14 @@ public PathTraceResult tracePathSeeded(PathSegment seg, uint2 pix, bool captureM
             showCelestial = true; // specular interface: the continuation ray may see the sun/moon disc
             if (bounce >= rrStart) {
                 float q = clamp(max(throughput.r, max(throughput.g, throughput.b)), 0.02, 1.0);
-                if (rndf(seed) > q) {
+                bool survive = rndf(seed) <= q;
+                pathAccumulateProposal(rouletteProposalPdf, rouletteProposalEvents,
+                        survive ? q : 1.0 - q);
+                if (!survive) {
+                    if (captureMetadata) topologyKey = pathTopologyStep(topologyKey, 0xE102u);
                     break;
                 }
+                if (captureMetadata) topologyKey = pathTopologyStep(topologyKey, 0xE101u);
                 throughput /= q;
             }
             continue;
@@ -244,8 +257,7 @@ public PathTraceResult tracePathSeeded(PathSegment seg, uint2 pix, bool captureM
                 Reservoir r = risInitial(hitPos, n, v, rd, albedo, float3(0.0, 0.0, 0.0), 1.0,
                                          true, 0.0, seed, proposalSeed);
                 if (r.proposalPdf > 0.0) {
-                    lightProposalPdf = min(lightProposalPdf * r.proposalPdf, 1.0e30);
-                    lightProposalEvents++;
+                    pathAccumulateProposal(lightProposalPdf, lightProposalEvents, r.proposalPdf);
                 }
                 L += throughput * shadeReservoir(r, hitPos, n, v, rd, albedo, float3(0.0, 0.0, 0.0), 1.0,
                                                  true, 0.0);
@@ -257,6 +269,8 @@ public PathTraceResult tracePathSeeded(PathSegment seg, uint2 pix, bool captureM
             throughput *= albedo;
             ro = hitPos + n * SURF_BIAS;
             rd = cosineDir(n, seed);
+            pathAccumulateProposal(continuationProposalPdf, continuationProposalEvents,
+                    max(abs(dot(n, rd)) * INV_PI, 1.0e-20));
             transportMask |= PATH_TRANSPORT_DIFFUSE;
             if (captureMetadata) topologyKey = pathTopologyStep(topologyKey, 0xC101u);
             rayConeSpread = max(rayConeSpread, RAY_CONE_DIFFUSE_SPREAD);
@@ -343,8 +357,7 @@ public PathTraceResult tracePathSeeded(PathSegment seg, uint2 pix, bool captureM
             Reservoir r = risInitial(hitPos, n, v, rd, diffAlb, F0, rough, false, activeSss,
                                      seed, proposalSeed);
             if (r.proposalPdf > 0.0) {
-                lightProposalPdf = min(lightProposalPdf * r.proposalPdf, 1.0e30);
-                lightProposalEvents++;
+                pathAccumulateProposal(lightProposalPdf, lightProposalEvents, r.proposalPdf);
             }
             L += throughput * shadeReservoir(r, hitPos, n, v, rd, diffAlb, F0, rough, false,
                                              activeSss);
@@ -390,6 +403,8 @@ public PathTraceResult tracePathSeeded(PathSegment seg, uint2 pix, bool captureM
                 // Authored zero is a delta distribution, not a narrow finite GGX lobe. This avoids the
                 // degenerate VNDF at alpha=0 and preserves a genuinely sharp reflection without a floor.
                 l = reflect(rd, n);
+                pathAccumulateProposal(continuationProposalPdf, continuationProposalEvents,
+                        max(ps, 1.0e-20));
                 throughput *= fresnelSchlick(clamp(dot(n, v), 0.0, 1.0), F0) / ps;
                 transportMask |= PATH_TRANSPORT_DELTA;
                 if (captureMetadata) topologyKey = pathTopologyStep(topologyKey, 0xB101u);
@@ -400,6 +415,9 @@ public PathTraceResult tracePathSeeded(PathSegment seg, uint2 pix, bool captureM
                 if (ndl2 <= 0.0) {
                     break; // microfacet reflects below the surface: terminate this path
                 }
+                float directionalPdf = ggxVndfReflectionPdf(n, v, h, rough);
+                pathAccumulateProposal(continuationProposalPdf, continuationProposalEvents,
+                        max(ps * directionalPdf, 1.0e-20));
                 // VNDF + separable Smith ⇒ weight = F · G2/G1(v) = F · G1(l); divide by the lobe pdf ps.
                 float3 F = fresnelSchlick(max(0.0, dot(v, h)), F0);
                 throughput *= F * ggxG1(ndl2, rough) / ps;
@@ -414,6 +432,8 @@ public PathTraceResult tracePathSeeded(PathSegment seg, uint2 pix, bool captureM
             throughput *= diffAlb / (1.0 - ps);
             ro = p;
             rd = cosineDir(n, seed);
+            pathAccumulateProposal(continuationProposalPdf, continuationProposalEvents,
+                    max((1.0 - ps) * abs(dot(n, rd)) * INV_PI, 1.0e-20));
             transportMask |= PATH_TRANSPORT_DIFFUSE;
             if (captureMetadata) topologyKey = pathTopologyStep(topologyKey, 0xB103u);
             rayConeSpread = max(rayConeSpread, RAY_CONE_DIFFUSE_SPREAD);
@@ -423,9 +443,14 @@ public PathTraceResult tracePathSeeded(PathSegment seg, uint2 pix, bool captureM
         // Russian roulette on deeper bounces: survive with prob = max channel, rescale survivors.
         if (bounce >= rrStart) {
             float q = clamp(max(throughput.r, max(throughput.g, throughput.b)), 0.02, 1.0);
-            if (rndf(seed) > q) {
+            bool survive = rndf(seed) <= q;
+            pathAccumulateProposal(rouletteProposalPdf, rouletteProposalEvents,
+                    survive ? q : 1.0 - q);
+            if (!survive) {
+                if (captureMetadata) topologyKey = pathTopologyStep(topologyKey, 0xE202u);
                 break;
             }
+            if (captureMetadata) topologyKey = pathTopologyStep(topologyKey, 0xE201u);
             throughput /= q;
         }
     }
@@ -441,6 +466,10 @@ public PathTraceResult tracePathSeeded(PathSegment seg, uint2 pix, bool captureM
     result.footprint = max(rayConeWidth, RAY_CONE_MIN_WIDTH);
     result.lightProposalPdf = lightProposalPdf;
     result.lightProposalEvents = lightProposalEvents;
+    result.continuationProposalPdf = continuationProposalPdf;
+    result.rouletteProposalPdf = rouletteProposalPdf;
+    result.continuationProposalEvents = continuationProposalEvents;
+    result.rouletteProposalEvents = rouletteProposalEvents;
     return result;
 }
 
@@ -507,6 +536,10 @@ void main() {
         float sampleFootprint = RAY_CONE_MIN_WIDTH;
         float sampleLightProposalPdf = 1.0;
         uint sampleLightProposalEvents = 0u;
+        float sampleContinuationProposalPdf = 1.0;
+        uint sampleContinuationProposalEvents = 0u;
+        float sampleRouletteProposalPdf = 1.0;
+        uint sampleRouletteProposalEvents = 0u;
         uint recordIndex = pixelIndex;
         for (uint leaf = 0u; leaf < MAX_PATH_SEGMENTS; ++leaf) {
             PackedPathSegment packed = queue[recordIndex];
@@ -527,8 +560,15 @@ void main() {
                     ^ traced.proposalReplayState ^ leaf * 1103515245u);
             sampleTransportMask |= traced.transportMask;
             sampleFootprint = max(sampleFootprint, traced.footprint);
-            sampleLightProposalPdf = min(sampleLightProposalPdf * traced.lightProposalPdf, 1.0e30);
+            sampleLightProposalPdf = pathCombineProposal(
+                    sampleLightProposalPdf, traced.lightProposalPdf);
             sampleLightProposalEvents += traced.lightProposalEvents;
+            sampleContinuationProposalPdf = pathCombineProposal(
+                    sampleContinuationProposalPdf, traced.continuationProposalPdf);
+            sampleContinuationProposalEvents += traced.continuationProposalEvents;
+            sampleRouletteProposalPdf = pathCombineProposal(
+                    sampleRouletteProposalPdf, traced.rouletteProposalPdf);
+            sampleRouletteProposalEvents += traced.rouletteProposalEvents;
             if (packed.nextRecord == PATH_NO_NEXT) {
                 break;
             }
@@ -547,6 +587,10 @@ void main() {
         candidate.footprint = sampleFootprint;
         candidate.lightProposalPdf = sampleLightProposalPdf;
         candidate.lightProposalEvents = sampleLightProposalEvents;
+        candidate.continuationProposalPdf = sampleContinuationProposalPdf;
+        candidate.rouletteProposalPdf = sampleRouletteProposalPdf;
+        candidate.continuationProposalEvents = sampleContinuationProposalEvents;
+        candidate.rouletteProposalEvents = sampleRouletteProposalEvents;
         uint sampleId = pathHash(worldPush.frameIndex * 2654435761u
                 ^ pixelIndex * 2246822519u ^ s * 3266489917u);
         pathReservoirUpdate(pathReservoir, candidate, sampleId, pixelIndex,

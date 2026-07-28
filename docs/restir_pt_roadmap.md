@@ -109,6 +109,8 @@ identity) over a raw transient primitive index where practical.
 Reservoir storage is double-buffered. The first implementation favors clarity
 and validation over minimum byte size; packing follows only after captures
 identify the real bandwidth and memory pressure.
+The current seven-lane path record is 112 B/pixel/slot; its final lane keeps
+light, continuation, and roulette PDF products separate from the shift Jacobian.
 
 ### Path Sample and Reservoir
 
@@ -131,10 +133,10 @@ match before a path is considered replay-compatible. The shader-independent
 mapping may relax the identity checks only together with a measured Jacobian/PDF mapping and
 new reference tests; it must not silently treat the two RNG streams as one seed.
 
-PDF capture is the next contract boundary. `RtPathPdfReference` treats technique selection,
-continuous directional density, and delta mass as separate events. Until the shader records all
-events (including continuation-lobe selection), the active path estimator keeps its bootstrap
-proposal density and does not claim ReSTIR PT correctness.
+PDF capture is the current contract boundary. `RtPathPdfReference` treats technique selection,
+continuous directional density, and delta mass as separate events. The GPU now records those
+components, but the active path estimator still keeps its bootstrap proposal density because one
+candidate currently sums NEE and continuation radiance rather than representing one canonical path.
 
 ## Delivery Phases
 
