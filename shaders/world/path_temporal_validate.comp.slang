@@ -12,6 +12,7 @@ import path_reservoir_common;
 [[vk::binding(2, 0)]] [format("rgba16f")] RWTexture2D<float4> debugColor;
 [[vk::binding(3, 0)]] [format("rgba32f")] RWTexture2D<float4> receiverPositionMaterial;
 [[vk::binding(4, 0)]] [format("rgba16f")] RWTexture2D<float4> receiverNormalRoughness;
+[[vk::binding(5, 0)]] RWStructuredBuffer<uint> spatialDiagnosticCounters;
 
 static const uint HISTORY_VALID = 1u << 7u;
 
@@ -201,6 +202,14 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID) {
         else if (validCount > 0u) spatialColor = float3(0.10, 0.10, 0.10);
         else if (compatibleCount > 0u) spatialColor = float3(0.95, 0.30, 0.04);
         else spatialColor = float3(0.90, 0.06, 0.05);
+        uint category = !receiverPresent ? 0u
+                : reconnectionCount > 0u ? 1u
+                : footprintRejected ? 2u
+                : rejectedPathCount > 0u ? 3u
+                : validCount > 0u ? 4u
+                : compatibleCount > 0u ? 5u
+                : 6u;
+        InterlockedAdd(spatialDiagnosticCounters[category], 1u);
         debugColor[pixel] = float4(spatialColor, 1.0);
     }
 }

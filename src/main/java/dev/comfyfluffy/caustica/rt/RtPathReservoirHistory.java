@@ -1,10 +1,15 @@
 package dev.comfyfluffy.caustica.rt;
 
+import com.mojang.blaze3d.vulkan.VulkanCommandEncoder;
+import dev.comfyfluffy.caustica.CausticaMod;
 import dev.comfyfluffy.caustica.rt.accel.RtBuffer;
 import dev.comfyfluffy.caustica.rt.accel.RtImage;
 import dev.comfyfluffy.caustica.rt.gen.PathReservoirData;
 import dev.comfyfluffy.caustica.rt.pipeline.RtPathTemporalPipeline;
 import java.nio.ByteBuffer;
+import java.nio.IntBuffer;
+import java.util.Locale;
+import org.lwjgl.system.MemoryUtil;
 import org.lwjgl.vulkan.VK10;
 import org.lwjgl.vulkan.VkCommandBuffer;
 
@@ -18,6 +23,9 @@ import org.lwjgl.vulkan.VkCommandBuffer;
 final class RtPathReservoirHistory {
     static final int SLOT_COUNT = 2;
     static final int BYTES_PER_RESERVOIR = PathReservoirData.BYTE_SIZE;
+    static final int SPATIAL_DIAGNOSTIC_COUNTER_COUNT = 7;
+    static final int SPATIAL_DIAGNOSTIC_COUNTER_BYTES =
+            SPATIAL_DIAGNOSTIC_COUNTER_COUNT * Integer.BYTES;
 
     record Frame(long generation, int writeSlot, int previousSlot, boolean previousAvailable) {
         int finalSlot() {
@@ -51,7 +59,9 @@ final class RtPathReservoirHistory {
 
     private final State state = new State();
     private final RtBuffer[] slots = new RtBuffer[SLOT_COUNT];
+    private RtBuffer spatialDiagnosticCounters;
     private RtPathTemporalPipeline temporalPipeline;
+    private boolean spatialDiagnosticsPending;
     private int width = -1;
     private int height = -1;
 
@@ -70,9 +80,13 @@ final class RtPathReservoirHistory {
             slots[slot] = ctx.createBuffer(bytesPerSlot, usage, false,
                     "path reservoir history slot " + slot + " " + width + "x" + height);
         }
+        spatialDiagnosticCounters = ctx.createBuffer(SPATIAL_DIAGNOSTIC_COUNTER_BYTES,
+                VK10.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK10.VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                true, "path spatial diagnostic counters");
         temporalPipeline = RtPathTemporalPipeline.create(ctx, receiverMotion.view,
                 validationMetadata.view, debugColor.view,
-                receiverPositionMaterial.view, receiverNormalRoughness.view);
+                receiverPositionMaterial.view, receiverNormalRoughness.view,
+                spatialDiagnosticCounters.handle);
         state.reset();
     }
 
@@ -87,11 +101,52 @@ final class RtPathReservoirHistory {
         state.commit(frame);
     }
 
-    void recordTemporalAdmission(VkCommandBuffer cmd, ByteBuffer pushConstants) {
+    void recordTemporalAdmission(VkCommandBuffer cmd, ByteBuffer pushConstants,
+                                 boolean spatialDiagnostics) {
         if (temporalPipeline == null) {
             throw new IllegalStateException("Path temporal pipeline used before allocation");
         }
+        if (spatialDiagnostics) {
+            VK10.vkCmdFillBuffer(cmd, spatialDiagnosticCounters.handle, 0L,
+                    spatialDiagnosticCounters.size, 0);
+            try (var stack = org.lwjgl.system.MemoryStack.stackPush()) {
+                VulkanCommandEncoder.memoryBarrier(cmd, stack);
+            }
+        }
         temporalPipeline.dispatch(cmd, width, height, pushConstants);
+        spatialDiagnosticsPending = spatialDiagnostics;
+    }
+
+    void pollSpatialDiagnosticCounters(RtContext ctx, long frameIndex) {
+        if (!spatialDiagnosticsPending || frameIndex == 0L || frameIndex % 60L != 0L) {
+            return;
+        }
+        ctx.waitIdle();
+        spatialDiagnosticCounters.invalidate();
+        IntBuffer counters = MemoryUtil.memIntBuffer(spatialDiagnosticCounters.mapped,
+                SPATIAL_DIAGNOSTIC_COUNTER_COUNT);
+        long[] values = new long[SPATIAL_DIAGNOSTIC_COUNTER_COUNT];
+        long total = 0L;
+        for (int index = 0; index < values.length; index++) {
+            values[index] = Integer.toUnsignedLong(counters.get(index));
+            total += values[index];
+        }
+        if (total > 0L) {
+            CausticaMod.LOGGER.info(
+                    "RT path spatial categories: total={}, empty={} ({}%), admitted={} ({}%), "
+                            + "footprintReject={} ({}%), pathReject={} ({}%), "
+                            + "noReconnection={} ({}%), neighborEmpty={} ({}%), "
+                            + "surfaceReject={} ({}%)",
+                    total,
+                    values[0], percent(values[0], total),
+                    values[1], percent(values[1], total),
+                    values[2], percent(values[2], total),
+                    values[3], percent(values[3], total),
+                    values[4], percent(values[4], total),
+                    values[5], percent(values[5], total),
+                    values[6], percent(values[6], total));
+        }
+        spatialDiagnosticsPending = false;
     }
 
     void reset() {
@@ -119,13 +174,18 @@ final class RtPathReservoirHistory {
     }
 
     boolean ready() {
-        return slots[0] != null && slots[1] != null && temporalPipeline != null;
+        return slots[0] != null && slots[1] != null
+                && spatialDiagnosticCounters != null && temporalPipeline != null;
     }
 
     void destroy() {
         if (temporalPipeline != null) {
             temporalPipeline.destroy();
             temporalPipeline = null;
+        }
+        if (spatialDiagnosticCounters != null) {
+            spatialDiagnosticCounters.destroy();
+            spatialDiagnosticCounters = null;
         }
         for (int slot = 0; slot < SLOT_COUNT; slot++) {
             if (slots[slot] != null) {
@@ -135,7 +195,12 @@ final class RtPathReservoirHistory {
         }
         width = -1;
         height = -1;
+        spatialDiagnosticsPending = false;
         state.reset();
+    }
+
+    private static String percent(long value, long total) {
+        return String.format(Locale.ROOT, "%.2f", value * 100.0 / total);
     }
 
     private RtBuffer slot(int slot) {

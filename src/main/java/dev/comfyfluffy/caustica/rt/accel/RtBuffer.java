@@ -60,4 +60,12 @@ public final class RtBuffer {
         }
         Vma.vmaFlushAllocation(vma, allocation, offset, length);
     }
+
+    /** Invalidate host caches before reading GPU writes; coherent allocations treat this as a no-op. */
+    public void invalidate() {
+        if (!hostVisible) {
+            throw new IllegalStateException("Cannot invalidate a non-host-visible buffer");
+        }
+        Vma.vmaInvalidateAllocation(vma, allocation, 0L, size);
+    }
 }

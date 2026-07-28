@@ -103,4 +103,18 @@ final class RtPathSpatialReuseReferenceTest {
         assertTrue(Double.isNaN(new RtPathSpatialReuseReference.DiagnosticCounters().ratio(
                 RtPathSpatialReuseReference.DiagnosticCategory.SURFACE_REJECT)));
     }
+
+    @Test
+    void diagnosticCategoryOrderMatchesGpuAtomicCounterContract() {
+        assertEquals(0, RtPathSpatialReuseReference.DiagnosticCategory.RECEIVER_EMPTY.ordinal());
+        assertEquals(1, RtPathSpatialReuseReference.DiagnosticCategory.ACCEPTED_RECONNECTION.ordinal());
+        assertEquals(2, RtPathSpatialReuseReference.DiagnosticCategory.FOOTPRINT_REJECT.ordinal());
+        assertEquals(3, RtPathSpatialReuseReference.DiagnosticCategory.PATH_REJECT.ordinal());
+        assertEquals(4, RtPathSpatialReuseReference.DiagnosticCategory.COMPATIBLE_NO_RECONNECTION.ordinal());
+        assertEquals(5, RtPathSpatialReuseReference.DiagnosticCategory.COMPATIBLE_NEIGHBOR_EMPTY.ordinal());
+        assertEquals(6, RtPathSpatialReuseReference.DiagnosticCategory.SURFACE_REJECT.ordinal());
+        assertEquals(7, RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_COUNTER_COUNT);
+        assertEquals(7 * Integer.BYTES,
+                RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_COUNTER_BYTES);
+    }
 }

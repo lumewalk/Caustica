@@ -934,6 +934,10 @@ public final class RtComposite {
                              RtDirectReservoirHistory.Frame reservoirFrame,
                              RtPathReservoirHistory.Frame pathReservoirFrame,
                              boolean restirPt) {
+        int debugView = debugView();
+        if (restirPt) {
+            pathReservoirs.pollSpatialDiagnosticCounters(ctx, frameCounter);
+        }
         long dstImage = vkImage(nativeColor);
         var encoder = (VulkanCommandEncoder) ((CommandEncoderAccessor) RenderSystem.getDevice().createCommandEncoder()).caustica$getBackend();
         RtGpuExecutor gpuExecutor = ctx.gpuExecutor();
@@ -945,7 +949,6 @@ public final class RtComposite {
         RtGpuFrameStats.Slot gpuStats = null;
         VkCommandBuffer cmd = encoder.allocateAndBeginTransientCommandBuffer();
         RtDebugLabels.name(ctx, VK10.VK_OBJECT_TYPE_COMMAND_BUFFER, cmd.address(), "composite command buffer");
-        int debugView = debugView();
         RtTerrain terrain = RtTerrain.currentOrNull();
         try (MemoryStack stack = MemoryStack.stackPush(); RtDebugLabels.Scope frameLabel = RtDebugLabels.scope(ctx, cmd, "composite frame")) {
             // RR drives the upscale: trace + jitter at render res, DLSS-RR denoises+upscales to display.
@@ -1146,7 +1149,8 @@ public final class RtComposite {
                              "path temporal admission");
                      RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage(
                              "frame.pathTemporalAdmission")) {
-                    pathReservoirs.recordTemporalAdmission(cmd, pushConstants);
+                    pathReservoirs.recordTemporalAdmission(
+                            cmd, pushConstants, debugView == 17);
                 }
                 VulkanCommandEncoder.memoryBarrier(cmd, stack);
             }
