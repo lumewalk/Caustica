@@ -110,7 +110,9 @@ continuation, and roulette PDF products plus event counters (including an explic
 canonical-endpoint validity bit), while the canonical radiance lane stores one
 replayable sky/emissive endpoint. The final two lanes store the selected canonical
 path's second-hit reconnection vertex, packed valid/depth metadata, oriented normal, and
-continuous source-edge proposal density. Two path-history slots
+continuous source-edge proposal density. Replay ABI 8 also packs the first-edge event kind
+(diffuse, glossy, delta, or transmission) so a future shift cannot confuse continuous and
+discrete measures. Two path-history slots
 therefore use about 262.9 MiB at 1280x673 and 591.2 MiB at 1920x1009. This is
 intentional: replay correctness is being established before any packing or compression pass.
 Debug view 15 is an opt-in seeded replay evaluator: it re-traces the selected reservoir's stored
@@ -133,6 +135,12 @@ and footprint agree. Its reconnection Jacobian is the solid-angle geometry ratio
 receiver/source directional-PDF ratio in primary-sample space; a random-replay segment has unit
 Jacobian. Do not add a GPU neighbor merge by copying the direct-light pass while these terms are
 absent from `PathReservoir`.
+
+Debug view 19 evaluates these terms for strict compatible continuous pairs only. Green means a
+finite positive primary-sample-space Jacobian; blue is strict compatibility rejection, magenta is
+a missing current edge, yellow is a delta/unsupported event, red is invalid geometry, cyan is an
+invalid directional PDF, orange is invalid technique mass, and gray is an invalid Jacobian. It is
+diagnostic-only: shifted visibility/radiance are not traced and the estimator is unchanged.
 
 ## Linux
 

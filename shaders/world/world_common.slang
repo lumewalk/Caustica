@@ -152,7 +152,8 @@ public struct DirectReservoir {
 // replayControl = {replay ABI version, segment count, terminal path-state hash,
 //                  terminal light-proposal-state hash}
 // canonicalRadianceTarget = {one replayable sky/emissive endpoint RGB, endpoint target density}
-// reconnectionVertex = {chosen path vertex position in current rebased world space, packed valid/depth}
+// reconnectionVertex = {chosen path vertex position in current rebased world space,
+//                       packed valid/depth/first-edge-event metadata}
 // reconnectionNormalPdf = {oriented second-hit normal, continuous source-edge proposal density}
 public struct PathReservoir {
     public float4 sampleRadianceTarget;

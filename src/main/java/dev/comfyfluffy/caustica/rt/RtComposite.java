@@ -1121,7 +1121,7 @@ public final class RtComposite {
                             | (restirPt ? 4 : 0)
                             | (restirPt && pathReservoirFrame.previousAvailable() ? 8 : 0)
                             | (restirPt && (debugView == 13 || debugView == 15 || debugView == 16
-                                    || debugView == 17 || debugView == 18) ? 16 : 0),
+                                    || debugView == 17 || debugView == 18 || debugView == 19) ? 16 : 0),
                     restirPt ? (int) pathReservoirFrame.generation() : 0).write(pushConstants);
             try (RtFrameStats.Scope ignoredTrace = RtFrameStats.FRAME.stage("frame.trace")) {
                 try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd, "world primary trace");
@@ -1151,7 +1151,7 @@ public final class RtComposite {
                              "frame.pathTemporalAdmission")) {
                     pathReservoirs.recordTemporalAdmission(
                             cmd, pushConstants,
-                            debugView == 17 || debugView == 18 ? debugView : 0);
+                            debugView == 17 || debugView == 18 || debugView == 19 ? debugView : 0);
                 }
                 VulkanCommandEncoder.memoryBarrier(cmd, stack);
             }

@@ -67,6 +67,7 @@ public PathTraceResult tracePathSeeded(PathSegment seg, uint2 pix, bool captureM
     // Full continuous proposal density for the hit-0 -> hit-1 edge, including lobe selection.
     // Delta reflection/refraction use a discrete measure and intentionally leave this at zero.
     float reconnectionSourcePdf = 0.0;
+    uint reconnectionEventKind = PATH_RECONNECTION_EVENT_NONE;
     int maxBounces = int(worldPush.maxBounces);
     int rrStart = maxBounces <= 3 ? 1 : 2;
     // RIS emitter NEE: direct lighting from block emitters is active when lights are published and the
@@ -219,6 +220,9 @@ public PathTraceResult tracePathSeeded(PathSegment seg, uint2 pix, bool captureM
                             canonicalContinuationProposalEvents, max(F, 1.0e-20));
                 }
                 transportMask |= PATH_TRANSPORT_DELTA;
+                if (captureMetadata && hitDepth == 0) {
+                    reconnectionEventKind = PATH_RECONNECTION_EVENT_DELTA;
+                }
                 if (captureMetadata) topologyKey = pathTopologyStep(topologyKey, 0xD101u);
                 rd = reflect(rd, n);
                 ro = offsetSurfaceOrigin(hitPos, geometricNormal, rd, SURF_BIAS);
@@ -231,6 +235,9 @@ public PathTraceResult tracePathSeeded(PathSegment seg, uint2 pix, bool captureM
                             canonicalContinuationProposalEvents, max(1.0 - F, 1.0e-20));
                 }
                 transportMask |= PATH_TRANSPORT_TRANSMISSION;
+                if (captureMetadata && hitDepth == 0) {
+                    reconnectionEventKind = PATH_RECONNECTION_EVENT_TRANSMISSION;
+                }
                 if (captureMetadata) topologyKey = pathTopologyStep(topologyKey, 0xD102u);
                 rd = normalize(transmittedDir);
                 ro = offsetSurfaceOrigin(hitPos, geometricNormal, rd, transmitBias);
@@ -316,6 +323,7 @@ public PathTraceResult tracePathSeeded(PathSegment seg, uint2 pix, bool captureM
             }
             if (captureMetadata && hitDepth == 0) {
                 reconnectionSourcePdf = directionalPdf;
+                reconnectionEventKind = PATH_RECONNECTION_EVENT_DIFFUSE;
             }
             transportMask |= PATH_TRANSPORT_DIFFUSE;
             if (captureMetadata) topologyKey = pathTopologyStep(topologyKey, 0xC101u);
@@ -461,6 +469,9 @@ public PathTraceResult tracePathSeeded(PathSegment seg, uint2 pix, bool captureM
                 }
                 throughput *= fresnelSchlick(clamp(dot(n, v), 0.0, 1.0), F0) / ps;
                 transportMask |= PATH_TRANSPORT_DELTA;
+                if (captureMetadata && hitDepth == 0) {
+                    reconnectionEventKind = PATH_RECONNECTION_EVENT_DELTA;
+                }
                 if (captureMetadata) topologyKey = pathTopologyStep(topologyKey, 0xB101u);
             } else {
                 float3 h = sampleGGXVNDF(n, v, rough, seed);
@@ -480,6 +491,7 @@ public PathTraceResult tracePathSeeded(PathSegment seg, uint2 pix, bool captureM
                 }
                 if (captureMetadata && hitDepth == 0) {
                     reconnectionSourcePdf = proposalPdf;
+                    reconnectionEventKind = PATH_RECONNECTION_EVENT_GLOSSY;
                 }
                 // VNDF + separable Smith ⇒ weight = F · G2/G1(v) = F · G1(l); divide by the lobe pdf ps.
                 float3 F = fresnelSchlick(max(0.0, dot(v, h)), F0);
@@ -505,6 +517,7 @@ public PathTraceResult tracePathSeeded(PathSegment seg, uint2 pix, bool captureM
             }
             if (captureMetadata && hitDepth == 0) {
                 reconnectionSourcePdf = directionalPdf;
+                reconnectionEventKind = PATH_RECONNECTION_EVENT_DIFFUSE;
             }
             transportMask |= PATH_TRANSPORT_DIFFUSE;
             if (captureMetadata) topologyKey = pathTopologyStep(topologyKey, 0xB103u);
@@ -557,6 +570,8 @@ public PathTraceResult tracePathSeeded(PathSegment seg, uint2 pix, bool captureM
     result.reconnectionDepth = reconnectionDepth;
     result.reconnectionNormal = reconnectionValid ? reconnectionNormal : float3(0.0);
     result.reconnectionSourcePdf = reconnectionValid ? reconnectionSourcePdf : 0.0;
+    result.reconnectionEventKind = reconnectionValid
+            ? reconnectionEventKind : PATH_RECONNECTION_EVENT_NONE;
     return result;
 }
 
@@ -647,6 +662,7 @@ void main() {
         uint sampleReconnectionDepth = 0u;
         float3 sampleReconnectionNormal = float3(0.0);
         float sampleReconnectionSourcePdf = 0.0;
+        uint sampleReconnectionEventKind = PATH_RECONNECTION_EVENT_NONE;
         uint recordIndex = pixelIndex;
         for (uint leaf = 0u; leaf < MAX_PATH_SEGMENTS; ++leaf) {
             PackedPathSegment packed = queue[recordIndex];
@@ -688,6 +704,7 @@ void main() {
                 sampleReconnectionDepth = traced.reconnectionDepth;
                 sampleReconnectionNormal = traced.reconnectionNormal;
                 sampleReconnectionSourcePdf = traced.reconnectionSourcePdf;
+                sampleReconnectionEventKind = traced.reconnectionEventKind;
             }
             if (packed.nextRecord == PATH_NO_NEXT) {
                 break;
@@ -722,6 +739,7 @@ void main() {
         candidate.reconnectionDepth = sampleReconnectionDepth;
         candidate.reconnectionNormal = sampleReconnectionNormal;
         candidate.reconnectionSourcePdf = sampleReconnectionSourcePdf;
+        candidate.reconnectionEventKind = sampleReconnectionEventKind;
         uint sampleId = pathHash(worldPush.frameIndex * 2654435761u
                 ^ pixelIndex * 2246822519u ^ s * 3266489917u);
         uint canonicalStatus = pathReservoirUpdate(pathReservoir, candidate, sampleId, pixelIndex,

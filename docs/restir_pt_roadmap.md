@@ -184,6 +184,17 @@ The CPU reference therefore records the solid-angle Jacobian
 form multiplies it by `p_receiver / p_source`; random replay contributes unit Jacobian. This
 keeps spatial admission testable without silently introducing a biased neighbor merge.
 
+Debug view 19 is the next opt-in diagnostic boundary. It stores the first-edge event kind in the
+packed reconnection metadata (replay ABI 8), then checks strict neighboring reservoirs for a
+continuous diffuse/glossy event with matching topology/depth/transport/footprint. For a selected
+pair it evaluates the receiver/source geometric solid-angle ratio and reconstructs the receiver
+directional density from the current edge and its shifted edge; the receiver/source PDF ratio
+produces a finite primary-sample-space Jacobian. Green means all terms are finite and positive;
+blue is strict compatibility rejection; magenta means the current edge is unavailable; yellow
+means a delta/unsupported event; red is invalid geometry; cyan is invalid directional density;
+orange is invalid technique mass; gray is an invalid Jacobian. View 19 does not trace shifted
+visibility or radiance and never changes the estimator or the existing view 17/18 counters.
+
 ## Delivery Phases
 
 ### Phase 0 — Wavefront Integration Baseline

@@ -26,6 +26,7 @@ final class RtPathReservoirHistory {
     static final int BYTES_PER_RESERVOIR = PathReservoirData.BYTE_SIZE;
     static final int SPATIAL_DEBUG_VIEW = 17;
     static final int SPATIAL_POLICY_DEBUG_VIEW = 18;
+    static final int RECONNECTION_DEBUG_VIEW = 19;
     static final int SPATIAL_DIAGNOSTIC_CATEGORY_COUNT = 9;
     static final int SPATIAL_DIAGNOSTIC_STRICT_PAIR_CURSOR_INDEX =
             SPATIAL_DIAGNOSTIC_CATEGORY_COUNT;
@@ -122,13 +123,14 @@ final class RtPathReservoirHistory {
         if (temporalPipeline == null) {
             throw new IllegalStateException("Path temporal pipeline used before allocation");
         }
-        boolean spatialDiagnostics = spatialDiagnosticView == SPATIAL_DEBUG_VIEW
+        boolean counterDiagnostics = spatialDiagnosticView == SPATIAL_DEBUG_VIEW
                 || spatialDiagnosticView == SPATIAL_POLICY_DEBUG_VIEW;
-        if (spatialDiagnosticView != 0 && !spatialDiagnostics) {
+        boolean reconnectionDiagnostics = spatialDiagnosticView == RECONNECTION_DEBUG_VIEW;
+        if (spatialDiagnosticView != 0 && !counterDiagnostics && !reconnectionDiagnostics) {
             throw new IllegalArgumentException(
                     "Unsupported path spatial diagnostic view: " + spatialDiagnosticView);
         }
-        if (spatialDiagnostics) {
+        if (counterDiagnostics) {
             VK10.vkCmdFillBuffer(cmd, spatialDiagnosticCounters.handle, 0L,
                     spatialDiagnosticCounters.size, 0);
             try (var stack = org.lwjgl.system.MemoryStack.stackPush()) {
@@ -136,7 +138,7 @@ final class RtPathReservoirHistory {
             }
         }
         temporalPipeline.dispatch(cmd, width, height, pushConstants);
-        spatialDiagnosticViewPending = spatialDiagnosticView;
+        spatialDiagnosticViewPending = counterDiagnostics ? spatialDiagnosticView : 0;
     }
 
     void pollSpatialDiagnosticCounters(RtContext ctx, long frameIndex) {

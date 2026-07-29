@@ -12,6 +12,39 @@ final class RtPathSpatialReuseReference {
     static final double MAX_FOOTPRINT_RATIO = 4.0;
     static final int RECONNECTION_HIT_DEPTH = 1;
     static final int RECONNECTION_VALID = 1;
+    static final int RECONNECTION_EVENT_SHIFT = 5;
+    static final int RECONNECTION_EVENT_MASK = 0x7 << RECONNECTION_EVENT_SHIFT;
+
+    enum ReconnectionEvent {
+        NONE(0),
+        DIFFUSE(1),
+        GLOSSY(2),
+        DELTA(3),
+        TRANSMISSION(4);
+
+        private final int code;
+
+        ReconnectionEvent(int code) {
+            this.code = code;
+        }
+
+        int code() {
+            return code;
+        }
+
+        static ReconnectionEvent fromCode(int code) {
+            for (ReconnectionEvent event : values()) {
+                if (event.code == code) {
+                    return event;
+                }
+            }
+            throw new IllegalArgumentException("unknown reconnection event: " + code);
+        }
+
+        boolean continuous() {
+            return this == DIFFUSE || this == GLOSSY;
+        }
+    }
 
     enum Decision {
         ACCEPTED,
@@ -280,11 +313,20 @@ final class RtPathSpatialReuseReference {
         return hitDepth == RECONNECTION_HIT_DEPTH;
     }
 
-    static int packReconnectionMetadata(int depth, boolean valid) {
+    static int packReconnectionMetadata(int depth, ReconnectionEvent event, boolean valid) {
         if (depth < 0) {
             throw new IllegalArgumentException("reconnection depth must be non-negative");
         }
-        return (valid ? RECONNECTION_VALID : 0) | ((Math.min(depth, 15) & 0xF) << 1);
+        if (event == null) {
+            throw new IllegalArgumentException("reconnection event must be non-null");
+        }
+        return (valid ? RECONNECTION_VALID : 0)
+                | ((Math.min(depth, 15) & 0xF) << 1)
+                | ((event.code() & 0x7) << RECONNECTION_EVENT_SHIFT);
+    }
+
+    static int packReconnectionMetadata(int depth, boolean valid) {
+        return packReconnectionMetadata(depth, ReconnectionEvent.NONE, valid);
     }
 
     static boolean reconnectionValid(int packedMetadata) {
@@ -293,6 +335,11 @@ final class RtPathSpatialReuseReference {
 
     static int reconnectionDepth(int packedMetadata) {
         return (packedMetadata >>> 1) & 0xF;
+    }
+
+    static ReconnectionEvent reconnectionEvent(int packedMetadata) {
+        return ReconnectionEvent.fromCode(
+                (packedMetadata & RECONNECTION_EVENT_MASK) >>> RECONNECTION_EVENT_SHIFT);
     }
 
     private static boolean positiveFinite(double value) {

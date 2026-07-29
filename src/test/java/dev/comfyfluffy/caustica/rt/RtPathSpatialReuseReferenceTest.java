@@ -108,9 +108,14 @@ final class RtPathSpatialReuseReferenceTest {
         assertTrue(RtPathSpatialReuseReference.captureReconnectionAtDepth(1));
         assertFalse(RtPathSpatialReuseReference.captureReconnectionAtDepth(2));
 
-        int packed = RtPathSpatialReuseReference.packReconnectionMetadata(1, true);
+        int packed = RtPathSpatialReuseReference.packReconnectionMetadata(
+                1, RtPathSpatialReuseReference.ReconnectionEvent.GLOSSY, true);
         assertTrue(RtPathSpatialReuseReference.reconnectionValid(packed));
         assertEquals(1, RtPathSpatialReuseReference.reconnectionDepth(packed));
+        assertEquals(RtPathSpatialReuseReference.ReconnectionEvent.GLOSSY,
+                RtPathSpatialReuseReference.reconnectionEvent(packed));
+        assertTrue(RtPathSpatialReuseReference.ReconnectionEvent.DIFFUSE.continuous());
+        assertFalse(RtPathSpatialReuseReference.ReconnectionEvent.DELTA.continuous());
         assertThrows(IllegalArgumentException.class,
                 () -> RtPathSpatialReuseReference.packReconnectionMetadata(-1, true));
     }
@@ -173,6 +178,7 @@ final class RtPathSpatialReuseReferenceTest {
         assertEquals(9, RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_CATEGORY_COUNT);
         assertEquals(17, RtPathReservoirHistory.SPATIAL_DEBUG_VIEW);
         assertEquals(18, RtPathReservoirHistory.SPATIAL_POLICY_DEBUG_VIEW);
+        assertEquals(19, RtPathReservoirHistory.RECONNECTION_DEBUG_VIEW);
         assertEquals(9, RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_STRICT_PAIR_CURSOR_INDEX);
         assertEquals(10, RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_LIMITED_ADMITTED_INDEX);
         assertEquals(11, RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_TOPOLOGY_RESCUED_INDEX);

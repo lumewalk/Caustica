@@ -17,6 +17,42 @@ import path_reservoir_common;
 
 static const uint HISTORY_VALID = 1u << 7u;
 static const uint SPATIAL_DIAGNOSTIC_PAIR_MASK = 3u;
+static const float PATH_INV_PI = 0.31830988618;
+
+static float pathGgxD(float ndh, float alpha) {
+    float a2 = alpha * alpha;
+    float d = ndh * ndh * (a2 - 1.0) + 1.0;
+    return a2 / (3.14159265359 * d * d + 1.0e-7);
+}
+
+static float pathGgxG1(float ndx, float alpha) {
+    float a2 = alpha * alpha;
+    return 2.0 * ndx / (ndx + sqrt(a2 + (1.0 - a2) * ndx * ndx) + 1.0e-7);
+}
+
+static float pathGgxVndfReflectionPdf(float3 n, float3 v, float3 h, float alpha) {
+    float ndv = max(dot(n, v), 0.0);
+    float ndh = max(dot(n, h), 0.0);
+    if (ndv <= 0.0 || ndh <= 0.0) return 0.0;
+    return pathGgxD(ndh, alpha) * pathGgxG1(ndv, alpha) / (4.0 * ndv);
+}
+
+static float pathReconnectionDirectionalPdf(uint eventKind, float3 n, float3 v,
+                                             float3 l, float roughness) {
+    float lLength = length(l);
+    if (lLength <= 1.0e-5) return 0.0;
+    l /= lLength;
+    if (eventKind == PATH_RECONNECTION_EVENT_DIFFUSE) {
+        return abs(dot(n, l)) * PATH_INV_PI;
+    }
+    if (eventKind == PATH_RECONNECTION_EVENT_GLOSSY) {
+        float3 h = v + l;
+        float hLength = length(h);
+        if (hLength <= 1.0e-5) return 0.0;
+        return pathGgxVndfReflectionPdf(n, v, h / hLength, max(roughness, 1.0e-3));
+    }
+    return 0.0;
+}
 
 [shader("compute")]
 [numthreads(16, 16, 1)]
@@ -210,7 +246,8 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID) {
                 }
                 uint reconnectionMetadata = asuint(source.reconnectionVertex.w);
                 bool reconnectionValid = (reconnectionMetadata & PATH_RECONNECTION_VALID) != 0u;
-                if (reconnectionValid && ((reconnectionMetadata >> 1u) & 0xFu) == 1u) {
+                if (reconnectionValid
+                        && ((reconnectionMetadata >> PATH_RECONNECTION_DEPTH_SHIFT) & 0xFu) == 1u) {
                     limitedReconnectionCount++;
                     if (topologyMismatch) {
                         topologyRescued = true;
@@ -290,5 +327,149 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID) {
             }
         }
         debugColor[pixel] = float4(spatialColor, 1.0);
+    }
+    if (pc.debugView == PATH_RECONNECTION_DEBUG_VIEW) {
+        float4 receiverPosition = receiverPositionMaterial[pixel];
+        float4 receiverNormalRoughnessValue = receiverNormalRoughness[pixel];
+        float receiverNormalLength = length(receiverNormalRoughnessValue.xyz);
+        uint receiverMaterial = uint(max(receiverPosition.w, 0.0));
+        bool receiverPresent = receiverNormalLength >= 0.5
+                && receiverMaterial <= MATERIAL_PARTICLE
+                && current.weights.y > 0.0
+                && current.sampleRadianceTarget.w > 0.0;
+        uint state = receiverPresent ? 1u : 0u;
+        WorldPush push = ConstPtr<WorldPush>(pc.worldPushAddr)[0];
+        float2 size = float2(width, height);
+        float2 uv = (float2(pixel) + 0.5) / size;
+        float2 jitteredNdc = (uv + push.jitter / size) * 2.0 - 1.0;
+        float4 nearH = mul(push.invViewProj,
+                float4(jitteredNdc.x, jitteredNdc.y, 1.0, 1.0));
+        float3 cameraPosition = nearH.xyz / nearH.w + push.camOffset;
+        float3 receiverNormal = receiverNormalRoughnessValue.xyz / receiverNormalLength;
+        float3 receiverView = normalize(cameraPosition - receiverPosition.xyz);
+        uint currentMetadata = asuint(current.reconnectionVertex.w);
+        uint currentEvent = pathReconnectionEvent(currentMetadata);
+        float currentSourcePdf = current.reconnectionNormalPdf.w;
+        float3 currentSecondHit = current.reconnectionVertex.xyz;
+        bool currentEdgeAvailable = (currentMetadata & PATH_RECONNECTION_VALID) != 0u
+                && ((currentMetadata >> PATH_RECONNECTION_DEPTH_SHIFT) & 0xFu) == 1u
+                && pathReconnectionContinuous(currentEvent)
+                && currentSourcePdf > 0.0
+                && all(isfinite(currentSecondHit))
+                && all(isfinite(receiverView));
+        if (receiverPresent && !currentEdgeAvailable) {
+            state = 2u; // current receiver edge/reconnection metadata unavailable
+        } else if (receiverPresent) {
+            uint seed = pathHash(pixel.x * 2246822519u
+                    ^ pixel.y * 3266489917u ^ pc.frameIndex * 668265263u);
+            float rotation = float(seed) * (6.28318530718 / 4294967296.0);
+            bool foundStrictNeighbor = false;
+            for (uint sample = 0u; sample < PATH_SPATIAL_SAMPLE_COUNT && !foundStrictNeighbor; ++sample) {
+                float radiusFraction = sqrt((float(sample) + 0.5)
+                        / float(PATH_SPATIAL_SAMPLE_COUNT));
+                float angle = rotation + float(sample) * 2.39996322973;
+                float radius = 2.0 + radiusFraction * (PATH_SPATIAL_RADIUS - 2.0);
+                int2 offset = int2(round(float2(cos(angle), sin(angle)) * radius));
+                int2 neighborTexel = int2(pixel) + offset;
+                if (any(neighborTexel < int2(0, 0))
+                        || any(neighborTexel >= int2(width, height))) continue;
+                float4 sourcePosition = receiverPositionMaterial[neighborTexel];
+                float4 sourceNormalValue = receiverNormalRoughness[neighborTexel];
+                float sourceNormalLength = length(sourceNormalValue.xyz);
+                uint sourceMaterial = uint(max(sourcePosition.w, 0.0));
+                if (sourceNormalLength < 0.5 || sourceMaterial != receiverMaterial) continue;
+                float3 sourceNormal = sourceNormalValue.xyz / sourceNormalLength;
+                float relativeDepth = abs(length(sourcePosition.xyz) - length(receiverPosition.xyz))
+                        / max(length(receiverPosition.xyz), 1.0);
+                if (dot(receiverNormal, sourceNormal) < PATH_SPATIAL_NORMAL_COS
+                        || relativeDepth > PATH_SPATIAL_RELATIVE_DEPTH) continue;
+                uint sourceIndex = uint(neighborTexel.y) * width + uint(neighborTexel.x);
+                PathReservoir source =
+                        ConstPtr<PathReservoir>(pc.pathReservoirAddr)[sourceIndex];
+                if (source.weights.y <= 0.0 || source.sampleRadianceTarget.w <= 0.0) continue;
+                if (pathMetadataDepth(source.identity.w) != pathMetadataDepth(current.identity.w)
+                        || source.identity.z != current.identity.z
+                        || pathMetadataTransport(source.identity.w)
+                                != pathMetadataTransport(current.identity.w)) {
+                    state = 3u; // strict path compatibility rejected
+                    continue;
+                }
+                float sourceFootprint = max(source.proposalShift.z, 1.0e-5);
+                float receiverFootprint = max(current.proposalShift.z, 1.0e-5);
+                if (max(sourceFootprint, receiverFootprint)
+                        / min(sourceFootprint, receiverFootprint) > PATH_MAX_FOOTPRINT_RATIO) {
+                    state = 3u;
+                    continue;
+                }
+                uint sourceMetadata = asuint(source.reconnectionVertex.w);
+                uint sourceEvent = pathReconnectionEvent(sourceMetadata);
+                float sourcePdf = source.reconnectionNormalPdf.w;
+                float3 sharedVertex = source.reconnectionVertex.xyz;
+                float3 sharedNormalValue = source.reconnectionNormalPdf.xyz;
+                float sharedNormalLength = length(sharedNormalValue);
+                bool sourceEdgeAvailable = (sourceMetadata & PATH_RECONNECTION_VALID) != 0u
+                        && ((sourceMetadata >> PATH_RECONNECTION_DEPTH_SHIFT) & 0xFu) == 1u
+                        && pathReconnectionContinuous(sourceEvent)
+                        && sourceEvent == currentEvent
+                        && sourcePdf > 0.0
+                        && all(isfinite(sharedVertex))
+                        && all(isfinite(sharedNormalValue))
+                        && sharedNormalLength >= 0.5;
+                if (!sourceEdgeAvailable) {
+                    state = 4u; // source event is delta/unsupported or missing
+                    continue;
+                }
+                float3 sharedNormal = sharedNormalValue / sharedNormalLength;
+                float3 sourceEdge = sharedVertex - sourcePosition.xyz;
+                float3 receiverEdge = sharedVertex - receiverPosition.xyz;
+                float sourceDistance = length(sourceEdge);
+                float receiverDistance = length(receiverEdge);
+                if (sourceDistance <= 1.0e-4 || receiverDistance <= 1.0e-4) {
+                    state = 5u;
+                    continue;
+                }
+                float sourceCosine = abs(dot(sharedNormal, -sourceEdge / sourceDistance));
+                float receiverCosine = abs(dot(sharedNormal, receiverEdge / receiverDistance));
+                float geometryJacobian = receiverCosine * sourceDistance * sourceDistance
+                        / max(sourceCosine * receiverDistance * receiverDistance, 1.0e-8);
+                float currentDensity = pathReconnectionDirectionalPdf(currentEvent,
+                        receiverNormal, receiverView, currentSecondHit - receiverPosition.xyz,
+                        receiverNormalRoughnessValue.w);
+                float shiftedDensity = pathReconnectionDirectionalPdf(currentEvent,
+                        receiverNormal, receiverView, receiverEdge, receiverNormalRoughnessValue.w);
+                if (!isfinite(currentDensity) || !isfinite(shiftedDensity)
+                        || currentDensity <= 0.0 || shiftedDensity <= 0.0) {
+                    state = 6u;
+                    continue;
+                }
+                float techniqueMass = currentSourcePdf / currentDensity;
+                float receiverPdf = techniqueMass * shiftedDensity;
+                float pssJacobian = geometryJacobian * receiverPdf / sourcePdf;
+                if (!isfinite(techniqueMass) || !isfinite(receiverPdf)
+                        || techniqueMass <= 0.0 || receiverPdf <= 0.0) {
+                    state = 7u;
+                    continue;
+                }
+                if (!isfinite(geometryJacobian) || !isfinite(pssJacobian)
+                        || geometryJacobian <= 0.0 || pssJacobian <= 0.0) {
+                    state = 8u;
+                    continue;
+                }
+                state = 9u; // strict pair has finite geometric and directional-PDF terms
+                foundStrictNeighbor = true;
+            }
+        }
+        float3 reconnectionColor;
+        if (state == 0u) reconnectionColor = float3(0.0); // receiver/current empty
+        else if (state == 1u) reconnectionColor = float3(0.10, 0.10, 0.10); // no strict pair
+        else if (state == 2u) reconnectionColor = float3(1.00, 0.12, 0.55); // current edge missing
+        else if (state == 3u) reconnectionColor = float3(0.15, 0.35, 0.95); // strict reject
+        else if (state == 4u) reconnectionColor = float3(0.95, 0.72, 0.04); // event/delta reject
+        else if (state == 5u) reconnectionColor = float3(0.90, 0.06, 0.05); // invalid geometry
+        else if (state == 6u) reconnectionColor = float3(0.05, 0.85, 0.95); // invalid directional PDF
+        else if (state == 7u) reconnectionColor = float3(0.95, 0.30, 0.04); // invalid technique mass
+        else if (state == 8u) reconnectionColor = float3(0.80, 0.80, 0.80); // invalid Jacobian
+        else reconnectionColor = float3(0.05, 0.95, 0.20); // finite PSS reconnection Jacobian
+        debugColor[pixel] = float4(reconnectionColor, 1.0);
     }
 }
