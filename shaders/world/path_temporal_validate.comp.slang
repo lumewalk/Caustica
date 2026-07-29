@@ -16,8 +16,6 @@ import path_reservoir_common;
 [[vk::binding(6, 0)]] RWStructuredBuffer<float2> spatialDiagnosticPairs;
 
 static const uint HISTORY_VALID = 1u << 7u;
-static const uint SPATIAL_DIAGNOSTIC_PAIR_CURSOR = 9u;
-static const uint SPATIAL_DIAGNOSTIC_PAIR_CAPACITY = 4096u;
 static const uint SPATIAL_DIAGNOSTIC_PAIR_MASK = 3u;
 
 [shader("compute")]
@@ -129,7 +127,8 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID) {
         else color = float3(0.05, 0.95, 0.20);                       // strict compatibility accepted
         debugColor[pixel] = float4(color, 1.0);
     }
-    if (pc.debugView == PATH_SPATIAL_DEBUG_VIEW) {
+    bool spatialPolicyDebug = pc.debugView == PATH_SPATIAL_POLICY_DEBUG_VIEW;
+    if (pc.debugView == PATH_SPATIAL_DEBUG_VIEW || spatialPolicyDebug) {
         float4 receiverPosition = receiverPositionMaterial[pixel];
         float4 receiverNormal = receiverNormalRoughness[pixel];
         float receiverNormalLength = length(receiverNormal.xyz);
@@ -141,12 +140,16 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID) {
         uint compatibleCount = 0u;
         uint validCount = 0u;
         uint reconnectionCount = 0u;
+        uint limitedReconnectionCount = 0u;
         bool depthRejected = false;
         bool topologyRejected = false;
         bool transportRejected = false;
         bool footprintRejected = false;
+        bool topologyRescued = false;
         bool diagnosticPairValid = false;
         float2 diagnosticPair = float2(0.0);
+        bool rescuedDiagnosticPairValid = false;
+        float2 rescuedDiagnosticPair = float2(0.0);
         if (receiverPresent) {
             float3 receiverNormalUnit = receiverNormal.xyz / receiverNormalLength;
             float receiverDistance = length(receiverPosition.xyz);
@@ -184,9 +187,10 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID) {
                     depthRejected = true;
                     continue;
                 }
-                if (source.identity.z != current.identity.z) {
+                bool topologyMismatch = source.identity.z != current.identity.z;
+                if (topologyMismatch) {
                     topologyRejected = true;
-                    continue;
+                    if (!spatialPolicyDebug) continue;
                 }
                 if (pathMetadataTransport(sourceMetadata)
                         != pathMetadataTransport(current.identity.w)) {
@@ -198,19 +202,34 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID) {
                 float footprintRatio = max(sourceFootprint, receiverFootprint)
                         / min(sourceFootprint, receiverFootprint);
                 if (footprintRatio > PATH_MAX_FOOTPRINT_RATIO) {
-                    footprintRejected = true;
+                    // Preserve the strict baseline category: under exact topology this is a
+                    // footprint reject; a relaxed-topology candidate remains a topology reject
+                    // unless it passes every later limited-policy condition.
+                    if (!topologyMismatch) footprintRejected = true;
                     continue;
                 }
                 uint reconnectionMetadata = asuint(source.reconnectionVertex.w);
                 bool reconnectionValid = (reconnectionMetadata & PATH_RECONNECTION_VALID) != 0u;
                 if (reconnectionValid && ((reconnectionMetadata >> 1u) & 0xFu) == 1u) {
-                    reconnectionCount++;
-                    if (!diagnosticPairValid
-                            && current.canonicalRadianceTarget.w > 0.0
-                            && source.canonicalRadianceTarget.w > 0.0) {
-                        diagnosticPair = float2(current.canonicalRadianceTarget.w,
-                                source.canonicalRadianceTarget.w);
-                        diagnosticPairValid = true;
+                    limitedReconnectionCount++;
+                    if (topologyMismatch) {
+                        topologyRescued = true;
+                        if (!rescuedDiagnosticPairValid
+                                && current.canonicalRadianceTarget.w > 0.0
+                                && source.canonicalRadianceTarget.w > 0.0) {
+                            rescuedDiagnosticPair = float2(current.canonicalRadianceTarget.w,
+                                    source.canonicalRadianceTarget.w);
+                            rescuedDiagnosticPairValid = true;
+                        }
+                    } else {
+                        reconnectionCount++;
+                        if (!diagnosticPairValid
+                                && current.canonicalRadianceTarget.w > 0.0
+                                && source.canonicalRadianceTarget.w > 0.0) {
+                            diagnosticPair = float2(current.canonicalRadianceTarget.w,
+                                    source.canonicalRadianceTarget.w);
+                            diagnosticPairValid = true;
+                        }
                     }
                 }
             }
@@ -218,6 +237,7 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID) {
         float3 spatialColor;
         if (!receiverPresent) spatialColor = float3(0.0);
         else if (reconnectionCount > 0u) spatialColor = float3(0.05, 0.95, 0.20);
+        else if (spatialPolicyDebug && topologyRescued) spatialColor = float3(0.98, 0.82, 0.05);
         else if (footprintRejected) spatialColor = float3(0.55, 0.10, 0.95);
         else if (depthRejected) spatialColor = float3(0.85, 0.05, 0.80);
         else if (topologyRejected) spatialColor = float3(0.15, 0.35, 0.95);
@@ -235,16 +255,38 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID) {
                 : compatibleCount > 0u ? 7u
                 : 8u;
         InterlockedAdd(spatialDiagnosticCounters[category], 1u);
+        if (spatialPolicyDebug) {
+            if (limitedReconnectionCount > 0u) {
+                InterlockedAdd(
+                        spatialDiagnosticCounters[PATH_SPATIAL_DIAGNOSTIC_LIMITED_ADMITTED], 1u);
+            }
+            if (topologyRescued && reconnectionCount == 0u) {
+                InterlockedAdd(
+                        spatialDiagnosticCounters[PATH_SPATIAL_DIAGNOSTIC_TOPOLOGY_RESCUED], 1u);
+            }
+        }
         // Keep readback bounded: hash-subsample roughly one quarter of admitted pixels and retain
         // raw canonical targets only. These are correlation diagnostics, not shifted GRIS targets.
         uint pairHash = pathHash(pixelIndex ^ pc.frameIndex * 668265263u);
         if (category == 1u && diagnosticPairValid
                 && (pairHash & SPATIAL_DIAGNOSTIC_PAIR_MASK) == 0u) {
             uint pairIndex;
-            InterlockedAdd(spatialDiagnosticCounters[SPATIAL_DIAGNOSTIC_PAIR_CURSOR],
+            InterlockedAdd(
+                    spatialDiagnosticCounters[PATH_SPATIAL_DIAGNOSTIC_STRICT_PAIR_CURSOR],
                     1u, pairIndex);
-            if (pairIndex < SPATIAL_DIAGNOSTIC_PAIR_CAPACITY) {
+            if (pairIndex < PATH_SPATIAL_DIAGNOSTIC_PAIR_CAPACITY) {
                 spatialDiagnosticPairs[pairIndex] = diagnosticPair;
+            }
+        }
+        if (spatialPolicyDebug && rescuedDiagnosticPairValid
+                && (pairHash & SPATIAL_DIAGNOSTIC_PAIR_MASK) == 0u) {
+            uint pairIndex;
+            InterlockedAdd(
+                    spatialDiagnosticCounters[PATH_SPATIAL_DIAGNOSTIC_RESCUED_PAIR_CURSOR],
+                    1u, pairIndex);
+            if (pairIndex < PATH_SPATIAL_DIAGNOSTIC_PAIR_CAPACITY) {
+                spatialDiagnosticPairs[PATH_SPATIAL_DIAGNOSTIC_PAIR_CAPACITY + pairIndex] =
+                        rescuedDiagnosticPair;
             }
         }
         debugColor[pixel] = float4(spatialColor, 1.0);

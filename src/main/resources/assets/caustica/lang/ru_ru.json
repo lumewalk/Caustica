@@ -67,6 +67,7 @@
 	"caustica.options.rt.debugView.15": "Проверка воспроизведения ReSTIR PT",
 	"caustica.options.rt.debugView.16": "Временное объединение ReSTIR PT",
 	"caustica.options.rt.debugView.17": "Пространственный допуск ReSTIR PT",
+	"caustica.options.rt.debugView.18": "A/B policy ReSTIR PT",
 	"caustica.options.rt.restirDirect": "Прямое освещение ReSTIR",
 	"caustica.options.rt.restirDirect.tooltip": "Заменяет прямой свет эмиттеров на первом интерфейсе проверенным temporal/spatial reservoir ReSTIR.",
 	"caustica.options.rt.restirPt": "Экспериментальное хранилище ReSTIR PT",

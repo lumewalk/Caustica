@@ -171,12 +171,17 @@ final class RtPathSpatialReuseReferenceTest {
         assertEquals(7, RtPathSpatialReuseReference.DiagnosticCategory.COMPATIBLE_NEIGHBOR_EMPTY.ordinal());
         assertEquals(8, RtPathSpatialReuseReference.DiagnosticCategory.SURFACE_REJECT.ordinal());
         assertEquals(9, RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_CATEGORY_COUNT);
-        assertEquals(9, RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_PAIR_CURSOR_INDEX);
-        assertEquals(10, RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_COUNTER_COUNT);
-        assertEquals(10 * Integer.BYTES,
+        assertEquals(17, RtPathReservoirHistory.SPATIAL_DEBUG_VIEW);
+        assertEquals(18, RtPathReservoirHistory.SPATIAL_POLICY_DEBUG_VIEW);
+        assertEquals(9, RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_STRICT_PAIR_CURSOR_INDEX);
+        assertEquals(10, RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_LIMITED_ADMITTED_INDEX);
+        assertEquals(11, RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_TOPOLOGY_RESCUED_INDEX);
+        assertEquals(12, RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_RESCUED_PAIR_CURSOR_INDEX);
+        assertEquals(13, RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_COUNTER_COUNT);
+        assertEquals(13 * Integer.BYTES,
                 RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_COUNTER_BYTES);
         assertEquals(4096, RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_PAIR_CAPACITY);
-        assertEquals(4096 * 2 * Float.BYTES,
+        assertEquals(2 * 4096 * 2 * Float.BYTES,
                 RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_PAIR_BYTES);
     }
 }
