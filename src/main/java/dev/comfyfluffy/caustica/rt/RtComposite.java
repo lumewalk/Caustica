@@ -1105,18 +1105,27 @@ public final class RtComposite {
             // section/entity/material tables are read from world.rahit/world.rchit, which never load
             // WorldPush at all, and the RIS light buffers are read from world.rgen's hot inner loop, so
             // none of them should cost an extra BDA dereference to find.
+            // The production replacement currently resolves only the fresh same-pixel candidate
+            // reservoir. Temporal/spatial reuse remains available to debug views 10-12, but is not yet
+            // safe to feed into the ordinary image: its correlated high-weight survivors show up as
+            // persistent, wandering light pools. Keeping the production address on the candidate slot
+            // also gives the toggle a clean single-frame RIS contract while reuse is diagnosed opt-in.
+            boolean diagnosticDirectReuse = debugView >= 10 && debugView <= 12;
+            RtBuffer directResolveBuffer = restirDirect && debugView == 0
+                    ? directReservoirs.writeBuffer(reservoirFrame)
+                    : directReservoirs.finalBuffer(reservoirFrame);
             ByteBuffer pushConstants = stack.malloc(WorldPushConstantsData.BYTE_SIZE);
             new WorldPushConstantsData(pushBuf.deviceAddress, terrain.tableAddress(), fe.geomTableAddr(),
                     RtMaterialRegistry.INSTANCE.tableAddress(),
                     terrain.lightBufferAddress(), terrain.lightAliasBufferAddress(),
                     terrain.lightLocalAliasBufferAddress(), terrain.lightGridCellBufferAddress(),
                     terrain.lightGridSpanBufferAddress(), continuationQueue.deviceAddress,
-                    directReservoirs.finalBuffer(reservoirFrame).deviceAddress,
+                    directResolveBuffer.deviceAddress,
                     restirPt ? pathReservoirs.finalBuffer(pathReservoirFrame).deviceAddress : 0L,
                     restirPt && pathReservoirFrame.previousAvailable()
                             ? pathReservoirs.previousBuffer(pathReservoirFrame).deviceAddress : 0L,
                     (int) frameCounter, debugView,
-                    (reservoirFrame.previousAvailable() ? 1 : 0)
+                    (reservoirFrame.previousAvailable() && diagnosticDirectReuse ? 1 : 0)
                             | (restirDirect ? 2 : 0)
                             | (restirPt ? 4 : 0)
                             | (restirPt && pathReservoirFrame.previousAvailable() ? 8 : 0)
