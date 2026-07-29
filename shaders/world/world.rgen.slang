@@ -596,10 +596,12 @@ void main() {
     bool pathTemporalMergeDebug = pc.debugView == PATH_TEMPORAL_MERGE_DEBUG_VIEW;
     bool pathSpatialDebug = pc.debugView == PATH_SPATIAL_DEBUG_VIEW;
     bool pathSpatialPolicyDebug = pc.debugView == PATH_SPATIAL_POLICY_DEBUG_VIEW;
+    bool pathReconnectionDebug = pc.debugView == PATH_RECONNECTION_DEBUG_VIEW;
     bool canonicalMode = (pc.historyFlags & PATH_CANONICAL_MODE_FLAG) != 0u;
     bool pathCapture = (pc.historyFlags & 4u) != 0u && pc.pathReservoirAddr != 0;
     if (pc.debugView != 0u && !pathDebug && !pathTemporalDebug && !pathReplayDebug
-            && !pathTemporalMergeDebug && !pathSpatialDebug && !pathSpatialPolicyDebug) {
+            && !pathTemporalMergeDebug && !pathSpatialDebug && !pathSpatialPolicyDebug
+            && !pathReconnectionDebug) {
         return; // pass A owns guide visualization output
     }
     uint2 dispatchIndex = DispatchRaysIndex().xy;
@@ -608,7 +610,7 @@ void main() {
     uint spp = max(worldPush.spp, 1u);
     uint pixelIndex = dispatchIndex.y * dimensions.x + dispatchIndex.x;
     if ((pathDebug || pathTemporalDebug || pathReplayDebug || pathTemporalMergeDebug
-            || pathSpatialDebug || pathSpatialPolicyDebug)
+            || pathSpatialDebug || pathSpatialPolicyDebug || pathReconnectionDebug)
             && !pathCapture) {
         outImage[pix] = float4(1.0, 0.0, 1.0, 1.0); // setting disabled / storage unavailable
         return;
