@@ -63,6 +63,10 @@ public PathTraceResult tracePathSeeded(PathSegment seg, uint2 pix, bool captureM
     float3 reconnectionVertex = float3(0.0);
     bool reconnectionValid = false;
     uint reconnectionDepth = 0u;
+    float3 reconnectionNormal = float3(0.0);
+    // Full continuous proposal density for the hit-0 -> hit-1 edge, including lobe selection.
+    // Delta reflection/refraction use a discrete measure and intentionally leave this at zero.
+    float reconnectionSourcePdf = 0.0;
     int maxBounces = int(worldPush.maxBounces);
     int rrStart = maxBounces <= 3 ? 1 : 2;
     // RIS emitter NEE: direct lighting from block emitters is active when lights are published and the
@@ -135,6 +139,9 @@ public PathTraceResult tracePathSeeded(PathSegment seg, uint2 pix, bool captureM
         int hitDepth = indirectDepth++;
         if (captureMetadata && !reconnectionValid && hitDepth == 1) {
             reconnectionVertex = hitPos;
+            // payload.normal is the viewer-oriented geometric normal. Capture it before water-wave
+            // shading perturbation so the future solid-angle Jacobian uses geometric measure.
+            reconnectionNormal = n;
             reconnectionValid = true;
             reconnectionDepth = uint(hitDepth);
         }
@@ -299,12 +306,16 @@ public PathTraceResult tracePathSeeded(PathSegment seg, uint2 pix, bool captureM
             throughput *= albedo;
             ro = hitPos + n * SURF_BIAS;
             rd = cosineDir(n, seed);
+            float directionalPdf = max(abs(dot(n, rd)) * INV_PI, 1.0e-20);
             pathAccumulateProposal(continuationProposalPdf, continuationProposalEvents,
-                    max(abs(dot(n, rd)) * INV_PI, 1.0e-20));
+                    directionalPdf);
             if (!canonicalValid) {
                 pathAccumulateProposal(canonicalContinuationProposalPdf,
                         canonicalContinuationProposalEvents,
-                        max(abs(dot(n, rd)) * INV_PI, 1.0e-20));
+                        directionalPdf);
+            }
+            if (captureMetadata && hitDepth == 0) {
+                reconnectionSourcePdf = directionalPdf;
             }
             transportMask |= PATH_TRANSPORT_DIFFUSE;
             if (captureMetadata) topologyKey = pathTopologyStep(topologyKey, 0xC101u);
@@ -459,12 +470,16 @@ public PathTraceResult tracePathSeeded(PathSegment seg, uint2 pix, bool captureM
                     break; // microfacet reflects below the surface: terminate this path
                 }
                 float directionalPdf = ggxVndfReflectionPdf(n, v, h, rough);
+                float proposalPdf = max(ps * directionalPdf, 1.0e-20);
                 pathAccumulateProposal(continuationProposalPdf, continuationProposalEvents,
-                        max(ps * directionalPdf, 1.0e-20));
+                        proposalPdf);
                 if (!canonicalValid) {
                     pathAccumulateProposal(canonicalContinuationProposalPdf,
                             canonicalContinuationProposalEvents,
-                            max(ps * directionalPdf, 1.0e-20));
+                            proposalPdf);
+                }
+                if (captureMetadata && hitDepth == 0) {
+                    reconnectionSourcePdf = proposalPdf;
                 }
                 // VNDF + separable Smith ⇒ weight = F · G2/G1(v) = F · G1(l); divide by the lobe pdf ps.
                 float3 F = fresnelSchlick(max(0.0, dot(v, h)), F0);
@@ -480,12 +495,16 @@ public PathTraceResult tracePathSeeded(PathSegment seg, uint2 pix, bool captureM
             throughput *= diffAlb / (1.0 - ps);
             ro = p;
             rd = cosineDir(n, seed);
+            float directionalPdf = max((1.0 - ps) * abs(dot(n, rd)) * INV_PI, 1.0e-20);
             pathAccumulateProposal(continuationProposalPdf, continuationProposalEvents,
-                    max((1.0 - ps) * abs(dot(n, rd)) * INV_PI, 1.0e-20));
+                    directionalPdf);
             if (!canonicalValid) {
                 pathAccumulateProposal(canonicalContinuationProposalPdf,
                         canonicalContinuationProposalEvents,
-                        max((1.0 - ps) * abs(dot(n, rd)) * INV_PI, 1.0e-20));
+                        directionalPdf);
+            }
+            if (captureMetadata && hitDepth == 0) {
+                reconnectionSourcePdf = directionalPdf;
             }
             transportMask |= PATH_TRANSPORT_DIFFUSE;
             if (captureMetadata) topologyKey = pathTopologyStep(topologyKey, 0xB103u);
@@ -536,6 +555,8 @@ public PathTraceResult tracePathSeeded(PathSegment seg, uint2 pix, bool captureM
     result.reconnectionVertex = reconnectionVertex;
     result.reconnectionValid = reconnectionValid ? 1u : 0u;
     result.reconnectionDepth = reconnectionDepth;
+    result.reconnectionNormal = reconnectionValid ? reconnectionNormal : float3(0.0);
+    result.reconnectionSourcePdf = reconnectionValid ? reconnectionSourcePdf : 0.0;
     return result;
 }
 
@@ -624,6 +645,8 @@ void main() {
         float3 sampleReconnectionVertex = float3(0.0);
         uint sampleReconnectionValid = 0u;
         uint sampleReconnectionDepth = 0u;
+        float3 sampleReconnectionNormal = float3(0.0);
+        float sampleReconnectionSourcePdf = 0.0;
         uint recordIndex = pixelIndex;
         for (uint leaf = 0u; leaf < MAX_PATH_SEGMENTS; ++leaf) {
             PackedPathSegment packed = queue[recordIndex];
@@ -663,6 +686,8 @@ void main() {
                 sampleReconnectionVertex = traced.reconnectionVertex;
                 sampleReconnectionValid = traced.reconnectionValid;
                 sampleReconnectionDepth = traced.reconnectionDepth;
+                sampleReconnectionNormal = traced.reconnectionNormal;
+                sampleReconnectionSourcePdf = traced.reconnectionSourcePdf;
             }
             if (packed.nextRecord == PATH_NO_NEXT) {
                 break;
@@ -695,13 +720,15 @@ void main() {
         candidate.reconnectionVertex = sampleReconnectionVertex;
         candidate.reconnectionValid = sampleReconnectionValid;
         candidate.reconnectionDepth = sampleReconnectionDepth;
+        candidate.reconnectionNormal = sampleReconnectionNormal;
+        candidate.reconnectionSourcePdf = sampleReconnectionSourcePdf;
         uint sampleId = pathHash(worldPush.frameIndex * 2654435761u
                 ^ pixelIndex * 2246822519u ^ s * 3266489917u);
         uint canonicalStatus = pathReservoirUpdate(pathReservoir, candidate, sampleId, pixelIndex,
                 pc.historyGeneration, selectionSeed, canonicalMode);
         if (canonicalMode) {
             // Averaging categorical colors across SPP exposes the local admission ratio without
-            // allocating another persistent buffer or changing the 144-byte PathReservoir ABI.
+            // allocating another persistent buffer or changing the 160-byte PathReservoir ABI.
             canonicalDebugColor += pathCanonicalCandidateDebugColor(canonicalStatus);
         }
     }

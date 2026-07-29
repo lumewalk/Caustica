@@ -103,14 +103,15 @@ at 1280x673 and 295.6 MiB at 1920x1009. This intentionally favors inspectable
 ReSTIR/GRIS semantics over packing until profiling identifies real bandwidth
 or residency pressure.
 
-The path-reservoir ABI is currently 144 bytes per pixel per slot. Its replay-control
+The path-reservoir ABI is currently 160 bytes per pixel per slot. Its replay-control
 lane stores the two wavefront segment seed pairs, segment count, replay version, and
 terminal-state hashes; the additional proposal-components lane captures light,
 continuation, and roulette PDF products plus event counters (including an explicit
 canonical-endpoint validity bit), while the canonical radiance lane stores one
-replayable sky/emissive endpoint. The final lane stores the selected canonical
-path's second-hit reconnection vertex and packed valid/depth metadata. Two path-history slots
-therefore use about 236.6 MiB at 1280x673 and 532.1 MiB at 1920x1009. This is
+replayable sky/emissive endpoint. The final two lanes store the selected canonical
+path's second-hit reconnection vertex, packed valid/depth metadata, oriented normal, and
+continuous source-edge proposal density. Two path-history slots
+therefore use about 262.9 MiB at 1280x673 and 591.2 MiB at 1920x1009. This is
 intentional: replay correctness is being established before any packing or compression pass.
 Debug view 15 is an opt-in seeded replay evaluator: it re-traces the selected reservoir's stored
 segment seeds and color-codes independent mismatches in terminal path/proposal state, topology,

@@ -9,9 +9,9 @@ import org.junit.jupiter.api.Test;
 
 final class RtPathReservoirHistoryTest {
     @Test
-    void reflectedAbiIncludesReplaySeedsControlsAndReconnectionVertex() {
-        assertEquals(144, PathReservoirData.BYTE_SIZE);
-        assertEquals(144, RtPathReservoirHistory.BYTES_PER_RESERVOIR);
+    void reflectedAbiIncludesReplayAndReconnectionGeometryLanes() {
+        assertEquals(160, PathReservoirData.BYTE_SIZE);
+        assertEquals(160, RtPathReservoirHistory.BYTES_PER_RESERVOIR);
     }
 
     @Test
@@ -49,7 +49,7 @@ final class RtPathReservoirHistoryTest {
     @Test
     void memoryAccountingUsesTwoFullResolutionSlots() {
         long perSlot = RtPathReservoirHistory.bytesPerSlot(1280, 673);
-        assertEquals(124_047_360L, perSlot);
-        assertEquals(248_094_720L, Math.multiplyExact(perSlot, 2L));
+        assertEquals(137_830_400L, perSlot);
+        assertEquals(275_660_800L, Math.multiplyExact(perSlot, 2L));
     }
 }

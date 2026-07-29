@@ -109,11 +109,14 @@ identity) over a raw transient primitive index where practical.
 Reservoir storage is double-buffered. The first implementation favors clarity
 and validation over minimum byte size; packing follows only after captures
 identify the real bandwidth and memory pressure.
-The current nine-lane path record is 144 B/pixel/slot; its proposal lane keeps
+The current ten-lane path record is 160 B/pixel/slot; its proposal lane keeps
 light-selection, canonical continuation, and roulette PDF products separate from
 the shift Jacobian. Its packed metadata includes an explicit canonical-endpoint
 validity bit, one lane stores a replayable sky/emissive endpoint, and the final
-lane stores the selected canonical path's second-hit reconnection vertex.
+two lanes store the selected canonical path's second-hit reconnection vertex,
+oriented normal, and continuous source-edge proposal density. The source PDF is zero for
+delta/refraction transitions because those are discrete measures and are not yet eligible
+for a spatial shift.
 
 ### Path Sample and Reservoir
 
@@ -172,9 +175,10 @@ values out of the reservoir; normal rendering and view 14 do not consume this di
 
 Spatial path reuse has a separate reference boundary. Neighbor admission reuses the direct-light
 surface policy (material, normal, relative depth) and additionally requires path depth, topology,
-transport class, and bounded footprint. The 144-byte record now stores the selected canonical
-path's second-hit reconnection vertex, but a shift still cannot be enabled until replay exposes
-the corresponding source/receiver geometric and directional-PDF terms.
+transport class, and bounded footprint. The 160-byte record now stores the selected canonical
+path's second-hit reconnection vertex, normal, and source directional proposal density, but a
+shift still cannot be enabled until the receiver-side material/PDF evaluation and full shifted
+target are available.
 The CPU reference therefore records the solid-angle Jacobian
 `|cos(theta_receiver) / cos(theta_source)| * d_source^2 / d_receiver^2` and the primary-sample
 form multiplies it by `p_receiver / p_source`; random replay contributes unit Jacobian. This

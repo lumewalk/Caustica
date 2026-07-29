@@ -153,6 +153,7 @@ public struct DirectReservoir {
 //                  terminal light-proposal-state hash}
 // canonicalRadianceTarget = {one replayable sky/emissive endpoint RGB, endpoint target density}
 // reconnectionVertex = {chosen path vertex position in current rebased world space, packed valid/depth}
+// reconnectionNormalPdf = {oriented second-hit normal, continuous source-edge proposal density}
 public struct PathReservoir {
     public float4 sampleRadianceTarget;
     public float4 proposalShift;
@@ -163,6 +164,7 @@ public struct PathReservoir {
     public uint4 replay;
     public uint4 replayControl;
     public float4 reconnectionVertex;
+    public float4 reconnectionNormalPdf;
 };
 
 // TerrainPrim.flags bit 0: this emissive quad is in the light buffer (RtLightCollector membership).

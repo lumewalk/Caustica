@@ -27,7 +27,7 @@ public static const uint PATH_TRANSPORT_DELTA = 4u;
 public static const uint PATH_TRANSPORT_TRANSMISSION = 8u;
 // Increment whenever replay metadata or RNG interpretation changes. Temporal reuse must reject
 // reservoirs produced by a different contract instead of trying to replay an incompatible path.
-public static const uint PATH_REPLAY_VERSION = 6u;
+public static const uint PATH_REPLAY_VERSION = 7u;
 public static const uint PATH_RECONNECTION_VALID = 1u;
 public static const uint PATH_CANONICAL_MODE_FLAG = 16u;
 public static const uint PATH_PROPOSAL_CANONICAL_VALID = 1u << 30u;
@@ -91,6 +91,8 @@ public struct PathTraceResult {
     public float3 reconnectionVertex;
     public uint reconnectionValid;
     public uint reconnectionDepth;
+    public float3 reconnectionNormal;
+    public float reconnectionSourcePdf;
 };
 
 // A complete screen-owned sample can contain both continuation records emitted by Pass A. Keep its
@@ -121,6 +123,8 @@ public struct PathCandidate {
     public float3 reconnectionVertex;
     public uint reconnectionValid;
     public uint reconnectionDepth;
+    public float3 reconnectionNormal;
+    public float reconnectionSourcePdf;
 };
 
 // Aggregate returned by a seeded replay of the same queue chain used by the selected candidate.
@@ -150,6 +154,8 @@ public struct PathReplayAggregate {
     public float3 reconnectionVertex;
     public uint reconnectionValid;
     public uint reconnectionDepth;
+    public float3 reconnectionNormal;
+    public float reconnectionSourcePdf;
 };
 
 public PathReplayAggregate pathReplayAggregateEmpty() {
@@ -177,6 +183,8 @@ public PathReplayAggregate pathReplayAggregateEmpty() {
     aggregate.reconnectionVertex = float3(0.0);
     aggregate.reconnectionValid = 0u;
     aggregate.reconnectionDepth = 0u;
+    aggregate.reconnectionNormal = float3(0.0);
+    aggregate.reconnectionSourcePdf = 0.0;
     return aggregate;
 }
 
@@ -212,6 +220,8 @@ public void pathReplayAccumulate(inout PathReplayAggregate aggregate,
         aggregate.reconnectionVertex = traced.reconnectionVertex;
         aggregate.reconnectionValid = traced.reconnectionValid;
         aggregate.reconnectionDepth = traced.reconnectionDepth;
+        aggregate.reconnectionNormal = traced.reconnectionNormal;
+        aggregate.reconnectionSourcePdf = traced.reconnectionSourcePdf;
     }
 }
 
@@ -289,7 +299,11 @@ public uint pathReplayCompare(PathReservoir reservoir, PathReplayAggregate repla
             || (storedReconnectionValid
                     && (!pathReplayPositionMatches(replay.reconnectionVertex,
                             reservoir.reconnectionVertex.xyz)
-                        || replay.reconnectionDepth != storedReconnectionDepth))) {
+                        || replay.reconnectionDepth != storedReconnectionDepth
+                        || !pathReplayPositionMatches(replay.reconnectionNormal,
+                                reservoir.reconnectionNormalPdf.xyz)
+                        || !pathReplayFloatMatches(replay.reconnectionSourcePdf,
+                                reservoir.reconnectionNormalPdf.w)))) {
         mismatch |= PATH_REPLAY_METADATA_MISMATCH;
     }
     return mismatch;
@@ -327,6 +341,7 @@ public PathReservoir pathReservoirEmpty() {
     reservoir.replay = uint4(0u);
     reservoir.replayControl = uint4(0u);
     reservoir.reconnectionVertex = float4(0.0);
+    reservoir.reconnectionNormalPdf = float4(0.0);
     reservoir.proposalComponents = float4(0.0, 0.0, 0.0, 0.0);
     reservoir.canonicalRadianceTarget = float4(0.0);
     return reservoir;
@@ -512,6 +527,8 @@ public uint pathReservoirUpdate(inout PathReservoir reservoir,
         reservoir.reconnectionVertex = float4(candidate.reconnectionVertex,
                 asfloat(pathPackReconnectionMetadata(candidate.reconnectionDepth,
                         candidate.reconnectionValid != 0u)));
+        reservoir.reconnectionNormalPdf = float4(candidate.reconnectionNormal,
+                candidate.reconnectionSourcePdf);
     }
 
     reservoir.weights.x = nextWeightSum;
@@ -550,6 +567,8 @@ public PathCandidate pathCandidateFromReplay(PathReplayAggregate replay,
     candidate.reconnectionVertex = replay.reconnectionVertex;
     candidate.reconnectionValid = replay.reconnectionValid;
     candidate.reconnectionDepth = replay.reconnectionDepth;
+    candidate.reconnectionNormal = replay.reconnectionNormal;
+    candidate.reconnectionSourcePdf = replay.reconnectionSourcePdf;
     return candidate;
 }
 
@@ -630,6 +649,8 @@ public uint pathReservoirTemporalMerge(inout PathReservoir receiver,
         receiver.reconnectionVertex = float4(shifted.reconnectionVertex,
                 asfloat(pathPackReconnectionMetadata(shifted.reconnectionDepth,
                         shifted.reconnectionValid != 0u)));
+        receiver.reconnectionNormalPdf = float4(shifted.reconnectionNormal,
+                shifted.reconnectionSourcePdf);
         status |= PATH_TEMPORAL_HISTORY_SELECTED;
     }
     receiver.weights.x = nextWeightSum;
