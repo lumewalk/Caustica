@@ -150,18 +150,13 @@ public PathTraceResult tracePathSeeded(PathSegment seg, uint2 pix, bool captureM
             topologyKey = pathTopologyStep(topologyKey,
                     (material & 0xFFu) | ((uint(hitDepth) & 0xFFu) << 8u));
         }
+        // The current frame's direct candidates are generated after this path trace because they need
+        // its receiver guides. Never inspect directReservoirAddr here: before candidate generation it
+        // contains stale slot data, so camera motion made this gate randomly alternate between inline
+        // RIS and the later direct resolve. Enabling the replacement owns hit 0 unconditionally; an
+        // empty current candidate simply contributes zero in the resolve, exactly like an empty RIS draw.
         bool restirAtFirstInterface = (worldPush.flags & 2u) != 0u && hitDepth == 0
                 && pc.directReservoirAddr != 0;
-        if (restirAtFirstInterface) {
-            uint2 restirDimensions = DispatchRaysDimensions().xy;
-            uint restirIndex = pix.y * restirDimensions.x + pix.x;
-            DirectReservoir restirReservoir = ConstPtr<DirectReservoir>(pc.directReservoirAddr)[restirIndex];
-            uint restirFlags = reservoirFlags(restirReservoir);
-            restirAtFirstInterface = (restirFlags & RESERVOIR_FLAG_VALID) != 0u
-                    && restirReservoir.metadata.y == worldPush.lightEpoch
-                    && restirReservoir.weights.y > 0.0
-                    && restirReservoir.weights.z > 0.0;
-        }
         bool risAtVertex = risOn && !restirAtFirstInterface;
 
         // ---- Dielectric interface: water, stained glass, ice. ONE handler and one behaviour — every
