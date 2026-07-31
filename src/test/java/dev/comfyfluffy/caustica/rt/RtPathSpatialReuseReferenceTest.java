@@ -391,6 +391,29 @@ final class RtPathSpatialReuseReferenceTest {
                 receiverPolicy(true, true, true, true, true, true, false).firstReject());
     }
 
+    @Test
+    void crossFrameSampleRescueIsShadowOnlyAndReportsTheNextReject() {
+        var rescued = receiverPolicy(true, false, true, true, true, true, true);
+        assertEquals(RtPathSpatialReuseReference.CrossFrameReceiverReject.SAMPLE,
+                rescued.firstReject());
+        assertTrue(rescued.sampleRescueEligible());
+        assertTrue(rescued.sampleRescued());
+        assertEquals(RtPathSpatialReuseReference.CrossFrameReceiverReject.NONE,
+                rescued.sampleRescueReject());
+
+        var edgeReject = receiverPolicy(true, false, false, false, false, false, false);
+        assertEquals(RtPathSpatialReuseReference.CrossFrameReceiverReject.SAMPLE,
+                edgeReject.firstReject());
+        assertFalse(edgeReject.sampleRescued());
+        assertEquals(RtPathSpatialReuseReference.CrossFrameReceiverReject.EDGE,
+                edgeReject.sampleRescueReject());
+
+        var surfaceReject = receiverPolicy(false, false, true, true, true, true, true);
+        assertFalse(surfaceReject.sampleRescueEligible());
+        assertEquals(RtPathSpatialReuseReference.CrossFrameReceiverReject.SURFACE,
+                surfaceReject.sampleRescueReject());
+    }
+
     private static RtPathSpatialReuseReference.CrossFrameReceiverPolicy receiverPolicy(
             boolean surface, boolean sample, boolean edge, boolean topology,
             boolean depth, boolean transport, boolean footprint) {
@@ -532,8 +555,18 @@ final class RtPathSpatialReuseReferenceTest {
         assertEquals(50, RtPathReservoirHistory.CROSS_FRAME_RECEIVER_DEPTH_REJECT_INDEX);
         assertEquals(51, RtPathReservoirHistory.CROSS_FRAME_RECEIVER_TRANSPORT_REJECT_INDEX);
         assertEquals(52, RtPathReservoirHistory.CROSS_FRAME_RECEIVER_FOOTPRINT_REJECT_INDEX);
-        assertEquals(53, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
-        assertEquals(53 * Integer.BYTES,
+        assertEquals(53, RtPathReservoirHistory.CROSS_FRAME_SAMPLE_RESCUE_ELIGIBLE_INDEX);
+        assertEquals(54, RtPathReservoirHistory.CROSS_FRAME_SAMPLE_RESCUED_INDEX);
+        assertEquals(55, RtPathReservoirHistory.CROSS_FRAME_SAMPLE_RESCUE_EDGE_REJECT_INDEX);
+        assertEquals(56,
+                RtPathReservoirHistory.CROSS_FRAME_SAMPLE_RESCUE_TOPOLOGY_REJECT_INDEX);
+        assertEquals(57, RtPathReservoirHistory.CROSS_FRAME_SAMPLE_RESCUE_DEPTH_REJECT_INDEX);
+        assertEquals(58,
+                RtPathReservoirHistory.CROSS_FRAME_SAMPLE_RESCUE_TRANSPORT_REJECT_INDEX);
+        assertEquals(59,
+                RtPathReservoirHistory.CROSS_FRAME_SAMPLE_RESCUE_FOOTPRINT_REJECT_INDEX);
+        assertEquals(60, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
+        assertEquals(60 * Integer.BYTES,
                 RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_COUNTER_BYTES);
         assertEquals(160, PathSourceRootData.BYTE_SIZE);
         assertEquals(4096, RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_PAIR_CAPACITY);

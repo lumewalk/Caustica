@@ -659,6 +659,24 @@ final class RtPathSpatialReuseReference {
         CrossFrameReceiverReject firstReject() {
             if (!surfaceCompatible) return CrossFrameReceiverReject.SURFACE;
             if (!sampleUsable) return CrossFrameReceiverReject.SAMPLE;
+            return firstRejectAfterSample();
+        }
+
+        boolean sampleRescueEligible() {
+            return surfaceCompatible && !sampleUsable;
+        }
+
+        CrossFrameReceiverReject sampleRescueReject() {
+            if (!sampleRescueEligible()) return firstReject();
+            return firstRejectAfterSample();
+        }
+
+        boolean sampleRescued() {
+            return sampleRescueEligible()
+                    && sampleRescueReject() == CrossFrameReceiverReject.NONE;
+        }
+
+        private CrossFrameReceiverReject firstRejectAfterSample() {
             if (!edgeAvailable) return CrossFrameReceiverReject.EDGE;
             if (!topologyMatches) return CrossFrameReceiverReject.TOPOLOGY;
             if (!depthMatches) return CrossFrameReceiverReject.DEPTH;

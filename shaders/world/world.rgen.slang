@@ -833,36 +833,62 @@ public void pathMappingReplayValidate() {
                 : PATH_MAPPING_REPLAY_RECEIVER_REJECT], 1u);
         return;
     }
-    if (current.weights.y <= 0.0 || current.sampleRadianceTarget.w <= 0.0) {
-        InterlockedAdd(counters[crossFrame
-                ? PATH_CROSS_FRAME_RECEIVER_SAMPLE_REJECT
-                : PATH_MAPPING_REPLAY_RECEIVER_REJECT], 1u);
-        return;
+    bool currentSampleUsable = current.weights.y > 0.0
+            && current.sampleRadianceTarget.w > 0.0;
+    bool sampleRescueCandidate = crossFrame && !currentSampleUsable;
+    if (!currentSampleUsable) {
+        if (!crossFrame) {
+            InterlockedAdd(counters[PATH_MAPPING_REPLAY_RECEIVER_REJECT], 1u);
+            return;
+        }
+        InterlockedAdd(counters[PATH_CROSS_FRAME_SAMPLE_RESCUE_ELIGIBLE], 1u);
     }
     if (!currentEdgeAvailable) {
         InterlockedAdd(counters[crossFrame
-                ? PATH_CROSS_FRAME_RECEIVER_EDGE_REJECT
+                ? (sampleRescueCandidate
+                        ? PATH_CROSS_FRAME_RECEIVER_SAMPLE_REJECT
+                        : PATH_CROSS_FRAME_RECEIVER_EDGE_REJECT)
                 : PATH_MAPPING_REPLAY_RECEIVER_REJECT], 1u);
+        if (sampleRescueCandidate) {
+            InterlockedAdd(counters[PATH_CROSS_FRAME_SAMPLE_RESCUE_EDGE_REJECT], 1u);
+        }
         return;
     }
     if (current.identity.z != mapped.identity.z) {
         InterlockedAdd(counters[crossFrame
-                ? PATH_CROSS_FRAME_RECEIVER_TOPOLOGY_REJECT
+                ? (sampleRescueCandidate
+                        ? PATH_CROSS_FRAME_RECEIVER_SAMPLE_REJECT
+                        : PATH_CROSS_FRAME_RECEIVER_TOPOLOGY_REJECT)
                 : PATH_MAPPING_REPLAY_RECEIVER_REJECT], 1u);
+        if (sampleRescueCandidate) {
+            InterlockedAdd(
+                    counters[PATH_CROSS_FRAME_SAMPLE_RESCUE_TOPOLOGY_REJECT], 1u);
+        }
         return;
     }
     if (pathMetadataDepth(current.identity.w)
             != pathMetadataDepth(mapped.identity.w)) {
         InterlockedAdd(counters[crossFrame
-                ? PATH_CROSS_FRAME_RECEIVER_DEPTH_REJECT
+                ? (sampleRescueCandidate
+                        ? PATH_CROSS_FRAME_RECEIVER_SAMPLE_REJECT
+                        : PATH_CROSS_FRAME_RECEIVER_DEPTH_REJECT)
                 : PATH_MAPPING_REPLAY_RECEIVER_REJECT], 1u);
+        if (sampleRescueCandidate) {
+            InterlockedAdd(counters[PATH_CROSS_FRAME_SAMPLE_RESCUE_DEPTH_REJECT], 1u);
+        }
         return;
     }
     if (pathMetadataTransport(current.identity.w)
             != pathMetadataTransport(mapped.identity.w)) {
         InterlockedAdd(counters[crossFrame
-                ? PATH_CROSS_FRAME_RECEIVER_TRANSPORT_REJECT
+                ? (sampleRescueCandidate
+                        ? PATH_CROSS_FRAME_RECEIVER_SAMPLE_REJECT
+                        : PATH_CROSS_FRAME_RECEIVER_TRANSPORT_REJECT)
                 : PATH_MAPPING_REPLAY_RECEIVER_REJECT], 1u);
+        if (sampleRescueCandidate) {
+            InterlockedAdd(
+                    counters[PATH_CROSS_FRAME_SAMPLE_RESCUE_TRANSPORT_REJECT], 1u);
+        }
         return;
     }
 
@@ -880,8 +906,21 @@ public void pathMappingReplayValidate() {
                     / min(sourceFootprint, receiverFootprint)
                     > PATH_MAX_FOOTPRINT_RATIO) {
         InterlockedAdd(counters[crossFrame
-                ? PATH_CROSS_FRAME_RECEIVER_FOOTPRINT_REJECT
+                ? (sampleRescueCandidate
+                        ? PATH_CROSS_FRAME_RECEIVER_SAMPLE_REJECT
+                        : PATH_CROSS_FRAME_RECEIVER_FOOTPRINT_REJECT)
                 : PATH_MAPPING_REPLAY_RECEIVER_REJECT], 1u);
+        if (sampleRescueCandidate) {
+            InterlockedAdd(
+                    counters[PATH_CROSS_FRAME_SAMPLE_RESCUE_FOOTPRINT_REJECT], 1u);
+        }
+        return;
+    }
+    if (sampleRescueCandidate) {
+        // This is a policy A/B count only. Keep the strict terminal category and do not trace,
+        // select, or persist the hypothetical relaxed sample.
+        InterlockedAdd(counters[PATH_CROSS_FRAME_RECEIVER_SAMPLE_REJECT], 1u);
+        InterlockedAdd(counters[PATH_CROSS_FRAME_SAMPLE_RESCUED], 1u);
         return;
     }
 

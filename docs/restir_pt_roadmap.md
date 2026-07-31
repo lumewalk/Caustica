@@ -315,10 +315,22 @@ dominant exclusive rejection was `receiverSample`: 56,370 (73.637183% of eligibl
 topology 6,357, first edge 2,477, footprint 1,105, and surface 356; depth and transport stayed zero.
 During five moving-camera readbacks, all 10,486 eligible records failed closed, with 10,457 surface
 rejects and 29 source-reprojection rejects. ABI/root and downstream geometry/PDF/visibility/radiance
-rejects remained zero. This localizes the next policy question: diagnose, without admitting it,
-whether a remap whose current canonical sample has zero weight/target but whose receiver edge and all
-remaining contracts are valid is a legitimate persistent-history rescue. Do not remove the positive
-current-sample requirement until that A/B population and CPU reference are explicit.
+rejects remained zero. This localizes the next policy question. A shadow `sampleRescue[...]` A/B now
+counts every surface-compatible zero-weight/zero-target current sample, then partitions it into edge,
+topology, depth, transport, footprint, or fully rescued outcomes. The strict terminal category
+remains `receiverSample`, and a fully rescued shadow record returns before geometry/radiance
+evaluation, so it cannot be selected or persisted. The CPU reference mirrors the same ordered strict
+and sample-relaxed decisions. Do not remove the positive-current-sample requirement until runtime
+ratios and the estimator/history mathematics justify it.
+
+Fresh Vulkan validation answered that A/B negatively. Across 20 settled readbacks,
+`receiverSample` and `sampleRescue.eligible` both totaled 41,685; all 41,685 shadow records failed
+the receiver-edge check, while rescued/topology/depth/transport/footprint were zero. All strict and
+shadow accounting identities were exact per frame. Removing current-sample positivity would
+therefore admit no additional record in this scene and is not justified. The next diagnostic must
+split receiver-edge availability into valid/depth/event/mapping/PDF/finite-throughput causes and
+decide whether persistent remapping needs a deterministic receiver-material substrate independent
+of a positive current canonical endpoint. Mapped history remains disabled.
 
 ## Delivery Phases
 

@@ -236,10 +236,19 @@ The initial split-counter capture found `receiverSample` to be the dominant sett
 56,370 of 76,551 eligible records (73.637183%), versus topology 6,357, edge 2,477, footprint 1,105,
 and surface 356. Acceptance was 8,594 (11.226503%); depth, transport, ABI/root, and all downstream
 mapping rejects were zero. Camera motion moved the terminal population to the expected fail-closed
-surface category. The next safe diagnostic is a counter-only sample-rescue A/B: count records with a
-zero current canonical weight/target that still have a valid receiver edge and pass topology, depth,
-transport, and footprint. It must not select those records, alter weights, or write history until the
-reference contract establishes whether current-sample positivity is mathematically required.
+surface category. The counter-only `sampleRescue[...]` A/B now evaluates zero-current-sample records
+through edge, topology, depth, transport, and footprint checks. Its exact shadow identity is
+`eligible = rescued + edge + topology + depth + transport + footprint`, while strict accounting
+still places every one of those records in `receiverSample`. Even a fully rescued shadow record
+returns before geometry/radiance evaluation; it is never selected and cannot alter weights or
+history. The shader-independent policy reference mirrors both orderings.
+
+The first runtime A/B produced zero sample rescues: all 41,685 zero-current-sample candidates across
+20 settled readbacks also lacked a valid receiver edge. Every shadow and strict accounting identity
+was exact. Thus the positive-current-sample check is not an independent admission bottleneck here;
+removing it would gain nothing and must not be treated as the fix. Diagnose the receiver-edge
+subconditions next, especially whether exact receiver material/PDF/throughput data must be generated
+independently of a positive current canonical endpoint before persistent remapping can be sound.
 
 ## Linux
 

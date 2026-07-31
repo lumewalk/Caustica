@@ -78,7 +78,14 @@ final class RtPathReservoirHistory {
     static final int CROSS_FRAME_RECEIVER_DEPTH_REJECT_INDEX = 50;
     static final int CROSS_FRAME_RECEIVER_TRANSPORT_REJECT_INDEX = 51;
     static final int CROSS_FRAME_RECEIVER_FOOTPRINT_REJECT_INDEX = 52;
-    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 53;
+    static final int CROSS_FRAME_SAMPLE_RESCUE_ELIGIBLE_INDEX = 53;
+    static final int CROSS_FRAME_SAMPLE_RESCUED_INDEX = 54;
+    static final int CROSS_FRAME_SAMPLE_RESCUE_EDGE_REJECT_INDEX = 55;
+    static final int CROSS_FRAME_SAMPLE_RESCUE_TOPOLOGY_REJECT_INDEX = 56;
+    static final int CROSS_FRAME_SAMPLE_RESCUE_DEPTH_REJECT_INDEX = 57;
+    static final int CROSS_FRAME_SAMPLE_RESCUE_TRANSPORT_REJECT_INDEX = 58;
+    static final int CROSS_FRAME_SAMPLE_RESCUE_FOOTPRINT_REJECT_INDEX = 59;
+    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 60;
     static final int SPATIAL_DIAGNOSTIC_COUNTER_BYTES =
             SHIFTED_DIAGNOSTIC_COUNTER_COUNT * Integer.BYTES;
     static final int SPATIAL_DIAGNOSTIC_PAIR_CAPACITY = 4096;
@@ -388,6 +395,20 @@ final class RtPathReservoirHistory {
                     counters.get(CROSS_FRAME_RECEIVER_TRANSPORT_REJECT_INDEX));
             long crossFrameReceiverFootprintReject = Integer.toUnsignedLong(
                     counters.get(CROSS_FRAME_RECEIVER_FOOTPRINT_REJECT_INDEX));
+            long crossFrameSampleRescueEligible = Integer.toUnsignedLong(
+                    counters.get(CROSS_FRAME_SAMPLE_RESCUE_ELIGIBLE_INDEX));
+            long crossFrameSampleRescued = Integer.toUnsignedLong(
+                    counters.get(CROSS_FRAME_SAMPLE_RESCUED_INDEX));
+            long crossFrameSampleRescueEdgeReject = Integer.toUnsignedLong(
+                    counters.get(CROSS_FRAME_SAMPLE_RESCUE_EDGE_REJECT_INDEX));
+            long crossFrameSampleRescueTopologyReject = Integer.toUnsignedLong(
+                    counters.get(CROSS_FRAME_SAMPLE_RESCUE_TOPOLOGY_REJECT_INDEX));
+            long crossFrameSampleRescueDepthReject = Integer.toUnsignedLong(
+                    counters.get(CROSS_FRAME_SAMPLE_RESCUE_DEPTH_REJECT_INDEX));
+            long crossFrameSampleRescueTransportReject = Integer.toUnsignedLong(
+                    counters.get(CROSS_FRAME_SAMPLE_RESCUE_TRANSPORT_REJECT_INDEX));
+            long crossFrameSampleRescueFootprintReject = Integer.toUnsignedLong(
+                    counters.get(CROSS_FRAME_SAMPLE_RESCUE_FOOTPRINT_REJECT_INDEX));
             long crossFrameReceiverReject = crossFrameReceiverSurfaceReject
                     + crossFrameReceiverSampleReject + crossFrameReceiverEdgeReject
                     + crossFrameReceiverTopologyReject + crossFrameReceiverDepthReject
@@ -486,7 +507,9 @@ final class RtPathReservoirHistory {
                              + "sourceReplay={},receiverTotal={},receiverSurface={},receiverSample={},"
                              + "receiverEdge={},receiverTopology={},receiverDepth={},"
                              + "receiverTransport={},receiverFootprint={},geometry={},pdf={},"
-                             + "visibility={},radiance={}]",
+                             + "visibility={},radiance={}], "
+                             + "sampleRescue[eligible={},rescued={},edge={},topology={},depth={},"
+                             + "transport={},footprint={}]",
                     total,
                     values[0], percent(values[0], total),
                     values[1], percent(values[1], total),
@@ -570,7 +593,13 @@ final class RtPathReservoirHistory {
                      crossFrameReceiverTransportReject, crossFrameReceiverFootprintReject,
                      crossFrameGeometryReject,
                      crossFramePdfReject, crossFrameVisibilityReject,
-                     crossFrameRadianceReject);
+                     crossFrameRadianceReject,
+                     crossFrameSampleRescueEligible, crossFrameSampleRescued,
+                     crossFrameSampleRescueEdgeReject,
+                     crossFrameSampleRescueTopologyReject,
+                     crossFrameSampleRescueDepthReject,
+                     crossFrameSampleRescueTransportReject,
+                     crossFrameSampleRescueFootprintReject);
             spatialDiagnosticViewPending = 0;
             return;
         }
