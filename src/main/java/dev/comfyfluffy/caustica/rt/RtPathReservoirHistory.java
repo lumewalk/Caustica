@@ -85,7 +85,14 @@ final class RtPathReservoirHistory {
     static final int CROSS_FRAME_SAMPLE_RESCUE_DEPTH_REJECT_INDEX = 57;
     static final int CROSS_FRAME_SAMPLE_RESCUE_TRANSPORT_REJECT_INDEX = 58;
     static final int CROSS_FRAME_SAMPLE_RESCUE_FOOTPRINT_REJECT_INDEX = 59;
-    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 60;
+    static final int CROSS_FRAME_EDGE_BREAKDOWN_ELIGIBLE_INDEX = 60;
+    static final int CROSS_FRAME_EDGE_MISSING_VALID_INDEX = 61;
+    static final int CROSS_FRAME_EDGE_DEPTH_REJECT_INDEX = 62;
+    static final int CROSS_FRAME_EDGE_EVENT_REJECT_INDEX = 63;
+    static final int CROSS_FRAME_EDGE_MAPPING_REJECT_INDEX = 64;
+    static final int CROSS_FRAME_EDGE_PDF_REJECT_INDEX = 65;
+    static final int CROSS_FRAME_EDGE_FINITE_REJECT_INDEX = 66;
+    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 67;
     static final int SPATIAL_DIAGNOSTIC_COUNTER_BYTES =
             SHIFTED_DIAGNOSTIC_COUNTER_COUNT * Integer.BYTES;
     static final int SPATIAL_DIAGNOSTIC_PAIR_CAPACITY = 4096;
@@ -409,6 +416,20 @@ final class RtPathReservoirHistory {
                     counters.get(CROSS_FRAME_SAMPLE_RESCUE_TRANSPORT_REJECT_INDEX));
             long crossFrameSampleRescueFootprintReject = Integer.toUnsignedLong(
                     counters.get(CROSS_FRAME_SAMPLE_RESCUE_FOOTPRINT_REJECT_INDEX));
+            long crossFrameEdgeBreakdownEligible = Integer.toUnsignedLong(
+                    counters.get(CROSS_FRAME_EDGE_BREAKDOWN_ELIGIBLE_INDEX));
+            long crossFrameEdgeMissingValid = Integer.toUnsignedLong(
+                    counters.get(CROSS_FRAME_EDGE_MISSING_VALID_INDEX));
+            long crossFrameEdgeDepthReject = Integer.toUnsignedLong(
+                    counters.get(CROSS_FRAME_EDGE_DEPTH_REJECT_INDEX));
+            long crossFrameEdgeEventReject = Integer.toUnsignedLong(
+                    counters.get(CROSS_FRAME_EDGE_EVENT_REJECT_INDEX));
+            long crossFrameEdgeMappingReject = Integer.toUnsignedLong(
+                    counters.get(CROSS_FRAME_EDGE_MAPPING_REJECT_INDEX));
+            long crossFrameEdgePdfReject = Integer.toUnsignedLong(
+                    counters.get(CROSS_FRAME_EDGE_PDF_REJECT_INDEX));
+            long crossFrameEdgeFiniteReject = Integer.toUnsignedLong(
+                    counters.get(CROSS_FRAME_EDGE_FINITE_REJECT_INDEX));
             long crossFrameReceiverReject = crossFrameReceiverSurfaceReject
                     + crossFrameReceiverSampleReject + crossFrameReceiverEdgeReject
                     + crossFrameReceiverTopologyReject + crossFrameReceiverDepthReject
@@ -509,7 +530,9 @@ final class RtPathReservoirHistory {
                              + "receiverTransport={},receiverFootprint={},geometry={},pdf={},"
                              + "visibility={},radiance={}], "
                              + "sampleRescue[eligible={},rescued={},edge={},topology={},depth={},"
-                             + "transport={},footprint={}]",
+                             + "transport={},footprint={}], "
+                             + "edgeBreakdown[eligible={},missingValid={},depth={},event={},"
+                             + "mapping={},pdf={},finite={}]",
                     total,
                     values[0], percent(values[0], total),
                     values[1], percent(values[1], total),
@@ -599,7 +622,11 @@ final class RtPathReservoirHistory {
                      crossFrameSampleRescueTopologyReject,
                      crossFrameSampleRescueDepthReject,
                      crossFrameSampleRescueTransportReject,
-                     crossFrameSampleRescueFootprintReject);
+                     crossFrameSampleRescueFootprintReject,
+                     crossFrameEdgeBreakdownEligible, crossFrameEdgeMissingValid,
+                     crossFrameEdgeDepthReject, crossFrameEdgeEventReject,
+                     crossFrameEdgeMappingReject, crossFrameEdgePdfReject,
+                     crossFrameEdgeFiniteReject);
             spatialDiagnosticViewPending = 0;
             return;
         }

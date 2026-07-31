@@ -332,6 +332,23 @@ split receiver-edge availability into valid/depth/event/mapping/PDF/finite-throu
 decide whether persistent remapping needs a deterministic receiver-material substrate independent
 of a positive current canonical endpoint. Mapped history remains disabled.
 
+The follow-up `edgeBreakdown[...]` shadow diagnostic partitions every failed current receiver edge
+into missing valid bit, wrong depth, unsupported event, mapping descriptor, non-positive PDF, or
+non-finite vertex/throughput. Its population must equal strict `receiverEdge` plus
+`sampleRescue.edge`; outcomes are exclusive and do not change either parent terminal decision. The
+ordered policy is mirrored by the CPU reference.
+
+The first edge-breakdown capture was exact on all 12 readbacks. Of 146,307 failed edges, 139,525
+(95.364542%) were missing the valid bit and exactly matched the sample-rescue edge population; the
+remaining 6,782 (4.635458%) were valid non-diffuse events and exactly matched strict
+`receiverEdge`. Depth, mapping, PDF, and finite-state failures were zero. This is not metadata
+corruption: a zero/empty current canonical endpoint does not publish receiver-edge state, while
+non-diffuse events are intentionally outside the current mapping support. Before persistent history
+can reuse through an empty current endpoint, define and validate a deterministic receiver-side
+diffuse material/PDF/throughput substrate independent of canonical endpoint selection. First audit
+whether the existing quantized guide is mathematically sufficient or whether an exact guide is
+required; do not allocate or admit it by assumption.
+
 ## Delivery Phases
 
 ### Phase 0 — Wavefront Integration Baseline

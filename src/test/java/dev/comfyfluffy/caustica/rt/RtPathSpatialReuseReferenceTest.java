@@ -414,6 +414,25 @@ final class RtPathSpatialReuseReferenceTest {
                 surfaceReject.sampleRescueReject());
     }
 
+    @Test
+    void crossFrameReceiverEdgeReportsTheFirstExclusiveReject() {
+        var reasons = RtPathSpatialReuseReference.CrossFrameReceiverEdgeReject.values();
+        for (int reject = 0; reject < reasons.length; reject++) {
+            assertEquals(reasons[reject], receiverEdgePolicy(reject).firstReject());
+        }
+    }
+
+    private static RtPathSpatialReuseReference.CrossFrameReceiverEdgePolicy receiverEdgePolicy(
+            int firstReject) {
+        return new RtPathSpatialReuseReference.CrossFrameReceiverEdgePolicy(
+                firstReject != 1,
+                firstReject != 2,
+                firstReject != 3,
+                firstReject != 4,
+                firstReject != 5,
+                firstReject != 6);
+    }
+
     private static RtPathSpatialReuseReference.CrossFrameReceiverPolicy receiverPolicy(
             boolean surface, boolean sample, boolean edge, boolean topology,
             boolean depth, boolean transport, boolean footprint) {
@@ -565,8 +584,15 @@ final class RtPathSpatialReuseReferenceTest {
                 RtPathReservoirHistory.CROSS_FRAME_SAMPLE_RESCUE_TRANSPORT_REJECT_INDEX);
         assertEquals(59,
                 RtPathReservoirHistory.CROSS_FRAME_SAMPLE_RESCUE_FOOTPRINT_REJECT_INDEX);
-        assertEquals(60, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
-        assertEquals(60 * Integer.BYTES,
+        assertEquals(60, RtPathReservoirHistory.CROSS_FRAME_EDGE_BREAKDOWN_ELIGIBLE_INDEX);
+        assertEquals(61, RtPathReservoirHistory.CROSS_FRAME_EDGE_MISSING_VALID_INDEX);
+        assertEquals(62, RtPathReservoirHistory.CROSS_FRAME_EDGE_DEPTH_REJECT_INDEX);
+        assertEquals(63, RtPathReservoirHistory.CROSS_FRAME_EDGE_EVENT_REJECT_INDEX);
+        assertEquals(64, RtPathReservoirHistory.CROSS_FRAME_EDGE_MAPPING_REJECT_INDEX);
+        assertEquals(65, RtPathReservoirHistory.CROSS_FRAME_EDGE_PDF_REJECT_INDEX);
+        assertEquals(66, RtPathReservoirHistory.CROSS_FRAME_EDGE_FINITE_REJECT_INDEX);
+        assertEquals(67, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
+        assertEquals(67 * Integer.BYTES,
                 RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_COUNTER_BYTES);
         assertEquals(160, PathSourceRootData.BYTE_SIZE);
         assertEquals(4096, RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_PAIR_CAPACITY);

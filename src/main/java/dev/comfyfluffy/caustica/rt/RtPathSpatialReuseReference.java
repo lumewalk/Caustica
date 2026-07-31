@@ -686,6 +686,33 @@ final class RtPathSpatialReuseReference {
         }
     }
 
+    enum CrossFrameReceiverEdgeReject {
+        NONE,
+        MISSING_VALID,
+        DEPTH,
+        EVENT,
+        MAPPING,
+        PDF,
+        FINITE
+    }
+
+    record CrossFrameReceiverEdgePolicy(boolean valid,
+                                        boolean depthMatches,
+                                        boolean eventMatches,
+                                        boolean mappingMatches,
+                                        boolean pdfPositive,
+                                        boolean vertexThroughputFinite) {
+        CrossFrameReceiverEdgeReject firstReject() {
+            if (!valid) return CrossFrameReceiverEdgeReject.MISSING_VALID;
+            if (!depthMatches) return CrossFrameReceiverEdgeReject.DEPTH;
+            if (!eventMatches) return CrossFrameReceiverEdgeReject.EVENT;
+            if (!mappingMatches) return CrossFrameReceiverEdgeReject.MAPPING;
+            if (!pdfPositive) return CrossFrameReceiverEdgeReject.PDF;
+            if (!vertexThroughputFinite) return CrossFrameReceiverEdgeReject.FINITE;
+            return CrossFrameReceiverEdgeReject.NONE;
+        }
+    }
+
     /**
      * Re-evaluates one color channel of a diffuse reconnection. The stored source endpoint already
      * contains the source first-edge throughput, so the shift removes that exact stored factor,

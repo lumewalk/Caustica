@@ -250,6 +250,19 @@ removing it would gain nothing and must not be treated as the fix. Diagnose the 
 subconditions next, especially whether exact receiver material/PDF/throughput data must be generated
 independently of a positive current canonical endpoint before persistent remapping can be sound.
 
+`edgeBreakdown[...]` is the next orthogonal shadow partition. It reports `missingValid`, `depth`,
+`event`, `mapping`, `pdf`, and `finite`, with
+`eligible = receiverEdge + sampleRescue.edge = sum(edge outcomes)`. It does not replace the strict
+or sample-rescue terminal counters and cannot reach mapping geometry/radiance.
+
+Runtime edge breakdown found only two populated causes: 139,525/146,307 missing-valid records, all
+from the zero-current-sample shadow population, and 6,782 valid but non-diffuse events, all from the
+strict receiver-edge category. Depth/mapping/PDF/finite failures were zero. Thus the stored edge is
+not malformed; it is absent whenever no positive canonical endpoint published it. The next design
+gate is a deterministic diffuse receiver-material contract independent of endpoint selection. Audit
+the precision and semantics of the existing albedo/material guides before introducing a new exact
+buffer or permitting persistence.
+
 ## Linux
 
 Set `DLSS_SDK` and `VULKAN_SDK` before configuring CMake:

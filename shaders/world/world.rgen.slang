@@ -813,17 +813,19 @@ public void pathMappingReplayValidate() {
     PathReservoir current =
             ConstPtr<PathReservoir>(pc.pathReservoirAddr)[pixelIndex];
     uint currentReconnectionMetadata = asuint(current.reconnectionVertex.w);
-    bool currentEdgeAvailable =
-            (currentReconnectionMetadata & PATH_RECONNECTION_VALID) != 0u
-            && ((currentReconnectionMetadata >> PATH_RECONNECTION_DEPTH_SHIFT)
-                    & 0xFu) == 1u
-            && pathReconnectionEvent(currentReconnectionMetadata)
-                    == PATH_RECONNECTION_EVENT_DIFFUSE
-            && pathMappingControlValid(current)
-            && pathMappingKind(current) == PATH_MAPPING_IDENTITY
-            && current.reconnectionNormalPdf.w > 0.0
-            && all(isfinite(current.reconnectionVertex.xyz))
+    bool currentEdgeValid =
+            (currentReconnectionMetadata & PATH_RECONNECTION_VALID) != 0u;
+    bool currentEdgeDepth =
+            ((currentReconnectionMetadata >> PATH_RECONNECTION_DEPTH_SHIFT) & 0xFu) == 1u;
+    bool currentEdgeEvent = pathReconnectionEvent(currentReconnectionMetadata)
+            == PATH_RECONNECTION_EVENT_DIFFUSE;
+    bool currentEdgeMapping = pathMappingControlValid(current)
+            && pathMappingKind(current) == PATH_MAPPING_IDENTITY;
+    bool currentEdgePdf = current.reconnectionNormalPdf.w > 0.0;
+    bool currentEdgeFinite = all(isfinite(current.reconnectionVertex.xyz))
             && all(isfinite(current.reconnectionThroughput.xyz));
+    bool currentEdgeAvailable = currentEdgeValid && currentEdgeDepth && currentEdgeEvent
+            && currentEdgeMapping && currentEdgePdf && currentEdgeFinite;
     if (receiverNormalLength < 0.5 || sourceNormalLength < 0.5
             || (receiverMaterial != MATERIAL_OPAQUE
                     && receiverMaterial != MATERIAL_PARTICLE)
@@ -844,6 +846,21 @@ public void pathMappingReplayValidate() {
         InterlockedAdd(counters[PATH_CROSS_FRAME_SAMPLE_RESCUE_ELIGIBLE], 1u);
     }
     if (!currentEdgeAvailable) {
+        if (crossFrame) {
+            InterlockedAdd(counters[PATH_CROSS_FRAME_EDGE_BREAKDOWN_ELIGIBLE], 1u);
+            uint edgeReason = !currentEdgeValid
+                    ? PATH_CROSS_FRAME_EDGE_MISSING_VALID
+                    : !currentEdgeDepth
+                            ? PATH_CROSS_FRAME_EDGE_DEPTH_REJECT
+                            : !currentEdgeEvent
+                                    ? PATH_CROSS_FRAME_EDGE_EVENT_REJECT
+                                    : !currentEdgeMapping
+                                            ? PATH_CROSS_FRAME_EDGE_MAPPING_REJECT
+                                            : !currentEdgePdf
+                                                    ? PATH_CROSS_FRAME_EDGE_PDF_REJECT
+                                                    : PATH_CROSS_FRAME_EDGE_FINITE_REJECT;
+            InterlockedAdd(counters[edgeReason], 1u);
+        }
         InterlockedAdd(counters[crossFrame
                 ? (sampleRescueCandidate
                         ? PATH_CROSS_FRAME_RECEIVER_SAMPLE_REJECT
