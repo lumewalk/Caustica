@@ -27,7 +27,7 @@ public static float3 rv_normal = float3(0.0, 0.0, 0.0);
 public static float3 rv_albedo = float3(0.0, 0.0, 0.0);
 public static float rv_roughness = 1.0;
 public static float rv_sss = 0.0;
-public static uint rv_material = 255u;
+public static uint rv_materialIdentity = 0x00FFFFFFu;
 // Transmission replaces the ordinary guide tuple with the visible destination, so RR's specular inputs
 // (specular albedo + reflection MV) need the foreground glass/water interface kept separately. This is
 // the surface the reflection physically lives on; for an opaque primary hit it is that hit itself.
@@ -158,13 +158,13 @@ public void setTransmissionGuide(float3 hitCamRel, float3 motionPrev, float3 nor
 }
 
 public void setRestirReceiver(float3 position, float3 normal, float3 albedo,
-                       float roughness, float sss, uint material) {
+                       float roughness, float sss, uint material, uint materialKey) {
     rv_position = position;
     rv_normal = normal;
     rv_albedo = albedo;
     rv_roughness = roughness;
     rv_sss = sss;
-    rv_material = material;
+    rv_materialIdentity = packReceiverMaterialIdentity(material, materialKey);
 }
 
 // Deterministic ordinary guide behind the first transmitted interface. This is guide-only work:
@@ -290,7 +290,7 @@ public void writeGuides(int2 pix, float3 primaryDir, float2 jndc, float2 size, f
     gMotion[pix] = motion;
     gSpecAlbedo[pix] = float4(specAlbedo, 1.0);
     gSpecMotion[pix] = specMotion;
-    gRestirPositionMaterial[pix] = float4(rv_position, float(rv_material));
+    gRestirPositionMaterial[pix] = float4(rv_position, float(rv_materialIdentity));
     gRestirNormalRoughness[pix] = float4(rv_normal, rv_roughness);
     gRestirAlbedoSss[pix] = float4(rv_albedo, rv_sss);
 }

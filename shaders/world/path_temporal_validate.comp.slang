@@ -168,7 +168,8 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID) {
         float4 receiverPosition = receiverPositionMaterial[pixel];
         float4 receiverNormal = receiverNormalRoughness[pixel];
         float receiverNormalLength = length(receiverNormal.xyz);
-        uint receiverMaterial = uint(max(receiverPosition.w, 0.0));
+        uint receiverMaterialIdentity = uint(max(receiverPosition.w, 0.0));
+        uint receiverMaterial = receiverMaterialModel(receiverMaterialIdentity);
         bool receiverPresent = receiverNormalLength >= 0.5
                 && receiverMaterial <= MATERIAL_PARTICLE
                 && current.weights.y > 0.0
@@ -204,8 +205,9 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID) {
                 float4 neighborPosition = receiverPositionMaterial[neighborTexel];
                 float4 neighborNormal = receiverNormalRoughness[neighborTexel];
                 float neighborNormalLength = length(neighborNormal.xyz);
-                uint neighborMaterial = uint(max(neighborPosition.w, 0.0));
-                if (neighborNormalLength < 0.5 || neighborMaterial != receiverMaterial) continue;
+                uint neighborMaterialIdentity = uint(max(neighborPosition.w, 0.0));
+                if (neighborNormalLength < 0.5
+                        || neighborMaterialIdentity != receiverMaterialIdentity) continue;
                 float3 neighborNormalUnit = neighborNormal.xyz / neighborNormalLength;
                 float relativeDepth = abs(length(neighborPosition.xyz) - receiverDistance)
                         / max(receiverDistance, 1.0);
@@ -332,7 +334,8 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID) {
         float4 receiverPosition = receiverPositionMaterial[pixel];
         float4 receiverNormalRoughnessValue = receiverNormalRoughness[pixel];
         float receiverNormalLength = length(receiverNormalRoughnessValue.xyz);
-        uint receiverMaterial = uint(max(receiverPosition.w, 0.0));
+        uint receiverMaterialIdentity = uint(max(receiverPosition.w, 0.0));
+        uint receiverMaterial = receiverMaterialModel(receiverMaterialIdentity);
         bool receiverPresent = receiverNormalLength >= 0.5
                 && receiverMaterial <= MATERIAL_PARTICLE
                 && current.weights.y > 0.0
@@ -376,8 +379,9 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID) {
                 float4 sourcePosition = receiverPositionMaterial[neighborTexel];
                 float4 sourceNormalValue = receiverNormalRoughness[neighborTexel];
                 float sourceNormalLength = length(sourceNormalValue.xyz);
-                uint sourceMaterial = uint(max(sourcePosition.w, 0.0));
-                if (sourceNormalLength < 0.5 || sourceMaterial != receiverMaterial) continue;
+                uint sourceMaterialIdentity = uint(max(sourcePosition.w, 0.0));
+                if (sourceNormalLength < 0.5
+                        || sourceMaterialIdentity != receiverMaterialIdentity) continue;
                 float3 sourceNormal = sourceNormalValue.xyz / sourceNormalLength;
                 float relativeDepth = abs(length(sourcePosition.xyz) - length(receiverPosition.xyz))
                         / max(length(receiverPosition.xyz), 1.0);

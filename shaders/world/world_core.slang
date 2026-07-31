@@ -19,6 +19,7 @@ import world_common;
 [[vk::binding(8, 0)]] [format("rg16f")]   public RWTexture2D<float2> gSpecMotion; // reflection MVs for RR
 // ReSTIR owns a separate first-interface surface cache. DLSS guides may deliberately resolve through
 // transparent interfaces, which is useful for denoising but is not a valid receiver for DI reuse.
+// .w is an exact 24-bit integer: low 2 bits material model, upper 22 bits registry material key.
 [[vk::binding(9, 0)]]  [format("rgba32f")] public RWTexture2D<float4> gRestirPositionMaterial;
 [[vk::binding(10, 0)]] [format("rgba16f")] public RWTexture2D<float4> gRestirNormalRoughness;
 [[vk::binding(11, 0)]] [format("rgba16f")] public RWTexture2D<float4> gRestirAlbedoSss;
@@ -39,6 +40,9 @@ public struct VisibilityResult {
 
 
 public uint payloadMaterial() { return payload.flags & PAYLOAD_MATERIAL_MASK; }
+public uint payloadMaterialKey() {
+    return (payload.flags >> PAYLOAD_MATERIAL_KEY_SHIFT) & PAYLOAD_MATERIAL_KEY_MASK;
+}
 // Set by world.rchit on any dielectric hit (see PAYLOAD_DIELECTRIC_ENTERING) — whether the ray was
 // travelling into the volume (vs. out of it) at this hit's face.
 public bool payloadDielectricEntering() { return (payload.flags & PAYLOAD_DIELECTRIC_ENTERING) != 0u; }

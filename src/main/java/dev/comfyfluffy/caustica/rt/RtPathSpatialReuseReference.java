@@ -14,6 +14,11 @@ final class RtPathSpatialReuseReference {
     static final int RECONNECTION_VALID = 1;
     static final int RECONNECTION_EVENT_SHIFT = 5;
     static final int RECONNECTION_EVENT_MASK = 0x7 << RECONNECTION_EVENT_SHIFT;
+    static final int MATERIAL_OPAQUE = 0;
+    static final int MATERIAL_PARTICLE = 2;
+    static final int RECEIVER_MATERIAL_KEY_MASK = 0x003F_FFFF;
+    static final int MAPPING_KIND_MASK = 0xF;
+    static final int MAPPING_RESERVED_MASK = 0xFFFF_FFF0;
 
     enum ReconnectionEvent {
         NONE(0),
@@ -46,6 +51,36 @@ final class RtPathSpatialReuseReference {
         }
     }
 
+    /**
+     * Compact control stored in {@code PathReservoir.reconnectionThroughput.w}. The first
+     * persistent spatial contract is deliberately one-hop: a diffuse reconnection can be replayed
+     * against its original identity source, but cannot itself be used as another spatial source
+     * until mapping/Jacobian composition is defined.
+     */
+    enum MappingKind {
+        IDENTITY(0),
+        DIFFUSE_RECONNECTION(1);
+
+        private final int code;
+
+        MappingKind(int code) {
+            this.code = code;
+        }
+
+        int code() {
+            return code;
+        }
+
+        static MappingKind fromCode(int code) {
+            for (MappingKind kind : values()) {
+                if (kind.code == code) {
+                    return kind;
+                }
+            }
+            throw new IllegalArgumentException("unknown spatial mapping kind: " + code);
+        }
+    }
+
     enum Decision {
         ACCEPTED,
         MATERIAL_MISMATCH,
@@ -55,6 +90,35 @@ final class RtPathSpatialReuseReference {
         TOPOLOGY_MISMATCH,
         TRANSPORT_MISMATCH,
         FOOTPRINT_MISMATCH
+    }
+
+    static int packMappingControl(MappingKind kind) {
+        if (kind == null) {
+            throw new IllegalArgumentException("spatial mapping kind must not be null");
+        }
+        return kind.code();
+    }
+
+    static boolean mappingControlValid(int control) {
+        int kind = control & MAPPING_KIND_MASK;
+        return (control & MAPPING_RESERVED_MASK) == 0
+                && (kind == MappingKind.IDENTITY.code()
+                        || kind == MappingKind.DIFFUSE_RECONNECTION.code());
+    }
+
+    static MappingKind mappingKind(int control) {
+        if (!mappingControlValid(control)) {
+            throw new IllegalArgumentException("invalid spatial mapping control");
+        }
+        return MappingKind.fromCode(control & MAPPING_KIND_MASK);
+    }
+
+    static boolean genericIdentityReplayEligible(int control) {
+        return mappingControlValid(control) && mappingKind(control) == MappingKind.IDENTITY;
+    }
+
+    static boolean oneHopSpatialSourceEligible(int control) {
+        return genericIdentityReplayEligible(control);
     }
 
     /**
@@ -270,6 +334,336 @@ final class RtPathSpatialReuseReference {
         }
     }
 
+    /** Receiver/source density terms used by the diffuse reconnection contract. */
+    record DiffuseShiftDensity(double currentDirectionalDensity,
+                               double shiftedDirectionalDensity,
+                               double sourceDirectionalDensity,
+                               double currentSourcePdf, double sourcePdf) {
+        DiffuseShiftDensity {
+            if (!positiveFinite(currentDirectionalDensity)
+                    || !positiveFinite(shiftedDirectionalDensity)
+                    || !positiveFinite(sourceDirectionalDensity)
+                    || !positiveFinite(currentSourcePdf)
+                    || !positiveFinite(sourcePdf)) {
+                throw new IllegalArgumentException("invalid diffuse shifted density terms");
+            }
+        }
+
+        double currentTechniqueMass() {
+            return finitePositiveRatio(currentSourcePdf, currentDirectionalDensity,
+                    "current technique mass");
+        }
+
+        double sourceTechniqueMass() {
+            return finitePositiveRatio(sourcePdf, sourceDirectionalDensity,
+                    "source technique mass");
+        }
+
+        double receiverDirectionalPdf() {
+            double receiverPdf = currentTechniqueMass() * shiftedDirectionalDensity;
+            if (!positiveFinite(receiverPdf)) {
+                throw new IllegalArgumentException("receiver directional PDF must be finite and positive");
+            }
+            return receiverPdf;
+        }
+
+        double primarySampleJacobian(ReconnectionGeometry geometry) {
+            if (geometry == null) {
+                throw new IllegalArgumentException("reconnection geometry is required");
+            }
+            double pssJacobian = geometry.solidAngleJacobian()
+                    * receiverDirectionalPdf() / sourcePdf;
+            if (!positiveFinite(pssJacobian)) {
+                throw new IllegalArgumentException("PSS Jacobian must be finite and positive");
+            }
+            return pssJacobian;
+        }
+    }
+
+    /**
+     * The first spatial GRIS merge weight, kept as a small CPU-only contract until the GPU can
+     * evaluate the receiver-side shifted target density and the complete reconnection mapping.
+     *
+     * <p>The PSS Jacobian belongs in this weight. It must not be applied again to the shifted
+     * radiance or to the final reservoir resolve:</p>
+     *
+     * <pre>
+     * w_spatial = shiftedTargetDensity * sourceFinalWeight
+     *              * min(sourceEffectiveCount, maxSourceCount)
+     *              * primarySampleJacobian
+     * </pre>
+     */
+    record SpatialGrisWeight(double shiftedTargetDensity, double sourceFinalWeight,
+                             double sourceEffectiveCount, double maxSourceCount,
+                             double primarySampleJacobian) {
+        SpatialGrisWeight {
+            if (!nonNegativeFinite(shiftedTargetDensity)
+                    || !nonNegativeFinite(sourceFinalWeight)
+                    || !nonNegativeFinite(sourceEffectiveCount)
+                    || !positiveFinite(maxSourceCount)
+                    || !positiveFinite(primarySampleJacobian)) {
+                throw new IllegalArgumentException("invalid spatial GRIS weight terms");
+            }
+        }
+
+        double clampedSourceCount() {
+            return Math.min(sourceEffectiveCount, maxSourceCount);
+        }
+
+        double mergeWeight() {
+            double sourceCount = clampedSourceCount();
+            if (sourceCount == 0.0 || shiftedTargetDensity == 0.0 || sourceFinalWeight == 0.0) {
+                return 0.0;
+            }
+            double weight = shiftedTargetDensity * sourceFinalWeight;
+            weight *= sourceCount;
+            weight *= primarySampleJacobian;
+            if (!Double.isFinite(weight) || weight < 0.0) {
+                throw new IllegalArgumentException("spatial GRIS weight overflow");
+            }
+            return weight;
+        }
+
+        double selectionProbability(double currentWeightSum) {
+            if (!nonNegativeFinite(currentWeightSum)) {
+                throw new IllegalArgumentException("invalid current reservoir weight sum");
+            }
+            double weight = mergeWeight();
+            if (weight == 0.0) {
+                return 0.0;
+            }
+            double nextWeightSum = Math.min(currentWeightSum + weight, 1.0e30);
+            double probability = weight / nextWeightSum;
+            if (!Double.isFinite(probability) || probability < 0.0 || probability > 1.0) {
+                throw new IllegalArgumentException("invalid spatial GRIS selection probability");
+            }
+            return probability;
+        }
+
+        boolean selectsSource(double currentWeightSum, double randomUnit) {
+            if (!Double.isFinite(randomUnit) || randomUnit < 0.0 || randomUnit >= 1.0) {
+                throw new IllegalArgumentException("invalid spatial GRIS selection random value");
+            }
+            return randomUnit < selectionProbability(currentWeightSum);
+        }
+
+        SpatialScratchMerge scratchMerge(double currentWeightSum, double currentEffectiveCount,
+                                         double currentTarget, double randomUnit) {
+            if (!nonNegativeFinite(currentEffectiveCount) || !positiveFinite(currentTarget)) {
+                throw new IllegalArgumentException("invalid current scratch reservoir");
+            }
+            boolean sourceSelected = selectsSource(currentWeightSum, randomUnit);
+            double nextWeightSum = Math.min(currentWeightSum + mergeWeight(), 1.0e30);
+            double nextEffectiveCount = Math.min(
+                    currentEffectiveCount + clampedSourceCount(), 16777216.0);
+            double selectedTarget = sourceSelected ? shiftedTargetDensity : currentTarget;
+            double finalWeight = nextWeightSum / (nextEffectiveCount * selectedTarget);
+            return new SpatialScratchMerge(
+                    nextWeightSum, nextEffectiveCount, finalWeight, sourceSelected);
+        }
+    }
+
+    record SpatialScratchMerge(double weightSum, double effectiveCount,
+                               double finalWeight, boolean sourceSelected) {
+        SpatialScratchMerge {
+            if (!positiveFinite(weightSum) || !positiveFinite(effectiveCount)
+                    || !positiveFinite(finalWeight)) {
+                throw new IllegalArgumentException("invalid spatial scratch merge result");
+            }
+        }
+    }
+
+    record Rgb(double r, double g, double b) {
+        Rgb {
+            if (!nonNegativeFinite(r) || !nonNegativeFinite(g) || !nonNegativeFinite(b)) {
+                throw new IllegalArgumentException("RGB terms must be finite and non-negative");
+            }
+        }
+
+        double luminance() {
+            return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        }
+    }
+
+    /**
+     * Shader-independent receiver-aware replay boundary for an ABI-10 one-hop diffuse mapping.
+     * The source path is replayed from its original seeds; this record then applies the stored
+     * receiver factor and freshly traced transmittance. Generic identity replay must never consume
+     * this descriptor.
+     */
+    record DiffuseMappingReplay(int replayVersion, int mappingControl,
+                                ReconnectionEvent replayEvent,
+                                double receiverDirectionalPdf,
+                                double primarySampleJacobian,
+                                Rgb sourceRadiance,
+                                Rgb sourceThroughput,
+                                Rgb receiverThroughput,
+                                Rgb transmittance) {
+        DiffuseMappingReplay {
+            if (replayVersion != RtPathReplayReference.REPLAY_VERSION) {
+                throw new IllegalArgumentException("spatial mapping replay ABI mismatch");
+            }
+            if (!mappingControlValid(mappingControl)
+                    || mappingKind(mappingControl) != MappingKind.DIFFUSE_RECONNECTION) {
+                throw new IllegalArgumentException("diffuse mapping descriptor is required");
+            }
+            if (replayEvent != ReconnectionEvent.DIFFUSE) {
+                throw new IllegalArgumentException("diffuse mapping replay event mismatch");
+            }
+            if (!positiveFinite(receiverDirectionalPdf)
+                    || !positiveFinite(primarySampleJacobian)
+                    || sourceRadiance == null || sourceThroughput == null
+                    || receiverThroughput == null || transmittance == null
+                    || transmittance.r() > 1.0 || transmittance.g() > 1.0
+                    || transmittance.b() > 1.0) {
+                throw new IllegalArgumentException("invalid receiver-aware replay terms");
+            }
+            // Validate the spectral support before the record can be used.
+            shiftedDiffuseRadiance(sourceRadiance.r(), sourceThroughput.r(),
+                    receiverThroughput.r(), transmittance.r());
+            shiftedDiffuseRadiance(sourceRadiance.g(), sourceThroughput.g(),
+                    receiverThroughput.g(), transmittance.g());
+            shiftedDiffuseRadiance(sourceRadiance.b(), sourceThroughput.b(),
+                    receiverThroughput.b(), transmittance.b());
+        }
+
+        Rgb shiftedRadiance() {
+            return new Rgb(
+                    shiftedDiffuseRadiance(sourceRadiance.r(), sourceThroughput.r(),
+                            receiverThroughput.r(), transmittance.r()),
+                    shiftedDiffuseRadiance(sourceRadiance.g(), sourceThroughput.g(),
+                            receiverThroughput.g(), transmittance.g()),
+                    shiftedDiffuseRadiance(sourceRadiance.b(), sourceThroughput.b(),
+                            receiverThroughput.b(), transmittance.b()));
+        }
+
+        double shiftedTarget() {
+            return shiftedRadiance().luminance();
+        }
+
+        boolean matchesStoredShift(Rgb storedShift) {
+            if (storedShift == null) {
+                return false;
+            }
+            Rgb shifted = shiftedRadiance();
+            return replayFloatMatches(shifted.r(), storedShift.r())
+                    && replayFloatMatches(shifted.g(), storedShift.g())
+                    && replayFloatMatches(shifted.b(), storedShift.b());
+        }
+    }
+
+    /**
+     * Reference boundary for carrying a one-hop diffuse mapping across a frame boundary.
+     *
+     * <p>The original source path remains the canonical replay root. A later receiver remap must
+     * therefore prove both the receiver reprojection and the stability of that source queue root,
+     * then replay the source exactly. The old receiver's Jacobian is validated as stored metadata
+     * but is never composed with the new mapping: the source-to-current-receiver Jacobian is
+     * recomputed directly.</p>
+     */
+    record PersistentDiffuseRemap(int replayVersion, int mappingControl,
+                                  boolean receiverReprojectionValid,
+                                  boolean sourceQueueRootStable,
+                                  boolean sourceReplayExact,
+                                  double previousPrimarySampleJacobian,
+                                  ReconnectionGeometry currentGeometry,
+                                  DiffuseShiftDensity currentDensity,
+                                  Rgb sourceRadiance,
+                                  Rgb sourceThroughput,
+                                  Rgb currentReceiverThroughput,
+                                  Rgb currentTransmittance) {
+        PersistentDiffuseRemap {
+            if (replayVersion != RtPathReplayReference.REPLAY_VERSION
+                    || !mappingControlValid(mappingControl)
+                    || mappingKind(mappingControl) != MappingKind.DIFFUSE_RECONNECTION) {
+                throw new IllegalArgumentException("persistent diffuse mapping descriptor mismatch");
+            }
+            if (!receiverReprojectionValid || !sourceQueueRootStable || !sourceReplayExact) {
+                throw new IllegalArgumentException("persistent diffuse mapping replay is not stable");
+            }
+            if (!positiveFinite(previousPrimarySampleJacobian)
+                    || currentGeometry == null || currentDensity == null
+                    || sourceRadiance == null || sourceThroughput == null
+                    || currentReceiverThroughput == null || currentTransmittance == null) {
+                throw new IllegalArgumentException("invalid persistent diffuse remap terms");
+            }
+        }
+
+        double currentPrimarySampleJacobian() {
+            return currentDensity.primarySampleJacobian(currentGeometry);
+        }
+
+        DiffuseMappingReplay currentReplay() {
+            return new DiffuseMappingReplay(
+                    replayVersion, mappingControl, ReconnectionEvent.DIFFUSE,
+                    currentDensity.receiverDirectionalPdf(),
+                    currentPrimarySampleJacobian(),
+                    sourceRadiance, sourceThroughput,
+                    currentReceiverThroughput, currentTransmittance);
+        }
+    }
+
+    /**
+     * Re-evaluates one color channel of a diffuse reconnection. The stored source endpoint already
+     * contains the source first-edge throughput, so the shift removes that exact stored factor,
+     * applies the receiver's exact stored diffuse factor, and finally applies newly traced
+     * transmittance.
+     */
+    static double shiftedDiffuseRadiance(
+            double sourceRadiance, double sourceThroughput, double receiverThroughput,
+            double transmittance) {
+        if (!nonNegativeFinite(sourceRadiance) || !nonNegativeFinite(sourceThroughput)
+                || !nonNegativeFinite(receiverThroughput)
+                || !nonNegativeFinite(transmittance) || transmittance > 1.0
+                || (sourceRadiance > 0.0 && sourceThroughput <= 0.0)) {
+            throw new IllegalArgumentException("invalid diffuse reconnection radiance terms");
+        }
+        if (sourceRadiance == 0.0 || receiverThroughput == 0.0 || transmittance == 0.0) {
+            return 0.0;
+        }
+        return sourceRadiance * receiverThroughput / sourceThroughput * transmittance;
+    }
+
+    static boolean replayFloatMatches(double expected, double actual) {
+        double tolerance = Math.max(1.0e-5,
+                Math.max(Math.abs(expected), Math.abs(actual)) * 1.0e-4);
+        return Double.isFinite(expected) && Double.isFinite(actual)
+                && Math.abs(expected - actual) <= tolerance;
+    }
+
+    /** Matches the shader's absolute-cosine diffuse density used for a shifted edge. */
+    static double diffuseShiftDirectionalDensity(double cosine) {
+        if (!Double.isFinite(cosine) || cosine < -1.0 || cosine > 1.0) {
+            throw new IllegalArgumentException("diffuse shift cosine must be finite and in [-1, 1]");
+        }
+        return Math.abs(cosine) / Math.PI;
+    }
+
+    /**
+     * The primary pass consumes water and dielectric interfaces before the canonical path starts.
+     * Only opaque and particle guides therefore describe the same first vertex as a stored diffuse
+     * reconnection event.
+     */
+    static boolean supportsDiffuseShiftReceiver(int material) {
+        return material == MATERIAL_OPAQUE || material == MATERIAL_PARTICLE;
+    }
+
+    /** Packs a 2-bit model and 22-bit stable registry key into an exactly representable R32F integer. */
+    static int packReceiverMaterialIdentity(int material, int materialKey) {
+        if ((material & ~3) != 0 || (materialKey & ~RECEIVER_MATERIAL_KEY_MASK) != 0) {
+            throw new IllegalArgumentException("receiver material identity exceeds 24 bits");
+        }
+        return (materialKey << 2) | material;
+    }
+
+    static int receiverMaterialModel(int identity) {
+        return identity & 3;
+    }
+
+    static int receiverMaterialKey(int identity) {
+        return identity >>> 2;
+    }
+
     static Decision admit(Surface receiver, Surface source) {
         return admit(receiver, source, AdmissionPolicy.STRICT);
     }
@@ -313,6 +707,11 @@ final class RtPathSpatialReuseReference {
         return hitDepth == RECONNECTION_HIT_DEPTH;
     }
 
+    /** A second-hit shift can consume only an endpoint reached after the first selected edge. */
+    static boolean reconnectionEndpointEligible(int hitDepth) {
+        return hitDepth >= RECONNECTION_HIT_DEPTH;
+    }
+
     static int packReconnectionMetadata(int depth, ReconnectionEvent event, boolean valid) {
         if (depth < 0) {
             throw new IllegalArgumentException("reconnection depth must be non-negative");
@@ -344,6 +743,18 @@ final class RtPathSpatialReuseReference {
 
     private static boolean positiveFinite(double value) {
         return Double.isFinite(value) && value > 0.0;
+    }
+
+    private static boolean nonNegativeFinite(double value) {
+        return Double.isFinite(value) && value >= 0.0;
+    }
+
+    private static double finitePositiveRatio(double numerator, double denominator, String label) {
+        double ratio = numerator / denominator;
+        if (!positiveFinite(ratio)) {
+            throw new IllegalArgumentException(label + " must be finite and positive");
+        }
+        return ratio;
     }
 
     private RtPathSpatialReuseReference() {

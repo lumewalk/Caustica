@@ -18,9 +18,11 @@ import math;
 [[vk::binding(2, 1)]] Sampler2D materialNormalAoTex[];
 [[vk::binding(3, 1)]] Sampler2D materialSurface1Tex[];
 
-void payloadSetPacked(inout Payload payload, uint material, float roughness, float metalness,
+void payloadSetPacked(inout Payload payload, uint material, uint materialKey,
+        float roughness, float metalness,
         float emission, float sss, float ior, float transmission, uint emissionSource) {
-    payload.flags = material | (emissionSource << PAYLOAD_EMISSION_SOURCE_SHIFT);
+    payload.flags = material | (emissionSource << PAYLOAD_EMISSION_SOURCE_SHIFT)
+            | ((materialKey & PAYLOAD_MATERIAL_KEY_MASK) << PAYLOAD_MATERIAL_KEY_SHIFT);
     payload.roughMetal = packHalf2(float2(roughness, metalness));
     payload.emissionSss = packHalf2(float2(emission, sss));
     payload.iorTransmission = packHalf2(float2(ior, transmission));
@@ -255,7 +257,8 @@ void main(inout Payload payload, in BuiltInTriangleIntersectionAttributes attr) 
             payload.motionPrev = half3(g.rigidDisp.xyz);
         }
         payload.f0 = half3(0.0h, 0.0h, 0.0h);
-        payloadSetPacked(payload, MATERIAL_PARTICLE, 1.0, 0.0, 0.0, 0.0,
+        payloadSetPacked(payload, MATERIAL_PARTICLE, RECEIVER_PARTICLE_MATERIAL_KEY,
+                1.0, 0.0, 0.0, 0.0,
                 1.0, 0.0, EMISSION_SOURCE_NONE);
         return;
     }
@@ -320,7 +323,7 @@ void main(inout Payload payload, in BuiltInTriangleIntersectionAttributes attr) 
         payload.f0 = half3(surface.f0);
         float emission = material == MATERIAL_OPAQUE ? surface.emission : 0.0;
         float sss = material == MATERIAL_OPAQUE ? surface.sss : 0.0;
-        payloadSetPacked(payload, material, surface.roughness, surface.metalness,
+        payloadSetPacked(payload, material, pr.materialId, surface.roughness, surface.metalness,
                 emission, sss, header.params.z, header.params.w,
                 materialEmissionSource(header, emission));
         payloadSetDielectric(payload, material, entering);
@@ -389,7 +392,7 @@ void main(inout Payload payload, in BuiltInTriangleIntersectionAttributes attr) 
         payload.hitT = RayTCurrent();
         payload.motionPrev = half3(0.0h, 0.0h, 0.0h);
         payload.f0 = half3(glassSurface.f0);
-        payloadSetPacked(payload, MATERIAL_DIELECTRIC, glassSurface.roughness,
+        payloadSetPacked(payload, MATERIAL_DIELECTRIC, pr.materialId, glassSurface.roughness,
                 glassSurface.metalness, 0.0, 0.0, materialHeader.params.z,
                 materialHeader.params.w, EMISSION_SOURCE_NONE);
         payloadSetDielectric(payload, MATERIAL_DIELECTRIC, entering);
@@ -422,7 +425,7 @@ void main(inout Payload payload, in BuiltInTriangleIntersectionAttributes attr) 
     }
     payload.normal = half3(n);
     payload.f0 = half3(surface.f0);
-    payloadSetPacked(payload, material, surface.roughness, surface.metalness,
+    payloadSetPacked(payload, material, pr.materialId, surface.roughness, surface.metalness,
             surface.emission, surface.sss, materialHeader.params.z, materialHeader.params.w,
             materialEmissionSource(materialHeader, surface.emission));
     payloadSetDielectric(payload, material, entering);

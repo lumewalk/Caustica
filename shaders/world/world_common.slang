@@ -72,6 +72,10 @@ public struct WorldPush {
     public uint     lightCount;       // packed Light records in pc.lightBufAddr
     public uint     risCandidates;    // RIS candidate count M per diffuse vertex (0 = emitter NEE off)
     public uint     lightEpoch;       // low 32 bits of the atomically published light hierarchy generation
+    // Opt-in view-20 readback addresses. They live in the per-frame BDA payload so the 120-byte
+    // inline push-constant ABI stays below Vulkan's portable minimum limit; zero outside view 20.
+    public uint64_t pathShiftDiagnosticCounterAddr;
+    public uint64_t pathShiftDiagnosticPairAddr;
 };
 
 // 32-byte hot area-light record. Radiance uses packed R11G11B10 and the grid-relative owner section
@@ -138,7 +142,7 @@ public struct DirectReservoir {
 // Clarity-first ReSTIR PT path-reservoir contract. The record is intentionally independent from the
 // transient 48-byte continuation queue: one path sample may outlive a queue record and must retain the
 // unshadowed contribution, density terms, shift footprint, and replay identity needed by a future GRIS
-// reconnection pass. Nine aligned lanes keep the first GPU substrate explicit while the estimator is still
+// reconnection pass. Eleven aligned lanes keep the first GPU substrate explicit while the estimator is still
 // being validated against RtPathReservoirReference.
 //
 // sampleRadianceTarget = {unshadowed RGB contribution, target density}
@@ -155,6 +159,8 @@ public struct DirectReservoir {
 // reconnectionVertex = {chosen path vertex position in current rebased world space,
 //                       packed valid/depth/first-edge-event metadata}
 // reconnectionNormalPdf = {oriented second-hit normal, continuous source-edge proposal density}
+// reconnectionThroughput = {selected local first-edge RGB throughput,
+//                           packed identity/diffuse-reconnection mapping control}
 public struct PathReservoir {
     public float4 sampleRadianceTarget;
     public float4 proposalShift;
@@ -166,6 +172,7 @@ public struct PathReservoir {
     public uint4 replayControl;
     public float4 reconnectionVertex;
     public float4 reconnectionNormalPdf;
+    public float4 reconnectionThroughput;
 };
 
 // TerrainPrim.flags bit 0: this emissive quad is in the light buffer (RtLightCollector membership).
@@ -188,7 +195,7 @@ public struct Payload {
     public float  hitT;        // >= 0 on hit, < 0 on miss.
     public half3  motionPrev;  // per-vertex world displacement since last frame.
     public half3  f0;          // specular F0.
-    public uint   flags;       // bits 0..1 material, bit 2 celestial, bit 3 water-entering, bits 4..6 emission source.
+    public uint   flags;       // bits 0..7 hit flags; bits 8..31 stable registry material key.
     public uint   roughMetal;  // packHalf2x16(roughness, metalness)
     public uint   emissionSss; // packHalf2x16(emission, sss)
     public uint   iorTransmission; // packHalf2x16(IOR, transmission factor)
@@ -212,6 +219,8 @@ public static const uint EMISSION_SOURCE_NONE = 0u;
 public static const uint EMISSION_SOURCE_UNIFORM = 1u;
 public static const uint EMISSION_SOURCE_HEURISTIC = 2u;
 public static const uint EMISSION_SOURCE_LAB_PBR = 3u;
+public static const uint PAYLOAD_MATERIAL_KEY_SHIFT = 8u;
+public static const uint PAYLOAD_MATERIAL_KEY_MASK = 0x00FFFFFFu;
 
 public static const uint PAYLOAD_MATERIAL_MASK = 3u;
 public static const uint MATERIAL_OPAQUE = 0u;
@@ -223,6 +232,23 @@ public static const uint MATERIAL_OPAQUE = 0u;
 public static const uint MATERIAL_WATER = 1u;
 public static const uint MATERIAL_PARTICLE = 2u;
 public static const uint MATERIAL_DIELECTRIC = 3u;
+// gRestirPositionMaterial.w is R32F and therefore preserves every integer through 24 bits. Keep the
+// 2-bit transport material model in the low bits and a stable 22-bit registry identity above it.
+public static const uint RECEIVER_MATERIAL_KEY_MASK = 0x003FFFFFu;
+public static const uint RECEIVER_PARTICLE_MATERIAL_KEY = RECEIVER_MATERIAL_KEY_MASK;
+
+public uint packReceiverMaterialIdentity(uint material, uint materialKey) {
+    return ((materialKey & RECEIVER_MATERIAL_KEY_MASK) << 2u)
+            | (material & PAYLOAD_MATERIAL_MASK);
+}
+
+public uint receiverMaterialModel(uint identity) {
+    return identity & PAYLOAD_MATERIAL_MASK;
+}
+
+public uint receiverMaterialKey(uint identity) {
+    return identity >> 2u;
+}
 
 // Entity per-triangle record (48 B). The final lane mirrors TerrainPrim's integer material metadata.
 public struct Prim {

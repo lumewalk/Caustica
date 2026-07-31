@@ -109,12 +109,13 @@ identity) over a raw transient primitive index where practical.
 Reservoir storage is double-buffered. The first implementation favors clarity
 and validation over minimum byte size; packing follows only after captures
 identify the real bandwidth and memory pressure.
-The current ten-lane path record is 160 B/pixel/slot; its proposal lane keeps
+The current eleven-lane path record is 176 B/pixel/slot; its proposal lane keeps
 light-selection, canonical continuation, and roulette PDF products separate from
 the shift Jacobian. Its packed metadata includes an explicit canonical-endpoint
 validity bit, one lane stores a replayable sky/emissive endpoint, and the final
-two lanes store the selected canonical path's second-hit reconnection vertex,
-oriented normal, and continuous source-edge proposal density. The source PDF is zero for
+three lanes store the selected canonical path's second-hit reconnection vertex,
+oriented normal, continuous source-edge proposal density, and exact local RGB throughput
+of the selected first event. The source PDF is zero for
 delta/refraction transitions because those are discrete measures and are not yet eligible
 for a spatial shift.
 
@@ -175,17 +176,24 @@ values out of the reservoir; normal rendering and view 14 do not consume this di
 
 Spatial path reuse has a separate reference boundary. Neighbor admission reuses the direct-light
 surface policy (material, normal, relative depth) and additionally requires path depth, topology,
-transport class, and bounded footprint. The 160-byte record now stores the selected canonical
-path's second-hit reconnection vertex, normal, and source directional proposal density, but a
-shift still cannot be enabled until the receiver-side material/PDF evaluation and full shifted
-target are available.
+transport class, and bounded footprint. The 176-byte record stores the selected canonical path's
+second-hit reconnection vertex, normal, source directional proposal density, and exact first-event
+RGB throughput. These lanes were the prerequisites for the receiver-side material/PDF evaluation,
+shifted target, and non-persistent replay boundary described below; they do not by themselves make
+a record safe for persistent reuse.
 The CPU reference therefore records the solid-angle Jacobian
 `|cos(theta_receiver) / cos(theta_source)| * d_source^2 / d_receiver^2` and the primary-sample
 form multiplies it by `p_receiver / p_source`; random replay contributes unit Jacobian. This
 keeps spatial admission testable without silently introducing a biased neighbor merge.
 
+The receiver position guide packs the 2-bit transport material model together with a stable 22-bit
+material-registry key into its exactly representable 24-bit integer range. Direct-light passes decode
+only the model, while strict path-spatial admission compares the full packed identity and the path
+topology hash includes the same registry key. This prevents unrelated opaque blocks from being
+treated as one material merely because they all use `MATERIAL_OPAQUE`.
+
 Debug view 19 is the next opt-in diagnostic boundary. It stores the first-edge event kind in the
-packed reconnection metadata (replay ABI 8), then checks strict neighboring reservoirs for a
+packed reconnection metadata (introduced before the current replay ABI 10), then checks strict neighboring reservoirs for a
 continuous diffuse/glossy event with matching topology/depth/transport/footprint. For a selected
 pair it evaluates the receiver/source geometric solid-angle ratio and reconstructs the receiver
 directional density from the current edge and its shifted edge; the receiver/source PDF ratio
@@ -194,6 +202,75 @@ blue is strict compatibility rejection; magenta means the current edge is unavai
 means a delta/unsupported event; red is invalid geometry; cyan is invalid directional density;
 orange is invalid technique mass; gray is an invalid Jacobian. View 19 does not trace shifted
 visibility or radiance and never changes the estimator or the existing view 17/18 counters.
+
+Debug view 20 adds the first separate ray-generation shifted evaluation. It intentionally accepts
+only strict-compatible diffuse pairs. The path record stores the exact selected local first-event RGB
+throughput, so the pass can remove the source factor, apply the receiver factor without rebuilding
+selected-path state from a quantized guide buffer, and trace the new
+receiver-to-second-hit transmittance through the production shadow SBT. Successful pixels display
+the resulting HDR shifted canonical radiance; occlusion, spectral-support mismatch, invalid arithmetic,
+and debug-output overflow remain separate diagnostic states. Glossy remains rejected until
+receiver/source F0 and metalness are available. Water and dielectric receivers are also rejected:
+the primary pass consumes those interfaces before the stored canonical wavefront path starts, so
+their guide receiver is not the path's first event. View 20 also skips hit-0 emissive endpoints:
+a second-hit reconnection may only carry an endpoint at hit depth 1 or later, after the stored first
+event throughput has actually entered the contribution. The Jacobian
+is revalidated but is not folded into the target, and no reservoir weight or production radiance is
+changed. A view-20-only host-visible readback records all 15 mutually exclusive terminal states and
+a bounded 4096-sample record. Each accepted sample keeps the shifted/source target pair in the first
+segment of the existing buffer, receiver directional PDF/PSS-Jacobian in the second segment,
+source-final-weight/spatial-merge-weight in the third segment, and the current reservoir weight sum
+plus hypothetical neighbor-selection probability in the fourth segment. For each finite accepted
+pair the shader also performs a deterministic Bernoulli draw using that probability and records
+eligible/source-selected counts. This distinguishes
+genuinely bright finite shifted radiance from the explicit R16F-overflow state and checks the
+target/PDF/weight/selection chain without changing normal rendering or the estimator.
+
+`SpatialGrisWeight` evaluates
+`shiftedTargetDensity * sourceFinalWeight * min(sourceM, maxSourceM) * primarySampleJacobian`.
+The PSS Jacobian is part of the reservoir merge weight and is never applied a second time to the
+shifted radiance. This contract is tested on the CPU, including empty/zero-target, source-count
+clamping, invalid-term, and overflow cases. The CPU reference mirrors the receiver-side diffuse
+density sequence used by view 20:
+current/source directional density, technique mass, shifted receiver PDF, and the resulting PSS
+Jacobian. Invalid or non-positive terms are rejected before they can form a GRIS weight.
+The provisional tail policy is `finite-unclamped`: every finite positive GRIS weight remains
+eligible, while only the existing source-count limit is applied. No Jacobian or merge-weight clamp
+is introduced. View 20 measures the resulting hypothetical selection probability as
+`mergeWeight / (currentWeightSum + mergeWeight)` so decisions can be based on the tail's actual
+effect on reservoir selection rather than on isolated absolute maxima. Runtime validation of this
+distribution and the stochastic selection gate is complete.
+
+View 20 writes an opt-in non-persistent scratch merge into the history
+slot that temporal admission has already consumed. It updates the accumulated weight, effective M,
+selected shifted target, and final W, but the frame still commits the untouched current candidate
+slot. Replay ABI 10 now uses the reserved `reconnectionThroughput.w` bits as a compact mapping
+control: identity is zero and a one-hop diffuse reconnection is one. A source-selected scratch record
+retains the original source seeds/states, stores receiver PDF/throughput in the reconnection lanes,
+and marks the diffuse mapping. Generic identity replay rejects mapped records, and an already mapped
+record cannot be selected as another spatial source; this prevents silent mapping/Jacobian
+composition. The CPU `DiffuseMappingReplay` reference formalizes receiver-aware reconstruction: it
+validates ABI 10,
+mapping kind, diffuse event, receiver PDF, and PSS Jacobian; recomputes shifted RGB from replayed
+source radiance, exact source/receiver throughput, and newly traced transmittance; then compares the
+result with the stored shifted RGB using the seeded-replay tolerance.
+A dedicated view-20-only same-frame GPU pass mirrors that boundary. It replays the stored source
+seed chain through the production path tracer, validates source state and receiver compatibility,
+recomputes geometry/PDF/Jacobian/receiver throughput, re-traces shifted visibility, and compares the
+reconstructed shifted sample with the non-persistent scratch record. Nine mutually exclusive
+counters expose accepted and ABI/source/receiver/geometry/PDF/visibility/radiance rejects. This pass
+does not modify the diagnostic image, reservoirs, committed history, or the active estimator. Runtime
+validation accepted 201419 of 201425 mapped records (99.997021%): every frame preserved exact
+category accounting, all ABI/source/receiver/geometry/visibility/radiance rejects stayed zero, and
+six isolated PDF-tail records were safely rejected without relaxing replay tolerance.
+
+The shader-independent `PersistentDiffuseRemap` reference defines the next history boundary. The
+original source remains the canonical replay root, so a cross-frame remap requires valid receiver
+reprojection, a stable source queue root, and exact source replay. The new source-to-current-receiver
+PDF and Jacobian are recomputed directly; the previous receiver's Jacobian is integrity metadata and
+must never be multiplied into the new Jacobian. Current GPU guide/history resources do not yet
+reproject that spatial source root, so mapped records remain non-persistent until this requirement is
+implemented and diagnosed.
 
 ## Delivery Phases
 

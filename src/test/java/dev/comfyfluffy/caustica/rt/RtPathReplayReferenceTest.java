@@ -74,7 +74,7 @@ final class RtPathReplayReferenceTest {
 
     @Test
     void mismatchBitsRemainStableAndIndependent() {
-        assertEquals(8, RtPathReplayReference.REPLAY_VERSION);
+        assertEquals(10, RtPathReplayReference.REPLAY_VERSION);
         assertEquals(1 << 0, RtPathReplayReference.MISMATCH_EMPTY);
         assertEquals(1 << 8, RtPathReplayReference.MISMATCH_METADATA);
         assertEquals(RtPathReplayReference.MISMATCH_PATH_STATE

@@ -9,6 +9,7 @@ import dev.comfyfluffy.caustica.rt.pipeline.RtPathTemporalPipeline;
 import java.nio.ByteBuffer;
 import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
+import java.util.Arrays;
 import java.util.Locale;
 import org.lwjgl.system.MemoryUtil;
 import org.lwjgl.vulkan.VK10;
@@ -27,6 +28,8 @@ final class RtPathReservoirHistory {
     static final int SPATIAL_DEBUG_VIEW = 17;
     static final int SPATIAL_POLICY_DEBUG_VIEW = 18;
     static final int RECONNECTION_DEBUG_VIEW = 19;
+    static final int SHIFTED_RADIANCE_DEBUG_VIEW = 20;
+    static final int MAPPING_REPLAY_PASS_FLAG = 1 << 5;
     static final int SPATIAL_DIAGNOSTIC_CATEGORY_COUNT = 9;
     static final int SPATIAL_DIAGNOSTIC_STRICT_PAIR_CURSOR_INDEX =
             SPATIAL_DIAGNOSTIC_CATEGORY_COUNT;
@@ -34,15 +37,44 @@ final class RtPathReservoirHistory {
     static final int SPATIAL_DIAGNOSTIC_TOPOLOGY_RESCUED_INDEX = 11;
     static final int SPATIAL_DIAGNOSTIC_RESCUED_PAIR_CURSOR_INDEX = 12;
     static final int SPATIAL_DIAGNOSTIC_COUNTER_COUNT = 13;
+    static final int SHIFTED_DIAGNOSTIC_STATE_COUNT = 15;
+    static final int SHIFTED_DIAGNOSTIC_SELECTION_ELIGIBLE_INDEX = 15;
+    static final int SHIFTED_DIAGNOSTIC_SOURCE_SELECTED_INDEX = 16;
+    static final int SHIFTED_DIAGNOSTIC_SCRATCH_WRITTEN_INDEX = 17;
+    static final int SHIFTED_DIAGNOSTIC_SCRATCH_SELECTED_INDEX = 18;
+    static final int SHIFTED_DIAGNOSTIC_SCRATCH_INVALID_INDEX = 19;
+    static final int SHIFTED_DIAGNOSTIC_PAIR_CURSOR_INDEX = 20;
+    static final int MAPPING_REPLAY_ELIGIBLE_INDEX = 21;
+    static final int MAPPING_REPLAY_ACCEPTED_INDEX = 22;
+    static final int MAPPING_REPLAY_ABI_REJECT_INDEX = 23;
+    static final int MAPPING_REPLAY_SOURCE_REJECT_INDEX = 24;
+    static final int MAPPING_REPLAY_RECEIVER_REJECT_INDEX = 25;
+    static final int MAPPING_REPLAY_GEOMETRY_REJECT_INDEX = 26;
+    static final int MAPPING_REPLAY_PDF_REJECT_INDEX = 27;
+    static final int MAPPING_REPLAY_VISIBILITY_REJECT_INDEX = 28;
+    static final int MAPPING_REPLAY_RADIANCE_REJECT_INDEX = 29;
+    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 30;
     static final int SPATIAL_DIAGNOSTIC_COUNTER_BYTES =
-            SPATIAL_DIAGNOSTIC_COUNTER_COUNT * Integer.BYTES;
+            SHIFTED_DIAGNOSTIC_COUNTER_COUNT * Integer.BYTES;
     static final int SPATIAL_DIAGNOSTIC_PAIR_CAPACITY = 4096;
+    static final int SHIFTED_DIAGNOSTIC_DENSITY_PAIR_OFFSET =
+            SPATIAL_DIAGNOSTIC_PAIR_CAPACITY;
+    static final int SHIFTED_DIAGNOSTIC_MERGE_PAIR_OFFSET =
+            SPATIAL_DIAGNOSTIC_PAIR_CAPACITY * 2;
+    static final int SHIFTED_DIAGNOSTIC_SELECTION_PAIR_OFFSET =
+            SPATIAL_DIAGNOSTIC_PAIR_CAPACITY * 3;
+    static final int SHIFTED_DIAGNOSTIC_PAIR_FLOAT_COUNT =
+            SPATIAL_DIAGNOSTIC_PAIR_CAPACITY * 8;
     static final int SPATIAL_DIAGNOSTIC_PAIR_BYTES =
-            2 * SPATIAL_DIAGNOSTIC_PAIR_CAPACITY * 2 * Float.BYTES;
+            SHIFTED_DIAGNOSTIC_PAIR_FLOAT_COUNT * Float.BYTES;
 
     record Frame(long generation, int writeSlot, int previousSlot, boolean previousAvailable) {
         int finalSlot() {
             return writeSlot;
+        }
+
+        int scratchSlot() {
+            return 1 - writeSlot;
         }
     }
 
@@ -141,6 +173,26 @@ final class RtPathReservoirHistory {
         spatialDiagnosticViewPending = counterDiagnostics ? spatialDiagnosticView : 0;
     }
 
+    void beginShiftedRadianceDiagnostics(VkCommandBuffer cmd) {
+        if (spatialDiagnosticCounters == null) {
+            throw new IllegalStateException("Shifted-radiance diagnostics used before allocation");
+        }
+        VK10.vkCmdFillBuffer(cmd, spatialDiagnosticCounters.handle, 0L,
+                spatialDiagnosticCounters.size, 0);
+        try (var stack = org.lwjgl.system.MemoryStack.stackPush()) {
+            VulkanCommandEncoder.memoryBarrier(cmd, stack);
+        }
+        spatialDiagnosticViewPending = SHIFTED_RADIANCE_DEBUG_VIEW;
+    }
+
+    long shiftedDiagnosticCounterAddress() {
+        return spatialDiagnosticCounters == null ? 0L : spatialDiagnosticCounters.deviceAddress;
+    }
+
+    long shiftedDiagnosticPairAddress() {
+        return spatialDiagnosticPairs == null ? 0L : spatialDiagnosticPairs.deviceAddress;
+    }
+
     void pollSpatialDiagnosticCounters(RtContext ctx, long frameIndex) {
         if (spatialDiagnosticViewPending == 0
                 || frameIndex == 0L || frameIndex % 60L != 0L) {
@@ -149,6 +201,207 @@ final class RtPathReservoirHistory {
         ctx.waitIdle();
         spatialDiagnosticCounters.invalidate();
         spatialDiagnosticPairs.invalidate();
+        if (spatialDiagnosticViewPending == SHIFTED_RADIANCE_DEBUG_VIEW) {
+            IntBuffer counters = MemoryUtil.memIntBuffer(spatialDiagnosticCounters.mapped,
+                    SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
+            long[] values = new long[SHIFTED_DIAGNOSTIC_STATE_COUNT];
+            long total = 0L;
+            for (int index = 0; index < values.length; index++) {
+                values[index] = Integer.toUnsignedLong(counters.get(index));
+                total += values[index];
+            }
+            long sampleAttempts = Integer.toUnsignedLong(
+                    counters.get(SHIFTED_DIAGNOSTIC_PAIR_CURSOR_INDEX));
+            long selectionEligible = Integer.toUnsignedLong(
+                    counters.get(SHIFTED_DIAGNOSTIC_SELECTION_ELIGIBLE_INDEX));
+            long sourceSelected = Integer.toUnsignedLong(
+                    counters.get(SHIFTED_DIAGNOSTIC_SOURCE_SELECTED_INDEX));
+            long scratchWritten = Integer.toUnsignedLong(
+                    counters.get(SHIFTED_DIAGNOSTIC_SCRATCH_WRITTEN_INDEX));
+            long scratchSelected = Integer.toUnsignedLong(
+                    counters.get(SHIFTED_DIAGNOSTIC_SCRATCH_SELECTED_INDEX));
+            long scratchInvalid = Integer.toUnsignedLong(
+                    counters.get(SHIFTED_DIAGNOSTIC_SCRATCH_INVALID_INDEX));
+            long mappingEligible = Integer.toUnsignedLong(
+                    counters.get(MAPPING_REPLAY_ELIGIBLE_INDEX));
+            long mappingAccepted = Integer.toUnsignedLong(
+                    counters.get(MAPPING_REPLAY_ACCEPTED_INDEX));
+            long mappingAbiReject = Integer.toUnsignedLong(
+                    counters.get(MAPPING_REPLAY_ABI_REJECT_INDEX));
+            long mappingSourceReject = Integer.toUnsignedLong(
+                    counters.get(MAPPING_REPLAY_SOURCE_REJECT_INDEX));
+            long mappingReceiverReject = Integer.toUnsignedLong(
+                    counters.get(MAPPING_REPLAY_RECEIVER_REJECT_INDEX));
+            long mappingGeometryReject = Integer.toUnsignedLong(
+                    counters.get(MAPPING_REPLAY_GEOMETRY_REJECT_INDEX));
+            long mappingPdfReject = Integer.toUnsignedLong(
+                    counters.get(MAPPING_REPLAY_PDF_REJECT_INDEX));
+            long mappingVisibilityReject = Integer.toUnsignedLong(
+                    counters.get(MAPPING_REPLAY_VISIBILITY_REJECT_INDEX));
+            long mappingRadianceReject = Integer.toUnsignedLong(
+                    counters.get(MAPPING_REPLAY_RADIANCE_REJECT_INDEX));
+            int capturedSamples = (int) Math.min(sampleAttempts, SPATIAL_DIAGNOSTIC_PAIR_CAPACITY);
+            FloatBuffer samples = MemoryUtil.memFloatBuffer(
+                    spatialDiagnosticPairs.mapped, SHIFTED_DIAGNOSTIC_PAIR_FLOAT_COUNT);
+            double shiftedSum = 0.0;
+            double shiftedLogSum = 0.0;
+            double sourceSum = 0.0;
+            double receiverPdfSum = 0.0;
+            double pssJacobianSum = 0.0;
+            double receiverPdfMin = Double.POSITIVE_INFINITY;
+            double receiverPdfMax = 0.0;
+            double pssJacobianMin = Double.POSITIVE_INFINITY;
+            double pssJacobianMax = 0.0;
+            double[] receiverPdfSamples = new double[capturedSamples];
+            double[] pssJacobianSamples = new double[capturedSamples];
+            double[] sourceFinalWeightSamples = new double[capturedSamples];
+            double[] mergeWeightSamples = new double[capturedSamples];
+            double[] currentWeightSumSamples = new double[capturedSamples];
+            double[] selectionProbabilitySamples = new double[capturedSamples];
+            double shiftedMin = Double.POSITIVE_INFINITY;
+            double shiftedMax = 0.0;
+            int finiteSamples = 0;
+            for (int sample = 0; sample < capturedSamples; sample++) {
+                float shifted = samples.get(sample * 2);
+                float source = samples.get(sample * 2 + 1);
+                int densityOffset = SHIFTED_DIAGNOSTIC_DENSITY_PAIR_OFFSET * 2 + sample * 2;
+                float receiverPdf = samples.get(densityOffset);
+                float pssJacobian = samples.get(densityOffset + 1);
+                int mergeOffset = SHIFTED_DIAGNOSTIC_MERGE_PAIR_OFFSET * 2 + sample * 2;
+                float sourceFinalWeight = samples.get(mergeOffset);
+                float mergeWeight = samples.get(mergeOffset + 1);
+                int selectionOffset = SHIFTED_DIAGNOSTIC_SELECTION_PAIR_OFFSET * 2 + sample * 2;
+                float currentWeightSum = samples.get(selectionOffset);
+                float selectionProbability = samples.get(selectionOffset + 1);
+                if (!Float.isFinite(shifted) || !Float.isFinite(source)
+                        || shifted < 0.0f || source < 0.0f
+                        || !Float.isFinite(receiverPdf) || receiverPdf <= 0.0f
+                        || !Float.isFinite(pssJacobian) || pssJacobian <= 0.0f
+                        || !Float.isFinite(sourceFinalWeight) || sourceFinalWeight <= 0.0f
+                        || !Float.isFinite(mergeWeight) || mergeWeight < 0.0f
+                        || !Float.isFinite(currentWeightSum) || currentWeightSum < 0.0f
+                        || !Float.isFinite(selectionProbability) || selectionProbability < 0.0f
+                        || selectionProbability > 1.0f) {
+                    continue;
+                }
+                receiverPdfSamples[finiteSamples] = receiverPdf;
+                pssJacobianSamples[finiteSamples] = pssJacobian;
+                sourceFinalWeightSamples[finiteSamples] = sourceFinalWeight;
+                mergeWeightSamples[finiteSamples] = mergeWeight;
+                currentWeightSumSamples[finiteSamples] = currentWeightSum;
+                selectionProbabilitySamples[finiteSamples] = selectionProbability;
+                finiteSamples++;
+                shiftedSum += shifted;
+                shiftedLogSum += Math.log1p(shifted);
+                sourceSum += source;
+                receiverPdfSum += receiverPdf;
+                pssJacobianSum += pssJacobian;
+                receiverPdfMin = Math.min(receiverPdfMin, receiverPdf);
+                receiverPdfMax = Math.max(receiverPdfMax, receiverPdf);
+                pssJacobianMin = Math.min(pssJacobianMin, pssJacobian);
+                pssJacobianMax = Math.max(pssJacobianMax, pssJacobian);
+                shiftedMin = Math.min(shiftedMin, shifted);
+                shiftedMax = Math.max(shiftedMax, shifted);
+            }
+            Arrays.sort(receiverPdfSamples, 0, finiteSamples);
+            Arrays.sort(pssJacobianSamples, 0, finiteSamples);
+            Arrays.sort(sourceFinalWeightSamples, 0, finiteSamples);
+            Arrays.sort(mergeWeightSamples, 0, finiteSamples);
+            Arrays.sort(currentWeightSumSamples, 0, finiteSamples);
+            Arrays.sort(selectionProbabilitySamples, 0, finiteSamples);
+            double invSamples = finiteSamples == 0 ? 0.0 : 1.0 / finiteSamples;
+            CausticaMod.LOGGER.info(
+                    "RT path shifted diagnostics: total={}, empty={} ({}%), noPair={} ({}%), "
+                            + "edgeMissing={} ({}%), strictReject={} ({}%), unsupported={} ({}%), "
+                            + "geometry={} ({}%), pdf={} ({}%), mass={} ({}%), jacobian={} ({}%), "
+                            + "occluded={} ({}%), spectral={} ({}%), zero={} ({}%), positive={} ({}%), "
+                            + "arithmetic={} ({}%), "
+                            + "overflow={} ({}%), samples={}/{}, finiteSamples={}, "
+                            + "shiftedTarget[min={},max={},mean={},logMean={}], sourceTargetMean={}, "
+                            + "receiverPdf[min={},p50={},p95={},p99={},max={},mean={}], "
+                            + "pssJacobian[min={},p50={},p95={},p99={},max={},mean={}], "
+                            + "sourceFinalWeight[p50={},p95={},p99={}], "
+                            + "mergeWeight[p50={},p95={},p99={}], "
+                            + "currentWeightSum[p50={},p95={},p99={}], "
+                            + "selectionProbability[p50={},p95={},p99={}], "
+                            + "sourceSelected={}/{} ({}%), "
+                            + "scratch[written={},selected={},invalid={}], "
+                            + "mappingReplay[eligible={},accepted={},abi={},source={},receiver={},"
+                            + "geometry={},pdf={},visibility={},radiance={}]",
+                    total,
+                    values[0], percent(values[0], total),
+                    values[1], percent(values[1], total),
+                    values[2], percent(values[2], total),
+                    values[3], percent(values[3], total),
+                    values[4], percent(values[4], total),
+                    values[5], percent(values[5], total),
+                    values[6], percent(values[6], total),
+                    values[7], percent(values[7], total),
+                    values[8], percent(values[8], total),
+                    values[9], percent(values[9], total),
+                    values[10], percent(values[10], total),
+                    values[11], percent(values[11], total),
+                    values[12], percent(values[12], total),
+                    values[13], percent(values[13], total),
+                    values[14], percent(values[14], total),
+                    capturedSamples, sampleAttempts, finiteSamples,
+                    finiteSamples == 0 ? "n/a" : metric(shiftedMin),
+                    finiteSamples == 0 ? "n/a" : metric(shiftedMax),
+                    finiteSamples == 0 ? "n/a" : metric(shiftedSum * invSamples),
+                    finiteSamples == 0 ? "n/a" : metric(shiftedLogSum * invSamples),
+                    finiteSamples == 0 ? "n/a" : metric(sourceSum * invSamples),
+                    finiteSamples == 0 ? "n/a" : metric(receiverPdfMin),
+                    finiteSamples == 0 ? "n/a" : metric(sortedPercentile(
+                            receiverPdfSamples, finiteSamples, 0.50)),
+                    finiteSamples == 0 ? "n/a" : metric(sortedPercentile(
+                            receiverPdfSamples, finiteSamples, 0.95)),
+                    finiteSamples == 0 ? "n/a" : metric(sortedPercentile(
+                            receiverPdfSamples, finiteSamples, 0.99)),
+                    finiteSamples == 0 ? "n/a" : metric(receiverPdfMax),
+                    finiteSamples == 0 ? "n/a" : metric(receiverPdfSum * invSamples),
+                    finiteSamples == 0 ? "n/a" : metric(pssJacobianMin),
+                    finiteSamples == 0 ? "n/a" : metric(sortedPercentile(
+                            pssJacobianSamples, finiteSamples, 0.50)),
+                    finiteSamples == 0 ? "n/a" : metric(sortedPercentile(
+                            pssJacobianSamples, finiteSamples, 0.95)),
+                    finiteSamples == 0 ? "n/a" : metric(sortedPercentile(
+                            pssJacobianSamples, finiteSamples, 0.99)),
+                    finiteSamples == 0 ? "n/a" : metric(pssJacobianMax),
+                    finiteSamples == 0 ? "n/a" : metric(pssJacobianSum * invSamples),
+                    finiteSamples == 0 ? "n/a" : metric(sortedPercentile(
+                            sourceFinalWeightSamples, finiteSamples, 0.50)),
+                    finiteSamples == 0 ? "n/a" : metric(sortedPercentile(
+                            sourceFinalWeightSamples, finiteSamples, 0.95)),
+                    finiteSamples == 0 ? "n/a" : metric(sortedPercentile(
+                            sourceFinalWeightSamples, finiteSamples, 0.99)),
+                    finiteSamples == 0 ? "n/a" : metric(sortedPercentile(
+                            mergeWeightSamples, finiteSamples, 0.50)),
+                    finiteSamples == 0 ? "n/a" : metric(sortedPercentile(
+                            mergeWeightSamples, finiteSamples, 0.95)),
+                    finiteSamples == 0 ? "n/a" : metric(sortedPercentile(
+                            mergeWeightSamples, finiteSamples, 0.99)),
+                    finiteSamples == 0 ? "n/a" : metric(sortedPercentile(
+                            currentWeightSumSamples, finiteSamples, 0.50)),
+                    finiteSamples == 0 ? "n/a" : metric(sortedPercentile(
+                            currentWeightSumSamples, finiteSamples, 0.95)),
+                    finiteSamples == 0 ? "n/a" : metric(sortedPercentile(
+                            currentWeightSumSamples, finiteSamples, 0.99)),
+                    finiteSamples == 0 ? "n/a" : metric(sortedPercentile(
+                            selectionProbabilitySamples, finiteSamples, 0.50)),
+                    finiteSamples == 0 ? "n/a" : metric(sortedPercentile(
+                            selectionProbabilitySamples, finiteSamples, 0.95)),
+                    finiteSamples == 0 ? "n/a" : metric(sortedPercentile(
+                            selectionProbabilitySamples, finiteSamples, 0.99)),
+                    sourceSelected, selectionEligible,
+                    percent(sourceSelected, selectionEligible),
+                    scratchWritten, scratchSelected, scratchInvalid,
+                    mappingEligible, mappingAccepted, mappingAbiReject,
+                    mappingSourceReject, mappingReceiverReject,
+                    mappingGeometryReject, mappingPdfReject,
+                    mappingVisibilityReject, mappingRadianceReject);
+            spatialDiagnosticViewPending = 0;
+            return;
+        }
         IntBuffer counters = MemoryUtil.memIntBuffer(spatialDiagnosticCounters.mapped,
                 SPATIAL_DIAGNOSTIC_COUNTER_COUNT);
         long[] values = new long[SPATIAL_DIAGNOSTIC_CATEGORY_COUNT];
@@ -231,6 +484,10 @@ final class RtPathReservoirHistory {
         return frame.previousAvailable() ? slot(frame.previousSlot()) : null;
     }
 
+    RtBuffer scratchBuffer(Frame frame) {
+        return slot(frame.scratchSlot());
+    }
+
     long allocatedBytes() {
         return ready() ? Math.multiplyExact(bytesPerSlot(width, height), SLOT_COUNT) : 0L;
     }
@@ -282,6 +539,18 @@ final class RtPathReservoirHistory {
         return Double.isFinite(value)
                 ? String.format(Locale.ROOT, "%.4f", value)
                 : "n/a";
+    }
+
+    static double sortedPercentile(double[] sortedValues, int count, double quantile) {
+        if (sortedValues == null || count <= 0 || count > sortedValues.length
+                || !Double.isFinite(quantile) || quantile < 0.0 || quantile > 1.0) {
+            throw new IllegalArgumentException("invalid sorted percentile input");
+        }
+        double position = quantile * (count - 1);
+        int lower = (int) Math.floor(position);
+        int upper = (int) Math.ceil(position);
+        double fraction = position - lower;
+        return sortedValues[lower] * (1.0 - fraction) + sortedValues[upper] * fraction;
     }
 
     private static void addPairs(

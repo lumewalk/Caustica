@@ -68,6 +68,11 @@ public PathTraceResult tracePathSeeded(PathSegment seg, uint2 pix, bool captureM
     // Delta reflection/refraction use a discrete measure and intentionally leave this at zero.
     float reconnectionSourcePdf = 0.0;
     uint reconnectionEventKind = PATH_RECONNECTION_EVENT_NONE;
+    float3 reconnectionThroughput = float3(0.0);
+    // A second-hit reconnection cannot shift an endpoint that was already gathered at hit 0.
+    // View 20 therefore captures only endpoints downstream of the first selected edge. Other
+    // diagnostics retain the general canonical contract, including primary emissive endpoints.
+    bool requireReconnectionEndpoint = pc.debugView == PATH_SHIFTED_RADIANCE_DEBUG_VIEW;
     int maxBounces = int(worldPush.maxBounces);
     int rrStart = maxBounces <= 3 ? 1 : 2;
     // RIS emitter NEE: direct lighting from block emitters is active when lights are published and the
@@ -115,7 +120,7 @@ public PathTraceResult tracePathSeeded(PathSegment seg, uint2 pix, bool captureM
             // packed show-celestial flag decides whether this path segment may see the bright disc.
             float3 sky = payload.albedo;
             L += throughput * sky; // escaped to sky
-            if (!canonicalValid) {
+            if (!canonicalValid && (!requireReconnectionEndpoint || indirectDepth > 1)) {
                 canonicalRadiance = throughput * sky;
                 canonicalValid = true;
             }
@@ -149,6 +154,7 @@ public PathTraceResult tracePathSeeded(PathSegment seg, uint2 pix, bool captureM
         if (captureMetadata) {
             topologyKey = pathTopologyStep(topologyKey,
                     (material & 0xFFu) | ((uint(hitDepth) & 0xFFu) << 8u));
+            topologyKey = pathTopologyStep(topologyKey, payloadMaterialKey());
         }
         // The current frame's direct candidates are generated after this path trace because they need
         // its receiver guides. Never inspect directReservoirAddr here: before candidate generation it
@@ -217,6 +223,7 @@ public PathTraceResult tracePathSeeded(PathSegment seg, uint2 pix, bool captureM
                 transportMask |= PATH_TRANSPORT_DELTA;
                 if (captureMetadata && hitDepth == 0) {
                     reconnectionEventKind = PATH_RECONNECTION_EVENT_DELTA;
+                    reconnectionThroughput = float3(1.0);
                 }
                 if (captureMetadata) topologyKey = pathTopologyStep(topologyKey, 0xD101u);
                 rd = reflect(rd, n);
@@ -232,6 +239,7 @@ public PathTraceResult tracePathSeeded(PathSegment seg, uint2 pix, bool captureM
                 transportMask |= PATH_TRANSPORT_TRANSMISSION;
                 if (captureMetadata && hitDepth == 0) {
                     reconnectionEventKind = PATH_RECONNECTION_EVENT_TRANSMISSION;
+                    reconnectionThroughput = float3(1.0);
                 }
                 if (captureMetadata) topologyKey = pathTopologyStep(topologyKey, 0xD102u);
                 rd = normalize(transmittedDir);
@@ -319,6 +327,7 @@ public PathTraceResult tracePathSeeded(PathSegment seg, uint2 pix, bool captureM
             if (captureMetadata && hitDepth == 0) {
                 reconnectionSourcePdf = directionalPdf;
                 reconnectionEventKind = PATH_RECONNECTION_EVENT_DIFFUSE;
+                reconnectionThroughput = albedo;
             }
             transportMask |= PATH_TRANSPORT_DIFFUSE;
             if (captureMetadata) topologyKey = pathTopologyStep(topologyKey, 0xC101u);
@@ -354,7 +363,8 @@ public PathTraceResult tracePathSeeded(PathSegment seg, uint2 pix, bool captureM
         // Emission is already the full HDR strength (EMISSIVE_STRENGTH baseline * any override
         // multiplier baked in Java at material-compile time — see MaterialHeader.features packing).
         float emission = payloadEmission();
-        if (!canonicalValid && emission > 0.0) {
+        if (!canonicalValid && emission > 0.0
+                && (!requireReconnectionEndpoint || hitDepth >= 1)) {
             canonicalRadiance = throughput * albedo * emission;
             canonicalValid = true;
         }
@@ -462,10 +472,13 @@ public PathTraceResult tracePathSeeded(PathSegment seg, uint2 pix, bool captureM
                     pathAccumulateProposal(canonicalContinuationProposalPdf,
                             canonicalContinuationProposalEvents, max(ps, 1.0e-20));
                 }
-                throughput *= fresnelSchlick(clamp(dot(n, v), 0.0, 1.0), F0) / ps;
+                float3 eventThroughput =
+                        fresnelSchlick(clamp(dot(n, v), 0.0, 1.0), F0) / ps;
+                throughput *= eventThroughput;
                 transportMask |= PATH_TRANSPORT_DELTA;
                 if (captureMetadata && hitDepth == 0) {
                     reconnectionEventKind = PATH_RECONNECTION_EVENT_DELTA;
+                    reconnectionThroughput = eventThroughput;
                 }
                 if (captureMetadata) topologyKey = pathTopologyStep(topologyKey, 0xB101u);
             } else {
@@ -490,8 +503,12 @@ public PathTraceResult tracePathSeeded(PathSegment seg, uint2 pix, bool captureM
                 }
                 // VNDF + separable Smith ⇒ weight = F · G2/G1(v) = F · G1(l); divide by the lobe pdf ps.
                 float3 F = fresnelSchlick(max(0.0, dot(v, h)), F0);
-                throughput *= F * ggxG1(ndl2, rough) / ps;
+                float3 eventThroughput = F * ggxG1(ndl2, rough) / ps;
+                throughput *= eventThroughput;
                 transportMask |= PATH_TRANSPORT_GLOSSY;
+                if (captureMetadata && hitDepth == 0) {
+                    reconnectionThroughput = eventThroughput;
+                }
                 if (captureMetadata) topologyKey = pathTopologyStep(topologyKey, 0xB102u);
                 rayConeSpread = max(rayConeSpread, rough * RAY_CONE_GLOSSY_SPREAD_SCALE);
             }
@@ -499,7 +516,8 @@ public PathTraceResult tracePathSeeded(PathSegment seg, uint2 pix, bool captureM
             rd = l;
             showCelestial = true; // specular lobe: this ray is a (glossy) mirror — show the disc
         } else {
-            throughput *= diffAlb / (1.0 - ps);
+            float3 eventThroughput = diffAlb / (1.0 - ps);
+            throughput *= eventThroughput;
             ro = p;
             rd = cosineDir(n, seed);
             float directionalPdf = max((1.0 - ps) * abs(dot(n, rd)) * INV_PI, 1.0e-20);
@@ -513,6 +531,7 @@ public PathTraceResult tracePathSeeded(PathSegment seg, uint2 pix, bool captureM
             if (captureMetadata && hitDepth == 0) {
                 reconnectionSourcePdf = directionalPdf;
                 reconnectionEventKind = PATH_RECONNECTION_EVENT_DIFFUSE;
+                reconnectionThroughput = eventThroughput;
             }
             transportMask |= PATH_TRANSPORT_DIFFUSE;
             if (captureMetadata) topologyKey = pathTopologyStep(topologyKey, 0xB103u);
@@ -567,6 +586,8 @@ public PathTraceResult tracePathSeeded(PathSegment seg, uint2 pix, bool captureM
     result.reconnectionSourcePdf = reconnectionValid ? reconnectionSourcePdf : 0.0;
     result.reconnectionEventKind = reconnectionValid
             ? reconnectionEventKind : PATH_RECONNECTION_EVENT_NONE;
+    result.reconnectionThroughput = reconnectionValid
+            ? reconnectionThroughput : float3(0.0);
     return result;
 }
 
@@ -582,9 +603,272 @@ public PathTraceResult tracePath(PathSegment seg, uint2 pix, uint sampleIndex, b
     return tracePathSeeded(seg, pix, captureMetadata, replaySeed, proposalReplaySeed);
 }
 
+static float pathMappingDiffuseDensity(float3 normal, float3 edge) {
+    float edgeLength = length(edge);
+    if (edgeLength <= 1.0e-5) return 0.0;
+    return abs(dot(normal, edge / edgeLength)) * INV_PI;
+}
+
+static float pathMappingThroughputRatio(float sourceThroughput,
+                                        float receiverThroughput) {
+    if (sourceThroughput <= 0.0 || receiverThroughput <= 0.0) return 0.0;
+    return receiverThroughput / sourceThroughput;
+}
+
+// Same-frame validation of the non-persistent ABI-10 scratch mapping. This dispatch runs only after
+// path_shifted_radiance has written the consumed slot. It replays the original source seeds through
+// the production path tracer, reconstructs receiver PDF/Jacobian/visibility/radiance, and records one
+// terminal counter. It never writes either reservoir slot or the output image.
+public void pathMappingReplayValidate() {
+    if (pc.debugView != PATH_SHIFTED_RADIANCE_DEBUG_VIEW
+            || pc.pathReservoirAddr == 0u
+            || pc.pathReservoirPreviousAddr == 0u
+            || pc.pathQueueAddr == 0u
+            || worldPush.pathShiftDiagnosticCounterAddr == 0u) {
+        return;
+    }
+
+    uint2 pixel = DispatchRaysIndex().xy;
+    uint2 dimensions = DispatchRaysDimensions().xy;
+    uint pixelIndex = pixel.y * dimensions.x + pixel.x;
+    DevicePtr<uint> counters =
+            DevicePtr<uint>(worldPush.pathShiftDiagnosticCounterAddr);
+    PathReservoir mapped =
+            ConstPtr<PathReservoir>(pc.pathReservoirPreviousAddr)[pixelIndex];
+    uint mappingControl = asuint(mapped.reconnectionThroughput.w);
+    if ((mappingControl & PATH_MAPPING_KIND_MASK)
+            != PATH_MAPPING_DIFFUSE_RECONNECTION) {
+        return;
+    }
+    InterlockedAdd(counters[PATH_MAPPING_REPLAY_ELIGIBLE], 1u);
+
+    uint pixelCount = dimensions.x * dimensions.y;
+    uint sourceIndex = mapped.identity.y;
+    if (!pathMappingControlValid(mapped)
+            || mapped.replayControl.x != PATH_REPLAY_VERSION
+            || mapped.replayControl.y < 1u
+            || mapped.replayControl.y > MAX_PATH_SEGMENTS
+            || (mapped.replayControl.y < MAX_PATH_SEGMENTS
+                    && any(mapped.replay.zw != uint2(0u)))
+            || asuint(mapped.proposalShift.w) != mapped.replayControl.z
+            || sourceIndex >= pixelCount) {
+        InterlockedAdd(counters[PATH_MAPPING_REPLAY_ABI_REJECT], 1u);
+        return;
+    }
+
+    ConstPtr<PackedPathSegment> queue =
+            ConstPtr<PackedPathSegment>(pc.pathQueueAddr);
+    PathReplayAggregate replay = pathReplayAggregateEmpty();
+    uint expectedSegments = mapped.replayControl.y;
+    uint recordIndex = sourceIndex;
+    uint2 sourcePixel = uint2(
+            sourceIndex % dimensions.x, sourceIndex / dimensions.x);
+    bool chainComplete = true;
+    for (uint leaf = 0u; leaf < MAX_PATH_SEGMENTS; ++leaf) {
+        if (leaf >= expectedSegments || recordIndex == PATH_NO_NEXT) break;
+        PackedPathSegment packed = queue[recordIndex];
+        PathSegment segment = unpackPathSegment(packed);
+        uint replaySeed = leaf == 0u ? mapped.replay.x : mapped.replay.z;
+        uint proposalReplaySeed = leaf == 0u ? mapped.replay.y : mapped.replay.w;
+        PathTraceResult traced = tracePathSeeded(
+                segment, sourcePixel, true, replaySeed, proposalReplaySeed);
+        pathReplayAccumulate(replay, traced, leaf);
+        if (leaf + 1u == expectedSegments) {
+            chainComplete = packed.nextRecord == PATH_NO_NEXT;
+            break;
+        }
+        if (packed.nextRecord == PATH_NO_NEXT) {
+            chainComplete = false;
+            break;
+        }
+        recordIndex = packed.nextRecord;
+    }
+    if (!chainComplete || !pathMappingSourceReplayMatches(mapped, replay)) {
+        InterlockedAdd(counters[PATH_MAPPING_REPLAY_SOURCE_REJECT], 1u);
+        return;
+    }
+
+    int2 receiverTexel = int2(pixel);
+    int2 sourceTexel = int2(sourcePixel);
+    float4 receiverPositionMaterial = gRestirPositionMaterial[receiverTexel];
+    float4 receiverNormalRoughness = gRestirNormalRoughness[receiverTexel];
+    float4 sourcePositionMaterial = gRestirPositionMaterial[sourceTexel];
+    float4 sourceNormalRoughness = gRestirNormalRoughness[sourceTexel];
+    float receiverNormalLength = length(receiverNormalRoughness.xyz);
+    float sourceNormalLength = length(sourceNormalRoughness.xyz);
+    uint receiverMaterialIdentity =
+            uint(max(receiverPositionMaterial.w, 0.0));
+    uint sourceMaterialIdentity = uint(max(sourcePositionMaterial.w, 0.0));
+    uint receiverMaterial = receiverMaterialModel(receiverMaterialIdentity);
+    PathReservoir current =
+            ConstPtr<PathReservoir>(pc.pathReservoirAddr)[pixelIndex];
+    uint currentReconnectionMetadata = asuint(current.reconnectionVertex.w);
+    bool currentEdgeAvailable =
+            (currentReconnectionMetadata & PATH_RECONNECTION_VALID) != 0u
+            && ((currentReconnectionMetadata >> PATH_RECONNECTION_DEPTH_SHIFT)
+                    & 0xFu) == 1u
+            && pathReconnectionEvent(currentReconnectionMetadata)
+                    == PATH_RECONNECTION_EVENT_DIFFUSE
+            && pathMappingControlValid(current)
+            && pathMappingKind(current) == PATH_MAPPING_IDENTITY
+            && current.reconnectionNormalPdf.w > 0.0
+            && all(isfinite(current.reconnectionVertex.xyz))
+            && all(isfinite(current.reconnectionThroughput.xyz));
+    if (receiverNormalLength < 0.5 || sourceNormalLength < 0.5
+            || (receiverMaterial != MATERIAL_OPAQUE
+                    && receiverMaterial != MATERIAL_PARTICLE)
+            || receiverMaterialIdentity != sourceMaterialIdentity
+            || current.weights.y <= 0.0
+            || current.sampleRadianceTarget.w <= 0.0
+            || !currentEdgeAvailable
+            || current.identity.z != mapped.identity.z
+            || pathMetadataDepth(current.identity.w)
+                    != pathMetadataDepth(mapped.identity.w)
+            || pathMetadataTransport(current.identity.w)
+                    != pathMetadataTransport(mapped.identity.w)) {
+        InterlockedAdd(counters[PATH_MAPPING_REPLAY_RECEIVER_REJECT], 1u);
+        return;
+    }
+
+    float3 receiverNormal =
+            receiverNormalRoughness.xyz / receiverNormalLength;
+    float3 sourceNormal = sourceNormalRoughness.xyz / sourceNormalLength;
+    float relativeDepth = abs(length(sourcePositionMaterial.xyz)
+            - length(receiverPositionMaterial.xyz))
+            / max(length(receiverPositionMaterial.xyz), 1.0);
+    float sourceFootprint = max(mapped.proposalShift.z, 1.0e-5);
+    float receiverFootprint = max(current.proposalShift.z, 1.0e-5);
+    if (dot(receiverNormal, sourceNormal) < PATH_SPATIAL_NORMAL_COS
+            || relativeDepth > PATH_SPATIAL_RELATIVE_DEPTH
+            || max(sourceFootprint, receiverFootprint)
+                    / min(sourceFootprint, receiverFootprint)
+                    > PATH_MAX_FOOTPRINT_RATIO) {
+        InterlockedAdd(counters[PATH_MAPPING_REPLAY_RECEIVER_REJECT], 1u);
+        return;
+    }
+
+    float3 sharedVertex = replay.reconnectionVertex;
+    float3 sharedNormalValue = replay.reconnectionNormal;
+    float sharedNormalLength = length(sharedNormalValue);
+    float3 sourceEdge = sharedVertex - sourcePositionMaterial.xyz;
+    float3 receiverEdge = sharedVertex - receiverPositionMaterial.xyz;
+    float sourceDistance = length(sourceEdge);
+    float receiverDistance = length(receiverEdge);
+    if (sharedNormalLength < 0.5 || sourceDistance <= 1.0e-4
+            || receiverDistance <= 1.0e-4) {
+        InterlockedAdd(counters[PATH_MAPPING_REPLAY_GEOMETRY_REJECT], 1u);
+        return;
+    }
+    float3 sharedNormal = sharedNormalValue / sharedNormalLength;
+    float sourceCosine =
+            abs(dot(sharedNormal, -sourceEdge / sourceDistance));
+    float receiverCosine =
+            abs(dot(sharedNormal, receiverEdge / receiverDistance));
+    float geometryJacobian =
+            receiverCosine * sourceDistance * sourceDistance
+            / max(sourceCosine * receiverDistance * receiverDistance, 1.0e-8);
+    if (!isfinite(geometryJacobian) || geometryJacobian <= 0.0) {
+        InterlockedAdd(counters[PATH_MAPPING_REPLAY_GEOMETRY_REJECT], 1u);
+        return;
+    }
+
+    float currentDensity = pathMappingDiffuseDensity(receiverNormal,
+            current.reconnectionVertex.xyz - receiverPositionMaterial.xyz);
+    float shiftedDensity =
+            pathMappingDiffuseDensity(receiverNormal, receiverEdge);
+    float sourceDensity =
+            pathMappingDiffuseDensity(sourceNormal, sourceEdge);
+    float currentTechniqueMass =
+            current.reconnectionNormalPdf.w / currentDensity;
+    float sourceTechniqueMass =
+            replay.reconnectionSourcePdf / sourceDensity;
+    float receiverPdf = currentTechniqueMass * shiftedDensity;
+    float pssJacobian =
+            geometryJacobian * receiverPdf / replay.reconnectionSourcePdf;
+    if (!isfinite(currentDensity) || !isfinite(shiftedDensity)
+            || !isfinite(sourceDensity) || currentDensity <= 0.0
+            || shiftedDensity <= 0.0 || sourceDensity <= 0.0
+            || !isfinite(currentTechniqueMass)
+            || !isfinite(sourceTechniqueMass)
+            || currentTechniqueMass <= 0.0 || sourceTechniqueMass <= 0.0
+            || !isfinite(receiverPdf) || receiverPdf <= 0.0
+            || !isfinite(pssJacobian) || pssJacobian <= 0.0
+            || !pathReplayFloatMatches(receiverPdf,
+                    mapped.reconnectionNormalPdf.w)
+            || !pathReplayFloatMatches(pssJacobian, mapped.proposalShift.y)
+            || !pathReplayColorMatches(current.reconnectionThroughput.xyz,
+                    mapped.reconnectionThroughput.xyz)) {
+        InterlockedAdd(counters[PATH_MAPPING_REPLAY_PDF_REJECT], 1u);
+        return;
+    }
+
+    float side = dot(receiverNormal, receiverEdge) >= 0.0 ? 1.0 : -1.0;
+    float3 shadowOrigin = receiverPositionMaterial.xyz
+            + side * receiverNormal * SURF_BIAS;
+    float3 toShared = sharedVertex - shadowOrigin;
+    float shiftedDistance = length(toShared);
+    if (shiftedDistance <= 1.0e-4) {
+        InterlockedAdd(counters[PATH_MAPPING_REPLAY_GEOMETRY_REJECT], 1u);
+        return;
+    }
+    VisibilityResult shiftedVisibility = visibility(shadowOrigin,
+            toShared / shiftedDistance, shiftedDistance * 0.999);
+    if (max(shiftedVisibility.transmittance.x,
+            max(shiftedVisibility.transmittance.y,
+                    shiftedVisibility.transmittance.z)) <= 0.0) {
+        InterlockedAdd(counters[PATH_MAPPING_REPLAY_VISIBILITY_REJECT], 1u);
+        return;
+    }
+
+    float3 sourceRadiance = replay.canonicalRadiance;
+    float3 sourceThroughput = replay.reconnectionThroughput;
+    float3 receiverThroughput = mapped.reconnectionThroughput.xyz;
+    bool invalidSourceChannel = any(sourceRadiance > float3(0.0)
+            && sourceThroughput <= float3(0.0));
+    float3 throughputRatio = float3(
+            pathMappingThroughputRatio(
+                    sourceThroughput.x, receiverThroughput.x),
+            pathMappingThroughputRatio(
+                    sourceThroughput.y, receiverThroughput.y),
+            pathMappingThroughputRatio(
+                    sourceThroughput.z, receiverThroughput.z));
+    float3 shiftedRadiance = sourceRadiance * throughputRatio
+            * shiftedVisibility.transmittance;
+    float shiftedTarget = pathLuminance(shiftedRadiance);
+    if (invalidSourceChannel
+            || !all(isfinite(sourceRadiance))
+            || !all(isfinite(sourceThroughput))
+            || !all(isfinite(receiverThroughput))
+            || !all(isfinite(throughputRatio))
+            || !all(isfinite(shiftedRadiance))
+            || any(sourceRadiance < float3(0.0))
+            || any(sourceThroughput < float3(0.0))
+            || any(receiverThroughput < float3(0.0))
+            || any(throughputRatio < float3(0.0))
+            || any(shiftedRadiance < float3(0.0))
+            || shiftedTarget <= 0.0
+            || !pathReplayColorMatches(
+                    shiftedRadiance, mapped.sampleRadianceTarget.xyz)
+            || !pathReplayFloatMatches(
+                    shiftedTarget, mapped.sampleRadianceTarget.w)
+            || !pathReplayColorMatches(
+                    shiftedRadiance, mapped.canonicalRadianceTarget.xyz)
+            || !pathReplayFloatMatches(
+                    shiftedTarget, mapped.canonicalRadianceTarget.w)) {
+        InterlockedAdd(counters[PATH_MAPPING_REPLAY_RADIANCE_REJECT], 1u);
+        return;
+    }
+
+    InterlockedAdd(counters[PATH_MAPPING_REPLAY_ACCEPTED], 1u);
+}
+
 [shader("raygeneration")]
 void main() {
     worldPush = ConstPtr<WorldPush>(pc.worldPushAddr)[0];
+    if ((pc.historyFlags & PATH_MAPPING_REPLAY_PASS_FLAG) != 0u) {
+        pathMappingReplayValidate();
+        return;
+    }
     bool pathDebug = pc.debugView == PATH_DEBUG_VIEW;
     bool pathTemporalDebug = pc.debugView == PATH_TEMPORAL_DEBUG_VIEW;
     bool pathReplayDebug = pc.debugView == PATH_REPLAY_DEBUG_VIEW;
@@ -592,11 +876,12 @@ void main() {
     bool pathSpatialDebug = pc.debugView == PATH_SPATIAL_DEBUG_VIEW;
     bool pathSpatialPolicyDebug = pc.debugView == PATH_SPATIAL_POLICY_DEBUG_VIEW;
     bool pathReconnectionDebug = pc.debugView == PATH_RECONNECTION_DEBUG_VIEW;
+    bool pathShiftedRadianceDebug = pc.debugView == PATH_SHIFTED_RADIANCE_DEBUG_VIEW;
     bool canonicalMode = (pc.historyFlags & PATH_CANONICAL_MODE_FLAG) != 0u;
     bool pathCapture = (pc.historyFlags & 4u) != 0u && pc.pathReservoirAddr != 0;
     if (pc.debugView != 0u && !pathDebug && !pathTemporalDebug && !pathReplayDebug
             && !pathTemporalMergeDebug && !pathSpatialDebug && !pathSpatialPolicyDebug
-            && !pathReconnectionDebug) {
+            && !pathReconnectionDebug && !pathShiftedRadianceDebug) {
         return; // pass A owns guide visualization output
     }
     uint2 dispatchIndex = DispatchRaysIndex().xy;
@@ -605,7 +890,8 @@ void main() {
     uint spp = max(worldPush.spp, 1u);
     uint pixelIndex = dispatchIndex.y * dimensions.x + dispatchIndex.x;
     if ((pathDebug || pathTemporalDebug || pathReplayDebug || pathTemporalMergeDebug
-            || pathSpatialDebug || pathSpatialPolicyDebug || pathReconnectionDebug)
+            || pathSpatialDebug || pathSpatialPolicyDebug || pathReconnectionDebug
+            || pathShiftedRadianceDebug)
             && !pathCapture) {
         outImage[pix] = float4(1.0, 0.0, 1.0, 1.0); // setting disabled / storage unavailable
         return;
@@ -660,6 +946,7 @@ void main() {
         float3 sampleReconnectionNormal = float3(0.0);
         float sampleReconnectionSourcePdf = 0.0;
         uint sampleReconnectionEventKind = PATH_RECONNECTION_EVENT_NONE;
+        float3 sampleReconnectionThroughput = float3(0.0);
         uint recordIndex = pixelIndex;
         for (uint leaf = 0u; leaf < MAX_PATH_SEGMENTS; ++leaf) {
             PackedPathSegment packed = queue[recordIndex];
@@ -702,6 +989,7 @@ void main() {
                 sampleReconnectionNormal = traced.reconnectionNormal;
                 sampleReconnectionSourcePdf = traced.reconnectionSourcePdf;
                 sampleReconnectionEventKind = traced.reconnectionEventKind;
+                sampleReconnectionThroughput = traced.reconnectionThroughput;
             }
             if (packed.nextRecord == PATH_NO_NEXT) {
                 break;
@@ -737,13 +1025,14 @@ void main() {
         candidate.reconnectionNormal = sampleReconnectionNormal;
         candidate.reconnectionSourcePdf = sampleReconnectionSourcePdf;
         candidate.reconnectionEventKind = sampleReconnectionEventKind;
+        candidate.reconnectionThroughput = sampleReconnectionThroughput;
         uint sampleId = pathHash(worldPush.frameIndex * 2654435761u
                 ^ pixelIndex * 2246822519u ^ s * 3266489917u);
         uint canonicalStatus = pathReservoirUpdate(pathReservoir, candidate, sampleId, pixelIndex,
                 pc.historyGeneration, selectionSeed, canonicalMode);
         if (canonicalMode) {
             // Averaging categorical colors across SPP exposes the local admission ratio without
-            // allocating another persistent buffer or changing the 160-byte PathReservoir ABI.
+            // allocating another persistent buffer or changing the PathReservoir ABI.
             canonicalDebugColor += pathCanonicalCandidateDebugColor(canonicalStatus);
         }
     }

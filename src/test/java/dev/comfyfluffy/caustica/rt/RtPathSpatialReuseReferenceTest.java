@@ -93,6 +93,78 @@ final class RtPathSpatialReuseReferenceTest {
     }
 
     @Test
+    void spatialGrisWeightUsesShiftedTargetAndPssJacobianOnce() {
+        var weight = new RtPathSpatialReuseReference.SpatialGrisWeight(
+                3.0, 2.0, 12.0, 8.0, 0.25);
+        assertEquals(8.0, weight.clampedSourceCount(), 1.0e-12);
+        assertEquals(12.0, weight.mergeWeight(), 1.0e-12);
+        assertEquals(0.75, weight.selectionProbability(4.0), 1.0e-12);
+        assertTrue(weight.selectsSource(4.0, 0.74));
+        assertFalse(weight.selectsSource(4.0, 0.75));
+        var selected = weight.scratchMerge(4.0, 2.0, 5.0, 0.74);
+        assertEquals(16.0, selected.weightSum(), 1.0e-12);
+        assertEquals(10.0, selected.effectiveCount(), 1.0e-12);
+        assertEquals(16.0 / 30.0, selected.finalWeight(), 1.0e-12);
+        assertTrue(selected.sourceSelected());
+        var retained = weight.scratchMerge(4.0, 2.0, 5.0, 0.75);
+        assertEquals(16.0 / 50.0, retained.finalWeight(), 1.0e-12);
+        assertFalse(retained.sourceSelected());
+    }
+
+    @Test
+    void spatialGrisWeightKeepsEmptyOrZeroTargetMergesAtZero() {
+        assertEquals(0.0, new RtPathSpatialReuseReference.SpatialGrisWeight(
+                0.0, 2.0, 1.0, 8.0, 1.0).mergeWeight(), 1.0e-12);
+        assertEquals(0.0, new RtPathSpatialReuseReference.SpatialGrisWeight(
+                3.0, 2.0, 0.0, 8.0, 1.0).mergeWeight(), 1.0e-12);
+    }
+
+    @Test
+    void spatialGrisWeightRejectsInvalidOrOverflowingTerms() {
+        assertThrows(IllegalArgumentException.class,
+                () -> new RtPathSpatialReuseReference.SpatialGrisWeight(
+                        1.0, 1.0, 1.0, 0.0, 1.0));
+        assertThrows(IllegalArgumentException.class,
+                () -> new RtPathSpatialReuseReference.SpatialGrisWeight(
+                        1.0, 1.0, 1.0, 1.0, Double.NaN));
+        assertThrows(IllegalArgumentException.class,
+                () -> new RtPathSpatialReuseReference.SpatialGrisWeight(
+                Double.MAX_VALUE, Double.MAX_VALUE, 1.0, 1.0, 1.0).mergeWeight());
+        var valid = new RtPathSpatialReuseReference.SpatialGrisWeight(
+                1.0, 1.0, 1.0, 1.0, 1.0);
+        assertThrows(IllegalArgumentException.class, () -> valid.selectionProbability(-1.0));
+        assertThrows(IllegalArgumentException.class, () -> valid.selectsSource(1.0, 1.0));
+    }
+
+    @Test
+    void diffuseShiftDensityReconstructsReceiverPdfAndPssJacobian() {
+        var density = new RtPathSpatialReuseReference.DiffuseShiftDensity(
+                0.25, 0.50, 0.40, 0.60, 0.80);
+        var geometry = new RtPathSpatialReuseReference.ReconnectionGeometry(
+                2.0, 4.0, 0.5, 0.25, 0.2, 0.4);
+        assertEquals(2.4, density.currentTechniqueMass(), 1.0e-12);
+        assertEquals(2.0, density.sourceTechniqueMass(), 1.0e-12);
+        assertEquals(1.2, density.receiverDirectionalPdf(), 1.0e-12);
+        assertEquals(0.1875, density.primarySampleJacobian(geometry), 1.0e-12);
+        assertEquals(0.5 / Math.PI,
+                RtPathSpatialReuseReference.diffuseShiftDirectionalDensity(0.5), 1.0e-12);
+        assertEquals(0.5 / Math.PI,
+                RtPathSpatialReuseReference.diffuseShiftDirectionalDensity(-0.5), 1.0e-12);
+    }
+
+    @Test
+    void diffuseShiftDensityRejectsUnsupportedTermsBeforeWeighting() {
+        assertThrows(IllegalArgumentException.class,
+                () -> new RtPathSpatialReuseReference.DiffuseShiftDensity(
+                        0.0, 0.5, 0.4, 0.6, 0.8));
+        assertThrows(IllegalArgumentException.class,
+                () -> new RtPathSpatialReuseReference.DiffuseShiftDensity(
+                        0.25, 0.5, 0.4, 0.6, Double.POSITIVE_INFINITY));
+        assertThrows(IllegalArgumentException.class,
+                () -> RtPathSpatialReuseReference.diffuseShiftDirectionalDensity(1.01));
+    }
+
+    @Test
     void invalidReconnectionTermsAreRejectedBeforeAReuseDecision() {
         assertThrows(IllegalArgumentException.class,
                 () -> new RtPathSpatialReuseReference.ReconnectionGeometry(
@@ -103,10 +175,48 @@ final class RtPathSpatialReuseReferenceTest {
     }
 
     @Test
+    void diffuseShiftReplacesSourceThroughputAndAppliesVisibility() {
+        assertEquals(6.0, RtPathSpatialReuseReference.shiftedDiffuseRadiance(
+                4.0, 0.25, 0.75, 0.5), 1.0e-12);
+        assertEquals(0.0, RtPathSpatialReuseReference.shiftedDiffuseRadiance(
+                4.0, 0.25, 0.75, 0.0), 1.0e-12);
+        assertEquals(0.5, RtPathSpatialReuseReference.shiftedDiffuseRadiance(
+                6.0e-8, 6.0e-8, 0.5, 1.0), 1.0e-12);
+        assertThrows(IllegalArgumentException.class,
+                () -> RtPathSpatialReuseReference.shiftedDiffuseRadiance(
+                        1.0, 0.0, 0.5, 1.0));
+    }
+
+    @Test
+    void diffuseShiftReceiverExcludesConsumedPrimaryInterfaces() {
+        assertTrue(RtPathSpatialReuseReference.supportsDiffuseShiftReceiver(0));
+        assertFalse(RtPathSpatialReuseReference.supportsDiffuseShiftReceiver(1));
+        assertTrue(RtPathSpatialReuseReference.supportsDiffuseShiftReceiver(2));
+        assertFalse(RtPathSpatialReuseReference.supportsDiffuseShiftReceiver(3));
+    }
+
+    @Test
+    void receiverMaterialIdentityRoundTripsThroughExactR32fIntegerRange() {
+        int packed = RtPathSpatialReuseReference.packReceiverMaterialIdentity(
+                3, RtPathSpatialReuseReference.RECEIVER_MATERIAL_KEY_MASK);
+        assertEquals(0x00FF_FFFF, packed);
+        assertEquals(3, RtPathSpatialReuseReference.receiverMaterialModel(packed));
+        assertEquals(RtPathSpatialReuseReference.RECEIVER_MATERIAL_KEY_MASK,
+                RtPathSpatialReuseReference.receiverMaterialKey(packed));
+        assertThrows(IllegalArgumentException.class,
+                () -> RtPathSpatialReuseReference.packReceiverMaterialIdentity(4, 0));
+        assertThrows(IllegalArgumentException.class,
+                () -> RtPathSpatialReuseReference.packReceiverMaterialIdentity(0, 0x0040_0000));
+    }
+
+    @Test
     void persistentReconnectionLaneSelectsAndPacksTheSecondPathHit() {
         assertFalse(RtPathSpatialReuseReference.captureReconnectionAtDepth(0));
         assertTrue(RtPathSpatialReuseReference.captureReconnectionAtDepth(1));
         assertFalse(RtPathSpatialReuseReference.captureReconnectionAtDepth(2));
+        assertFalse(RtPathSpatialReuseReference.reconnectionEndpointEligible(0));
+        assertTrue(RtPathSpatialReuseReference.reconnectionEndpointEligible(1));
+        assertTrue(RtPathSpatialReuseReference.reconnectionEndpointEligible(2));
 
         int packed = RtPathSpatialReuseReference.packReconnectionMetadata(
                 1, RtPathSpatialReuseReference.ReconnectionEvent.GLOSSY, true);
@@ -118,6 +228,146 @@ final class RtPathSpatialReuseReferenceTest {
         assertFalse(RtPathSpatialReuseReference.ReconnectionEvent.DELTA.continuous());
         assertThrows(IllegalArgumentException.class,
                 () -> RtPathSpatialReuseReference.packReconnectionMetadata(-1, true));
+    }
+
+    @Test
+    void spatialMappingControlIsCompactStrictAndOneHop() {
+        int identity = RtPathSpatialReuseReference.packMappingControl(
+                RtPathSpatialReuseReference.MappingKind.IDENTITY);
+        int diffuse = RtPathSpatialReuseReference.packMappingControl(
+                RtPathSpatialReuseReference.MappingKind.DIFFUSE_RECONNECTION);
+
+        assertEquals(0, identity);
+        assertEquals(1, diffuse);
+        assertTrue(RtPathSpatialReuseReference.mappingControlValid(identity));
+        assertTrue(RtPathSpatialReuseReference.mappingControlValid(diffuse));
+        assertEquals(RtPathSpatialReuseReference.MappingKind.IDENTITY,
+                RtPathSpatialReuseReference.mappingKind(identity));
+        assertEquals(RtPathSpatialReuseReference.MappingKind.DIFFUSE_RECONNECTION,
+                RtPathSpatialReuseReference.mappingKind(diffuse));
+        assertTrue(RtPathSpatialReuseReference.genericIdentityReplayEligible(identity));
+        assertFalse(RtPathSpatialReuseReference.genericIdentityReplayEligible(diffuse));
+        assertTrue(RtPathSpatialReuseReference.oneHopSpatialSourceEligible(identity));
+        assertFalse(RtPathSpatialReuseReference.oneHopSpatialSourceEligible(diffuse));
+        assertFalse(RtPathSpatialReuseReference.mappingControlValid(2));
+        assertFalse(RtPathSpatialReuseReference.mappingControlValid(0x10));
+        assertThrows(IllegalArgumentException.class,
+                () -> RtPathSpatialReuseReference.mappingKind(0x10));
+        assertThrows(IllegalArgumentException.class,
+                () -> RtPathSpatialReuseReference.packMappingControl(null));
+    }
+
+    @Test
+    void receiverAwareDiffuseReplayReconstructsAndValidatesStoredShift() {
+        var replay = new RtPathSpatialReuseReference.DiffuseMappingReplay(
+                RtPathReplayReference.REPLAY_VERSION,
+                RtPathSpatialReuseReference.packMappingControl(
+                        RtPathSpatialReuseReference.MappingKind.DIFFUSE_RECONNECTION),
+                RtPathSpatialReuseReference.ReconnectionEvent.DIFFUSE,
+                0.2, 1.5,
+                new RtPathSpatialReuseReference.Rgb(8.0, 4.0, 2.0),
+                new RtPathSpatialReuseReference.Rgb(2.0, 1.0, 0.5),
+                new RtPathSpatialReuseReference.Rgb(1.0, 2.0, 1.0),
+                new RtPathSpatialReuseReference.Rgb(0.5, 0.5, 0.5));
+
+        var shifted = replay.shiftedRadiance();
+        assertEquals(2.0, shifted.r(), 1.0e-12);
+        assertEquals(4.0, shifted.g(), 1.0e-12);
+        assertEquals(2.0, shifted.b(), 1.0e-12);
+        assertEquals(0.2126 * 2.0 + 0.7152 * 4.0 + 0.0722 * 2.0,
+                replay.shiftedTarget(), 1.0e-12);
+        assertTrue(replay.matchesStoredShift(new RtPathSpatialReuseReference.Rgb(
+                2.00001, 3.99999, 2.0)));
+        assertFalse(replay.matchesStoredShift(new RtPathSpatialReuseReference.Rgb(
+                2.1, 4.0, 2.0)));
+    }
+
+    @Test
+    void receiverAwareReplayRejectsWrongAbiMappingEventAndSpectralSupport() {
+        int diffuse = RtPathSpatialReuseReference.packMappingControl(
+                RtPathSpatialReuseReference.MappingKind.DIFFUSE_RECONNECTION);
+        var radiance = new RtPathSpatialReuseReference.Rgb(1.0, 0.0, 0.0);
+        var throughput = new RtPathSpatialReuseReference.Rgb(1.0, 1.0, 1.0);
+        var visibility = new RtPathSpatialReuseReference.Rgb(1.0, 1.0, 1.0);
+
+        assertThrows(IllegalArgumentException.class,
+                () -> new RtPathSpatialReuseReference.DiffuseMappingReplay(
+                        RtPathReplayReference.REPLAY_VERSION - 1, diffuse,
+                        RtPathSpatialReuseReference.ReconnectionEvent.DIFFUSE,
+                        0.2, 1.0, radiance, throughput, throughput, visibility));
+        assertThrows(IllegalArgumentException.class,
+                () -> new RtPathSpatialReuseReference.DiffuseMappingReplay(
+                        RtPathReplayReference.REPLAY_VERSION, 0,
+                        RtPathSpatialReuseReference.ReconnectionEvent.DIFFUSE,
+                        0.2, 1.0, radiance, throughput, throughput, visibility));
+        assertThrows(IllegalArgumentException.class,
+                () -> new RtPathSpatialReuseReference.DiffuseMappingReplay(
+                        RtPathReplayReference.REPLAY_VERSION, diffuse,
+                        RtPathSpatialReuseReference.ReconnectionEvent.GLOSSY,
+                        0.2, 1.0, radiance, throughput, throughput, visibility));
+        assertThrows(IllegalArgumentException.class,
+                () -> new RtPathSpatialReuseReference.DiffuseMappingReplay(
+                        RtPathReplayReference.REPLAY_VERSION, diffuse,
+                        RtPathSpatialReuseReference.ReconnectionEvent.DIFFUSE,
+                        0.0, 1.0, radiance, throughput, throughput, visibility));
+        assertThrows(IllegalArgumentException.class,
+                () -> new RtPathSpatialReuseReference.DiffuseMappingReplay(
+                        RtPathReplayReference.REPLAY_VERSION, diffuse,
+                        RtPathSpatialReuseReference.ReconnectionEvent.DIFFUSE,
+                        0.2, 1.0, radiance,
+                        new RtPathSpatialReuseReference.Rgb(0.0, 1.0, 1.0),
+                        throughput, visibility));
+    }
+
+    @Test
+    void persistentDiffuseRemapRecomputesRatherThanComposesJacobian() {
+        int diffuse = RtPathSpatialReuseReference.packMappingControl(
+                RtPathSpatialReuseReference.MappingKind.DIFFUSE_RECONNECTION);
+        var geometry = new RtPathSpatialReuseReference.ReconnectionGeometry(
+                2.0, 1.0, 0.5, 0.25, 0.4, 0.2);
+        var density = new RtPathSpatialReuseReference.DiffuseShiftDensity(
+                1.0, 1.0, 1.0, 0.2, 0.4);
+        var sourceRadiance = new RtPathSpatialReuseReference.Rgb(8.0, 4.0, 2.0);
+        var sourceThroughput = new RtPathSpatialReuseReference.Rgb(2.0, 1.0, 0.5);
+        var receiverThroughput = new RtPathSpatialReuseReference.Rgb(1.0, 2.0, 1.0);
+        var visibility = new RtPathSpatialReuseReference.Rgb(0.5, 0.5, 0.5);
+        var remap = new RtPathSpatialReuseReference.PersistentDiffuseRemap(
+                RtPathReplayReference.REPLAY_VERSION, diffuse,
+                true, true, true,
+                9.0, geometry, density,
+                sourceRadiance, sourceThroughput, receiverThroughput, visibility);
+
+        assertEquals(1.0, remap.currentPrimarySampleJacobian(), 1.0e-12);
+        assertEquals(2.0, remap.currentReplay().shiftedRadiance().r(), 1.0e-12);
+        assertEquals(4.0, remap.currentReplay().shiftedRadiance().g(), 1.0e-12);
+        assertEquals(2.0, remap.currentReplay().shiftedRadiance().b(), 1.0e-12);
+    }
+
+    @Test
+    void persistentDiffuseRemapRejectsUnstableReceiverOrSourceRoot() {
+        int diffuse = RtPathSpatialReuseReference.packMappingControl(
+                RtPathSpatialReuseReference.MappingKind.DIFFUSE_RECONNECTION);
+        var geometry = new RtPathSpatialReuseReference.ReconnectionGeometry(
+                1.0, 1.0, 1.0, 1.0, 1.0, 1.0);
+        var density = new RtPathSpatialReuseReference.DiffuseShiftDensity(
+                1.0, 1.0, 1.0, 1.0, 1.0);
+        var rgb = new RtPathSpatialReuseReference.Rgb(1.0, 1.0, 1.0);
+
+        assertThrows(IllegalArgumentException.class,
+                () -> new RtPathSpatialReuseReference.PersistentDiffuseRemap(
+                        RtPathReplayReference.REPLAY_VERSION, diffuse,
+                        false, true, true, 1.0,
+                        geometry, density, rgb, rgb, rgb, rgb));
+        assertThrows(IllegalArgumentException.class,
+                () -> new RtPathSpatialReuseReference.PersistentDiffuseRemap(
+                        RtPathReplayReference.REPLAY_VERSION, diffuse,
+                        true, false, true, 1.0,
+                        geometry, density, rgb, rgb, rgb, rgb));
+        assertThrows(IllegalArgumentException.class,
+                () -> new RtPathSpatialReuseReference.PersistentDiffuseRemap(
+                        RtPathReplayReference.REPLAY_VERSION, diffuse,
+                        true, true, false, 1.0,
+                        geometry, density, rgb, rgb, rgb, rgb));
     }
 
     @Test
@@ -179,15 +429,38 @@ final class RtPathSpatialReuseReferenceTest {
         assertEquals(17, RtPathReservoirHistory.SPATIAL_DEBUG_VIEW);
         assertEquals(18, RtPathReservoirHistory.SPATIAL_POLICY_DEBUG_VIEW);
         assertEquals(19, RtPathReservoirHistory.RECONNECTION_DEBUG_VIEW);
+        assertEquals(20, RtPathReservoirHistory.SHIFTED_RADIANCE_DEBUG_VIEW);
+        assertEquals(32, RtPathReservoirHistory.MAPPING_REPLAY_PASS_FLAG);
         assertEquals(9, RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_STRICT_PAIR_CURSOR_INDEX);
         assertEquals(10, RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_LIMITED_ADMITTED_INDEX);
         assertEquals(11, RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_TOPOLOGY_RESCUED_INDEX);
         assertEquals(12, RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_RESCUED_PAIR_CURSOR_INDEX);
         assertEquals(13, RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_COUNTER_COUNT);
-        assertEquals(13 * Integer.BYTES,
+        assertEquals(15, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_STATE_COUNT);
+        assertEquals(15, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_SELECTION_ELIGIBLE_INDEX);
+        assertEquals(16, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_SOURCE_SELECTED_INDEX);
+        assertEquals(17, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_SCRATCH_WRITTEN_INDEX);
+        assertEquals(18, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_SCRATCH_SELECTED_INDEX);
+        assertEquals(19, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_SCRATCH_INVALID_INDEX);
+        assertEquals(20, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_PAIR_CURSOR_INDEX);
+        assertEquals(21, RtPathReservoirHistory.MAPPING_REPLAY_ELIGIBLE_INDEX);
+        assertEquals(22, RtPathReservoirHistory.MAPPING_REPLAY_ACCEPTED_INDEX);
+        assertEquals(23, RtPathReservoirHistory.MAPPING_REPLAY_ABI_REJECT_INDEX);
+        assertEquals(24, RtPathReservoirHistory.MAPPING_REPLAY_SOURCE_REJECT_INDEX);
+        assertEquals(25, RtPathReservoirHistory.MAPPING_REPLAY_RECEIVER_REJECT_INDEX);
+        assertEquals(26, RtPathReservoirHistory.MAPPING_REPLAY_GEOMETRY_REJECT_INDEX);
+        assertEquals(27, RtPathReservoirHistory.MAPPING_REPLAY_PDF_REJECT_INDEX);
+        assertEquals(28, RtPathReservoirHistory.MAPPING_REPLAY_VISIBILITY_REJECT_INDEX);
+        assertEquals(29, RtPathReservoirHistory.MAPPING_REPLAY_RADIANCE_REJECT_INDEX);
+        assertEquals(30, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
+        assertEquals(30 * Integer.BYTES,
                 RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_COUNTER_BYTES);
         assertEquals(4096, RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_PAIR_CAPACITY);
-        assertEquals(2 * 4096 * 2 * Float.BYTES,
+        assertEquals(4096, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_DENSITY_PAIR_OFFSET);
+        assertEquals(8192, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_MERGE_PAIR_OFFSET);
+        assertEquals(12288, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_SELECTION_PAIR_OFFSET);
+        assertEquals(4096 * 8, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_PAIR_FLOAT_COUNT);
+        assertEquals(4096 * 8 * Float.BYTES,
                 RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_PAIR_BYTES);
     }
 }

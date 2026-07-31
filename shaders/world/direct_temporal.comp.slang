@@ -33,7 +33,7 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID) {
     float4 normalRoughness = receiverNormalRoughness[pixel];
     float4 albedoSss = receiverAlbedoSss[pixel];
     float normalLength = length(normalRoughness.xyz);
-    uint material = uint(max(positionMaterial.w, 0.0));
+    uint material = receiverMaterialModel(uint(max(positionMaterial.w, 0.0)));
     bool receiverPresent = normalLength >= 0.5
             && material <= MATERIAL_PARTICLE
             && max(albedoSss.x, max(albedoSss.y, albedoSss.z)) > 0.0;

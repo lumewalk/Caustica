@@ -30,7 +30,7 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID) {
     float4 normalRoughness = receiverNormalRoughness[pixel];
     float4 albedoSss = receiverAlbedoSss[pixel];
     float normalLength = length(normalRoughness.xyz);
-    uint material = uint(max(positionMaterial.w, 0.0));
+    uint material = receiverMaterialModel(uint(max(positionMaterial.w, 0.0)));
     bool receiverPresent = normalLength >= 0.5
             && material <= MATERIAL_PARTICLE
             && max(albedoSss.x, max(albedoSss.y, albedoSss.z)) > 0.0;
@@ -74,7 +74,8 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID) {
             float4 neighborPositionMaterial = receiverPositionMaterial[neighborTexel];
             float4 neighborNormalRoughness = receiverNormalRoughness[neighborTexel];
             float neighborNormalLength = length(neighborNormalRoughness.xyz);
-            uint neighborMaterial = uint(max(neighborPositionMaterial.w, 0.0));
+            uint neighborMaterial = receiverMaterialModel(
+                    uint(max(neighborPositionMaterial.w, 0.0)));
             if (neighborNormalLength < 0.5 || neighborMaterial != material) continue;
             float3 neighborNormal = neighborNormalRoughness.xyz / neighborNormalLength;
             float neighborDistance = length(neighborPositionMaterial.xyz - rayOrigin);

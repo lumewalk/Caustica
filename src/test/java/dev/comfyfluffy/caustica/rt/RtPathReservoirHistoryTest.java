@@ -2,6 +2,7 @@ package dev.comfyfluffy.caustica.rt;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.comfyfluffy.caustica.rt.gen.PathReservoirData;
@@ -10,8 +11,8 @@ import org.junit.jupiter.api.Test;
 final class RtPathReservoirHistoryTest {
     @Test
     void reflectedAbiIncludesReplayAndReconnectionGeometryLanes() {
-        assertEquals(160, PathReservoirData.BYTE_SIZE);
-        assertEquals(160, RtPathReservoirHistory.BYTES_PER_RESERVOIR);
+        assertEquals(176, PathReservoirData.BYTE_SIZE);
+        assertEquals(176, RtPathReservoirHistory.BYTES_PER_RESERVOIR);
     }
 
     @Test
@@ -21,6 +22,7 @@ final class RtPathReservoirHistoryTest {
 
         RtPathReservoirHistory.Frame first = reservoirs.begin(history.beginFrame());
         assertEquals(0, first.writeSlot());
+        assertEquals(1, first.scratchSlot());
         assertFalse(first.previousAvailable());
         reservoirs.commit(first);
         history.markProduced(first.generation());
@@ -28,6 +30,7 @@ final class RtPathReservoirHistoryTest {
         RtPathReservoirHistory.Frame second = reservoirs.begin(history.beginFrame());
         assertEquals(1, second.writeSlot());
         assertEquals(0, second.previousSlot());
+        assertEquals(second.previousSlot(), second.scratchSlot());
         assertTrue(second.previousAvailable());
     }
 
@@ -49,7 +52,17 @@ final class RtPathReservoirHistoryTest {
     @Test
     void memoryAccountingUsesTwoFullResolutionSlots() {
         long perSlot = RtPathReservoirHistory.bytesPerSlot(1280, 673);
-        assertEquals(137_830_400L, perSlot);
-        assertEquals(275_660_800L, Math.multiplyExact(perSlot, 2L));
+        assertEquals(151_613_440L, perSlot);
+        assertEquals(303_226_880L, Math.multiplyExact(perSlot, 2L));
+    }
+
+    @Test
+    void sortedPercentileInterpolatesBoundedDiagnosticSamples() {
+        double[] values = {1.0, 2.0, 4.0, 8.0};
+        assertEquals(3.0, RtPathReservoirHistory.sortedPercentile(values, 4, 0.5), 1.0e-12);
+        assertEquals(7.4, RtPathReservoirHistory.sortedPercentile(values, 4, 0.95), 1.0e-12);
+        assertEquals(8.0, RtPathReservoirHistory.sortedPercentile(values, 4, 1.0), 1.0e-12);
+        assertThrows(IllegalArgumentException.class,
+                () -> RtPathReservoirHistory.sortedPercentile(values, 0, 0.5));
     }
 }

@@ -37,7 +37,7 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID) {
     float4 positionMaterial = receiverPositionMaterial[pixel];
     float4 normalRoughness = receiverNormalRoughness[pixel];
     float4 albedoSss = receiverAlbedoSss[pixel];
-    uint material = uint(max(positionMaterial.w, 0.0));
+    uint material = receiverMaterialModel(uint(max(positionMaterial.w, 0.0)));
     float normalLength = length(normalRoughness.xyz);
 
     WorldPush push = ConstPtr<WorldPush>(pc.worldPushAddr)[0];

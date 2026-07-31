@@ -577,7 +577,8 @@ public final class RtComposite {
             worldPipeline = RtPipeline.create(ctx, new String[]{
                             RtDeviceBringup.worldPrimaryRaygenShader(),
                             RtDeviceBringup.worldRaygenShader(),
-                            "direct_resolve.rgen.spv"},
+                            "direct_resolve.rgen.spv",
+                            "path_shifted_radiance.rgen.spv"},
                     new String[]{"world.rmiss.spv", "world_guide.rmiss.spv"},
                     "world.rchit.spv", "world.rahit.spv",
                     WorldPushConstantsData.BYTE_SIZE, true, GUIDE_COUNT, bindlessTextureCapacity, true);
@@ -1073,7 +1074,11 @@ public final class RtComposite {
                     new Int4(terrain.lightGridDimX(), terrain.lightGridDimY(), terrain.lightGridDimZ(), 0),
                     terrain.lightCount(),
                     CausticaConfig.Rt.Lights.RIS_CANDIDATES.value(),
-                    terrain.lightEpoch()
+                    terrain.lightEpoch(),
+                    restirPt && debugView == RtPathReservoirHistory.SHIFTED_RADIANCE_DEBUG_VIEW
+                            ? pathReservoirs.shiftedDiagnosticCounterAddress() : 0L,
+                    restirPt && debugView == RtPathReservoirHistory.SHIFTED_RADIANCE_DEBUG_VIEW
+                            ? pathReservoirs.shiftedDiagnosticPairAddress() : 0L
             ).write(push);
             pushBuf.flush(0L, WORLD_PUSH_SIZE);
             // Upload any entity textures registered this frame into the bindless set before the trace.
@@ -1115,23 +1120,57 @@ public final class RtComposite {
                     ? directReservoirs.writeBuffer(reservoirFrame)
                     : directReservoirs.finalBuffer(reservoirFrame);
             ByteBuffer pushConstants = stack.malloc(WorldPushConstantsData.BYTE_SIZE);
-            new WorldPushConstantsData(pushBuf.deviceAddress, terrain.tableAddress(), fe.geomTableAddr(),
+            long pathPreviousOrScratchAddress = restirPt
+                    && debugView == RtPathReservoirHistory.SHIFTED_RADIANCE_DEBUG_VIEW
+                    ? pathReservoirs.scratchBuffer(pathReservoirFrame).deviceAddress
+                    : restirPt && pathReservoirFrame.previousAvailable()
+                            ? pathReservoirs.previousBuffer(pathReservoirFrame).deviceAddress : 0L;
+            int pathHistoryFlags =
+                    (reservoirFrame.previousAvailable() && diagnosticDirectReuse ? 1 : 0)
+                            | (restirDirect ? 2 : 0)
+                            | (restirPt ? 4 : 0)
+                            | (restirPt && pathReservoirFrame.previousAvailable() ? 8 : 0)
+                            | (restirPt && (debugView == 13 || debugView == 15 || debugView == 16
+                                    || debugView == 17 || debugView == 18 || debugView == 19
+                                    || debugView == 20) ? 16 : 0);
+            WorldPushConstantsData worldConstants = new WorldPushConstantsData(
+                    pushBuf.deviceAddress, terrain.tableAddress(), fe.geomTableAddr(),
                     RtMaterialRegistry.INSTANCE.tableAddress(),
                     terrain.lightBufferAddress(), terrain.lightAliasBufferAddress(),
                     terrain.lightLocalAliasBufferAddress(), terrain.lightGridCellBufferAddress(),
                     terrain.lightGridSpanBufferAddress(), continuationQueue.deviceAddress,
                     directResolveBuffer.deviceAddress,
                     restirPt ? pathReservoirs.finalBuffer(pathReservoirFrame).deviceAddress : 0L,
-                    restirPt && pathReservoirFrame.previousAvailable()
-                            ? pathReservoirs.previousBuffer(pathReservoirFrame).deviceAddress : 0L,
-                    (int) frameCounter, debugView,
-                    (reservoirFrame.previousAvailable() && diagnosticDirectReuse ? 1 : 0)
-                            | (restirDirect ? 2 : 0)
-                            | (restirPt ? 4 : 0)
-                            | (restirPt && pathReservoirFrame.previousAvailable() ? 8 : 0)
-                            | (restirPt && (debugView == 13 || debugView == 15 || debugView == 16
-                                    || debugView == 17 || debugView == 18 || debugView == 19) ? 16 : 0),
-                    restirPt ? (int) pathReservoirFrame.generation() : 0).write(pushConstants);
+                    pathPreviousOrScratchAddress,
+                    (int) frameCounter, debugView, pathHistoryFlags,
+                    restirPt ? (int) pathReservoirFrame.generation() : 0);
+            worldConstants.write(pushConstants);
+            ByteBuffer mappingReplayPushConstants = null;
+            if (restirPt
+                    && debugView == RtPathReservoirHistory.SHIFTED_RADIANCE_DEBUG_VIEW) {
+                mappingReplayPushConstants =
+                        stack.malloc(WorldPushConstantsData.BYTE_SIZE);
+                new WorldPushConstantsData(
+                        worldConstants.worldPushAddr(),
+                        worldConstants.tableAddr(),
+                        worldConstants.entityTableAddr(),
+                        worldConstants.materialTableAddr(),
+                        worldConstants.lightBufAddr(),
+                        worldConstants.lightAliasAddr(),
+                        worldConstants.lightLocalAliasAddr(),
+                        worldConstants.lightGridCellAddr(),
+                        worldConstants.lightGridSpanAddr(),
+                        worldConstants.pathQueueAddr(),
+                        worldConstants.directReservoirAddr(),
+                        worldConstants.pathReservoirAddr(),
+                        worldConstants.pathReservoirPreviousAddr(),
+                        worldConstants.frameIndex(),
+                        worldConstants.debugView(),
+                        worldConstants.historyFlags()
+                                | RtPathReservoirHistory.MAPPING_REPLAY_PASS_FLAG,
+                        worldConstants.historyGeneration())
+                        .write(mappingReplayPushConstants);
+            }
             try (RtFrameStats.Scope ignoredTrace = RtFrameStats.FRAME.stage("frame.trace")) {
                 try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd, "world primary trace");
                      RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage("frame.tracePrimary")) {
@@ -1163,6 +1202,25 @@ public final class RtComposite {
                             debugView == 17 || debugView == 18 || debugView == 19 ? debugView : 0);
                 }
                 VulkanCommandEncoder.memoryBarrier(cmd, stack);
+                if (debugView == RtPathReservoirHistory.SHIFTED_RADIANCE_DEBUG_VIEW) {
+                    pathReservoirs.beginShiftedRadianceDiagnostics(cmd);
+                    VulkanCommandEncoder.memoryBarrier(cmd, stack);
+                    try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd,
+                                 "path shifted radiance");
+                         RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage(
+                                 "frame.pathShiftedRadiance")) {
+                        active.trace(cmd, renderW, renderH, pushConstants, 3);
+                    }
+                    VulkanCommandEncoder.memoryBarrier(cmd, stack);
+                    try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd,
+                                 "path mapping replay");
+                         RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage(
+                                 "frame.pathMappingReplay")) {
+                        active.trace(cmd, renderW, renderH,
+                                mappingReplayPushConstants, 1);
+                    }
+                    VulkanCommandEncoder.memoryBarrier(cmd, stack);
+                }
             }
             try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd, "direct reservoir initialize");
                  RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage("frame.reservoirInit")) {

@@ -24,7 +24,7 @@ void main() {
     float4 normalRoughness = gRestirNormalRoughness[texel];
     float4 albedoSss = gRestirAlbedoSss[texel];
     float normalLength = length(normalRoughness.xyz);
-    uint material = uint(max(positionMaterial.w, 0.0));
+    uint material = receiverMaterialModel(uint(max(positionMaterial.w, 0.0)));
     DirectReservoir reservoir = ConstPtr<DirectReservoir>(pc.directReservoirAddr)[pixelIndex];
     uint flags = reservoirFlags(reservoir);
 

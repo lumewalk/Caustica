@@ -8,11 +8,33 @@ public static const uint PATH_TEMPORAL_MERGE_DEBUG_VIEW = 16u;
 public static const uint PATH_SPATIAL_DEBUG_VIEW = 17u;
 public static const uint PATH_SPATIAL_POLICY_DEBUG_VIEW = 18u;
 public static const uint PATH_RECONNECTION_DEBUG_VIEW = 19u;
+public static const uint PATH_SHIFTED_RADIANCE_DEBUG_VIEW = 20u;
 public static const uint PATH_SPATIAL_DIAGNOSTIC_STRICT_PAIR_CURSOR = 9u;
 public static const uint PATH_SPATIAL_DIAGNOSTIC_LIMITED_ADMITTED = 10u;
 public static const uint PATH_SPATIAL_DIAGNOSTIC_TOPOLOGY_RESCUED = 11u;
 public static const uint PATH_SPATIAL_DIAGNOSTIC_RESCUED_PAIR_CURSOR = 12u;
 public static const uint PATH_SPATIAL_DIAGNOSTIC_PAIR_CAPACITY = 4096u;
+public static const uint PATH_SHIFT_DIAGNOSTIC_SELECTION_ELIGIBLE = 15u;
+public static const uint PATH_SHIFT_DIAGNOSTIC_SOURCE_SELECTED = 16u;
+public static const uint PATH_SHIFT_DIAGNOSTIC_SCRATCH_WRITTEN = 17u;
+public static const uint PATH_SHIFT_DIAGNOSTIC_SCRATCH_SELECTED = 18u;
+public static const uint PATH_SHIFT_DIAGNOSTIC_SCRATCH_INVALID = 19u;
+public static const uint PATH_SHIFT_DIAGNOSTIC_PAIR_CURSOR = 20u;
+public static const uint PATH_MAPPING_REPLAY_ELIGIBLE = 21u;
+public static const uint PATH_MAPPING_REPLAY_ACCEPTED = 22u;
+public static const uint PATH_MAPPING_REPLAY_ABI_REJECT = 23u;
+public static const uint PATH_MAPPING_REPLAY_SOURCE_REJECT = 24u;
+public static const uint PATH_MAPPING_REPLAY_RECEIVER_REJECT = 25u;
+public static const uint PATH_MAPPING_REPLAY_GEOMETRY_REJECT = 26u;
+public static const uint PATH_MAPPING_REPLAY_PDF_REJECT = 27u;
+public static const uint PATH_MAPPING_REPLAY_VISIBILITY_REJECT = 28u;
+public static const uint PATH_MAPPING_REPLAY_RADIANCE_REJECT = 29u;
+public static const uint PATH_SHIFT_DIAGNOSTIC_COUNTER_COUNT = 30u;
+public static const uint PATH_SHIFT_DIAGNOSTIC_PAIR_MASK = 3u;
+public static const uint PATH_SHIFT_DIAGNOSTIC_MERGE_PAIR_OFFSET =
+        PATH_SPATIAL_DIAGNOSTIC_PAIR_CAPACITY * 2u;
+public static const uint PATH_SHIFT_DIAGNOSTIC_SELECTION_PAIR_OFFSET =
+        PATH_SPATIAL_DIAGNOSTIC_PAIR_CAPACITY * 3u;
 public static const uint PATH_GENERATION_MASK = 0x00FFFFFFu;
 public static const float PATH_MAX_FOOTPRINT_RATIO = 4.0;
 public static const uint PATH_SPATIAL_SAMPLE_COUNT = 8u;
@@ -28,17 +50,25 @@ public static const uint PATH_TRANSPORT_DELTA = 4u;
 public static const uint PATH_TRANSPORT_TRANSMISSION = 8u;
 // Increment whenever replay metadata or RNG interpretation changes. Temporal reuse must reject
 // reservoirs produced by a different contract instead of trying to replay an incompatible path.
-public static const uint PATH_REPLAY_VERSION = 8u;
+public static const uint PATH_REPLAY_VERSION = 10u;
 public static const uint PATH_RECONNECTION_VALID = 1u;
 public static const uint PATH_RECONNECTION_DEPTH_SHIFT = 1u;
 public static const uint PATH_RECONNECTION_EVENT_SHIFT = 5u;
 public static const uint PATH_RECONNECTION_EVENT_MASK = 0x7u << PATH_RECONNECTION_EVENT_SHIFT;
+// Stored in reconnectionThroughput.w. The first persistent spatial contract supports exactly one
+// diffuse receiver-to-second-hit mapping. A mapped record cannot become another spatial source until
+// mapping composition has its own descriptor and Jacobian reference.
+public static const uint PATH_MAPPING_IDENTITY = 0u;
+public static const uint PATH_MAPPING_DIFFUSE_RECONNECTION = 1u;
+public static const uint PATH_MAPPING_KIND_MASK = 0xFu;
+public static const uint PATH_MAPPING_RESERVED_MASK = 0xFFFFFFF0u;
 public static const uint PATH_RECONNECTION_EVENT_NONE = 0u;
 public static const uint PATH_RECONNECTION_EVENT_DIFFUSE = 1u;
 public static const uint PATH_RECONNECTION_EVENT_GLOSSY = 2u;
 public static const uint PATH_RECONNECTION_EVENT_DELTA = 3u;
 public static const uint PATH_RECONNECTION_EVENT_TRANSMISSION = 4u;
 public static const uint PATH_CANONICAL_MODE_FLAG = 16u;
+public static const uint PATH_MAPPING_REPLAY_PASS_FLAG = 32u;
 public static const uint PATH_PROPOSAL_CANONICAL_VALID = 1u << 30u;
 public static const uint PATH_PROPOSAL_RESERVED_MASK = 1u << 31u;
 // Debug-view 13 admission states. These numeric values are mirrored by
@@ -103,6 +133,7 @@ public struct PathTraceResult {
     public float3 reconnectionNormal;
     public float reconnectionSourcePdf;
     public uint reconnectionEventKind;
+    public float3 reconnectionThroughput;
 };
 
 // A complete screen-owned sample can contain both continuation records emitted by Pass A. Keep its
@@ -136,6 +167,7 @@ public struct PathCandidate {
     public float3 reconnectionNormal;
     public float reconnectionSourcePdf;
     public uint reconnectionEventKind;
+    public float3 reconnectionThroughput;
 };
 
 // Aggregate returned by a seeded replay of the same queue chain used by the selected candidate.
@@ -168,6 +200,7 @@ public struct PathReplayAggregate {
     public float3 reconnectionNormal;
     public float reconnectionSourcePdf;
     public uint reconnectionEventKind;
+    public float3 reconnectionThroughput;
 };
 
 public PathReplayAggregate pathReplayAggregateEmpty() {
@@ -198,6 +231,7 @@ public PathReplayAggregate pathReplayAggregateEmpty() {
     aggregate.reconnectionNormal = float3(0.0);
     aggregate.reconnectionSourcePdf = 0.0;
     aggregate.reconnectionEventKind = PATH_RECONNECTION_EVENT_NONE;
+    aggregate.reconnectionThroughput = float3(0.0);
     return aggregate;
 }
 
@@ -236,6 +270,7 @@ public void pathReplayAccumulate(inout PathReplayAggregate aggregate,
         aggregate.reconnectionNormal = traced.reconnectionNormal;
         aggregate.reconnectionSourcePdf = traced.reconnectionSourcePdf;
         aggregate.reconnectionEventKind = traced.reconnectionEventKind;
+        aggregate.reconnectionThroughput = traced.reconnectionThroughput;
     }
 }
 
@@ -261,7 +296,11 @@ public uint pathReplayCompare(PathReservoir reservoir, PathReplayAggregate repla
     uint segmentCount = reservoir.replayControl.y;
     if (reservoir.replayControl.x != PATH_REPLAY_VERSION
             || segmentCount < 1u || segmentCount > MAX_PATH_SEGMENTS
-            || (segmentCount < MAX_PATH_SEGMENTS && any(reservoir.replay.zw != uint2(0u)))) {
+            || (segmentCount < MAX_PATH_SEGMENTS && any(reservoir.replay.zw != uint2(0u)))
+            || !pathMappingControlValid(reservoir)
+            // Generic exact replay reconstructs an identity path. A spatially mapped record must
+            // pass through the future receiver-aware mapping replay before it can be admitted.
+            || pathMappingKind(reservoir) != PATH_MAPPING_IDENTITY) {
         mismatch |= PATH_REPLAY_ABI_MISMATCH;
     }
     if (replay.replaySegmentCount != segmentCount) {
@@ -321,10 +360,81 @@ public uint pathReplayCompare(PathReservoir reservoir, PathReplayAggregate repla
                         || !pathReplayPositionMatches(replay.reconnectionNormal,
                                 reservoir.reconnectionNormalPdf.xyz)
                         || !pathReplayFloatMatches(replay.reconnectionSourcePdf,
-                                reservoir.reconnectionNormalPdf.w)))) {
+                                reservoir.reconnectionNormalPdf.w)
+                        || !pathReplayColorMatches(replay.reconnectionThroughput,
+                                reservoir.reconnectionThroughput.xyz)
+                        || asuint(reservoir.reconnectionThroughput.w) != 0u))) {
         mismatch |= PATH_REPLAY_METADATA_MISMATCH;
     }
     return mismatch;
+}
+
+// Validates the canonical source portion of a one-hop mapped record. The mapped endpoint,
+// directional PDF, and first-edge throughput are receiver-side values, so they are deliberately
+// checked later by the receiver-aware replay pass rather than compared with the source aggregate.
+public bool pathMappingSourceReplayMatches(
+        PathReservoir mapped, PathReplayAggregate replay) {
+    uint segmentCount = mapped.replayControl.y;
+    if (mapped.replayControl.x != PATH_REPLAY_VERSION
+            || segmentCount < 1u || segmentCount > MAX_PATH_SEGMENTS
+            || (segmentCount < MAX_PATH_SEGMENTS && any(mapped.replay.zw != uint2(0u)))
+            || !pathMappingControlValid(mapped)
+            || pathMappingKind(mapped) != PATH_MAPPING_DIFFUSE_RECONNECTION
+            || asuint(mapped.proposalShift.w) != mapped.replayControl.z
+            || replay.replaySegmentCount != segmentCount
+            || replay.replayState != mapped.replayControl.z
+            || replay.proposalReplayState != mapped.replayControl.w
+            || replay.topologyKey != mapped.identity.z
+            || replay.canonicalValid == 0u
+            || !pathReplayFloatMatches(replay.footprint, mapped.proposalShift.z)) {
+        return false;
+    }
+
+    uint packedEvents = asuint(mapped.proposalComponents.w);
+    if (!pathReplayFloatMatches(replay.lightProposalPdf, mapped.proposalComponents.x)
+            || !pathReplayFloatMatches(replay.canonicalContinuationProposalPdf,
+                    mapped.proposalComponents.y)
+            || !pathReplayFloatMatches(replay.canonicalRouletteProposalPdf,
+                    mapped.proposalComponents.z)
+            || (packedEvents & PATH_PROPOSAL_CANONICAL_VALID) == 0u
+            || ((packedEvents & 1023u) != min(replay.lightProposalEvents, 1023u))
+            || (((packedEvents >> 10u) & 1023u)
+                    != min(replay.canonicalContinuationProposalEvents, 1023u))
+            || (((packedEvents >> 20u) & 1023u)
+                    != min(replay.canonicalRouletteProposalEvents, 1023u))
+            || (packedEvents & PATH_PROPOSAL_RESERVED_MASK) != 0u) {
+        return false;
+    }
+
+    uint storedMetadata = mapped.identity.w;
+    if (pathPackMetadata(storedMetadata & PATH_GENERATION_MASK,
+            replay.depth, replay.transportMask) != storedMetadata) {
+        return false;
+    }
+
+    uint packedReconnection = asuint(mapped.reconnectionVertex.w);
+    bool storedReconnectionValid = (packedReconnection & PATH_RECONNECTION_VALID) != 0u;
+    uint storedReconnectionDepth =
+            (packedReconnection >> PATH_RECONNECTION_DEPTH_SHIFT) & 0xFu;
+    uint storedReconnectionEvent = pathReconnectionEvent(packedReconnection);
+    return storedReconnectionValid
+            && storedReconnectionDepth == 1u
+            && storedReconnectionEvent == PATH_RECONNECTION_EVENT_DIFFUSE
+            && replay.reconnectionValid != 0u
+            && replay.reconnectionDepth == storedReconnectionDepth
+            && replay.reconnectionEventKind == storedReconnectionEvent
+            && pathReplayPositionMatches(replay.reconnectionVertex,
+                    mapped.reconnectionVertex.xyz)
+            && pathReplayPositionMatches(replay.reconnectionNormal,
+                    mapped.reconnectionNormalPdf.xyz)
+            && isfinite(replay.reconnectionSourcePdf)
+            && replay.reconnectionSourcePdf > 0.0
+            && all(isfinite(replay.reconnectionThroughput))
+            && all(replay.reconnectionThroughput >= float3(0.0))
+            && isfinite(mapped.reconnectionNormalPdf.w)
+            && mapped.reconnectionNormalPdf.w > 0.0
+            && all(isfinite(mapped.reconnectionThroughput.xyz))
+            && all(mapped.reconnectionThroughput.xyz >= float3(0.0));
 }
 
 public float3 pathReplayDebugColor(uint mismatch) {
@@ -360,6 +470,7 @@ public PathReservoir pathReservoirEmpty() {
     reservoir.replayControl = uint4(0u);
     reservoir.reconnectionVertex = float4(0.0);
     reservoir.reconnectionNormalPdf = float4(0.0);
+    reservoir.reconnectionThroughput = float4(0.0);
     reservoir.proposalComponents = float4(0.0, 0.0, 0.0, 0.0);
     reservoir.canonicalRadianceTarget = float4(0.0);
     return reservoir;
@@ -407,6 +518,18 @@ public uint pathPackReconnectionMetadata(uint depth, uint eventKind, bool valid)
 
 public uint pathReconnectionEvent(uint packedMetadata) {
     return (packedMetadata & PATH_RECONNECTION_EVENT_MASK) >> PATH_RECONNECTION_EVENT_SHIFT;
+}
+
+public uint pathMappingKind(PathReservoir reservoir) {
+    return asuint(reservoir.reconnectionThroughput.w) & PATH_MAPPING_KIND_MASK;
+}
+
+public bool pathMappingControlValid(PathReservoir reservoir) {
+    uint control = asuint(reservoir.reconnectionThroughput.w);
+    uint kind = control & PATH_MAPPING_KIND_MASK;
+    return (control & PATH_MAPPING_RESERVED_MASK) == 0u
+            && (kind == PATH_MAPPING_IDENTITY
+                    || kind == PATH_MAPPING_DIFFUSE_RECONNECTION);
 }
 
 public bool pathReconnectionContinuous(uint eventKind) {
@@ -557,6 +680,7 @@ public uint pathReservoirUpdate(inout PathReservoir reservoir,
                         candidate.reconnectionEventKind, candidate.reconnectionValid != 0u)));
         reservoir.reconnectionNormalPdf = float4(candidate.reconnectionNormal,
                 candidate.reconnectionSourcePdf);
+        reservoir.reconnectionThroughput = float4(candidate.reconnectionThroughput, 0.0);
     }
 
     reservoir.weights.x = nextWeightSum;
@@ -598,6 +722,7 @@ public PathCandidate pathCandidateFromReplay(PathReplayAggregate replay,
     candidate.reconnectionNormal = replay.reconnectionNormal;
     candidate.reconnectionSourcePdf = replay.reconnectionSourcePdf;
     candidate.reconnectionEventKind = replay.reconnectionEventKind;
+    candidate.reconnectionThroughput = replay.reconnectionThroughput;
     return candidate;
 }
 
@@ -680,6 +805,7 @@ public uint pathReservoirTemporalMerge(inout PathReservoir receiver,
                         shifted.reconnectionEventKind, shifted.reconnectionValid != 0u)));
         receiver.reconnectionNormalPdf = float4(shifted.reconnectionNormal,
                 shifted.reconnectionSourcePdf);
+        receiver.reconnectionThroughput = float4(shifted.reconnectionThroughput, 0.0);
         status |= PATH_TEMPORAL_HISTORY_SELECTED;
     }
     receiver.weights.x = nextWeightSum;
