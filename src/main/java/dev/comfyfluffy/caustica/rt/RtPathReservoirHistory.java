@@ -92,7 +92,16 @@ final class RtPathReservoirHistory {
     static final int CROSS_FRAME_EDGE_MAPPING_REJECT_INDEX = 64;
     static final int CROSS_FRAME_EDGE_PDF_REJECT_INDEX = 65;
     static final int CROSS_FRAME_EDGE_FINITE_REJECT_INDEX = 66;
-    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 67;
+    static final int RECEIVER_GUIDE_ATTEMPTED_INDEX = 67;
+    static final int RECEIVER_GUIDE_INVALID_INDEX = 68;
+    static final int RECEIVER_GUIDE_NO_STORED_EDGE_INDEX = 69;
+    static final int RECEIVER_GUIDE_STORED_ELIGIBLE_INDEX = 70;
+    static final int RECEIVER_GUIDE_ACCEPTED_INDEX = 71;
+    static final int RECEIVER_GUIDE_MASS_MISMATCH_INDEX = 72;
+    static final int RECEIVER_GUIDE_THROUGHPUT_MISMATCH_INDEX = 73;
+    static final int RECEIVER_GUIDE_PDF_MISMATCH_INDEX = 74;
+    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 75;
+    static final int SHIFTED_RECEIVER_GUIDE_STRIDE = 4 * Float.BYTES;
     static final int SPATIAL_DIAGNOSTIC_COUNTER_BYTES =
             SHIFTED_DIAGNOSTIC_COUNTER_COUNT * Integer.BYTES;
     static final int SPATIAL_DIAGNOSTIC_PAIR_CAPACITY = 4096;
@@ -170,6 +179,7 @@ final class RtPathReservoirHistory {
     private RtBuffer spatialDiagnosticPairs;
     private RtBuffer shiftedSourceRoots;
     private RtBuffer shiftedMappedReservoirs;
+    private RtBuffer shiftedReceiverGuides;
     private RtPathTemporalPipeline temporalPipeline;
     private int spatialDiagnosticViewPending;
     private int width = -1;
@@ -254,23 +264,30 @@ final class RtPathReservoirHistory {
         if (!ready()) {
             throw new IllegalStateException("Shifted source roots used before path allocation");
         }
-        if (shiftedSourceRoots != null && shiftedMappedReservoirs != null) {
+        if (shiftedSourceRoots != null && shiftedMappedReservoirs != null
+                && shiftedReceiverGuides != null) {
             return;
         }
         long rootBytes = Math.multiplyExact(Math.multiplyExact((long) width, height),
                 PathSourceRootData.BYTE_SIZE);
         long mappedBytes = bytesPerSlot(width, height);
+        long receiverGuideBytes = shiftedReceiverGuideBytes(width, height);
         shiftedSourceRoots = ctx.createBuffer(rootBytes, VK10.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
                 false, "path shifted source roots " + width + "x" + height);
         shiftedMappedReservoirs = ctx.createBuffer(mappedBytes,
                 VK10.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK10.VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                 false, "path shifted mapped snapshot " + width + "x" + height);
+        shiftedReceiverGuides = ctx.createBuffer(receiverGuideBytes,
+                VK10.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                false, "path shifted receiver guides " + width + "x" + height);
         CausticaMod.LOGGER.info(
                 "RT path shifted snapshot: render={}x{}, rootStride={} B, mappedStride={} B, "
-                        + "rootBytes={}, mappedBytes={}, gpuMiB={}",
+                        + "receiverGuideStride={} B, rootBytes={}, mappedBytes={}, "
+                        + "receiverGuideBytes={}, gpuMiB={}",
                 width, height, PathSourceRootData.BYTE_SIZE, BYTES_PER_RESERVOIR,
-                rootBytes, mappedBytes,
-                String.format(Locale.ROOT, "%.2f", (rootBytes + mappedBytes) / (1024.0 * 1024.0)));
+                SHIFTED_RECEIVER_GUIDE_STRIDE, rootBytes, mappedBytes, receiverGuideBytes,
+                String.format(Locale.ROOT, "%.2f",
+                        (rootBytes + mappedBytes + receiverGuideBytes) / (1024.0 * 1024.0)));
         shiftedSnapshotState.reset();
     }
 
@@ -288,6 +305,10 @@ final class RtPathReservoirHistory {
 
     long shiftedMappedReservoirAddress() {
         return shiftedMappedReservoirs == null ? 0L : shiftedMappedReservoirs.deviceAddress;
+    }
+
+    long shiftedReceiverGuideAddress() {
+        return shiftedReceiverGuides == null ? 0L : shiftedReceiverGuides.deviceAddress;
     }
 
     boolean previousShiftedSnapshotAvailable(Frame frame, long frameIndex) {
@@ -430,6 +451,22 @@ final class RtPathReservoirHistory {
                     counters.get(CROSS_FRAME_EDGE_PDF_REJECT_INDEX));
             long crossFrameEdgeFiniteReject = Integer.toUnsignedLong(
                     counters.get(CROSS_FRAME_EDGE_FINITE_REJECT_INDEX));
+            long receiverGuideAttempted = Integer.toUnsignedLong(
+                    counters.get(RECEIVER_GUIDE_ATTEMPTED_INDEX));
+            long receiverGuideInvalid = Integer.toUnsignedLong(
+                    counters.get(RECEIVER_GUIDE_INVALID_INDEX));
+            long receiverGuideNoStoredEdge = Integer.toUnsignedLong(
+                    counters.get(RECEIVER_GUIDE_NO_STORED_EDGE_INDEX));
+            long receiverGuideStoredEligible = Integer.toUnsignedLong(
+                    counters.get(RECEIVER_GUIDE_STORED_ELIGIBLE_INDEX));
+            long receiverGuideAccepted = Integer.toUnsignedLong(
+                    counters.get(RECEIVER_GUIDE_ACCEPTED_INDEX));
+            long receiverGuideMassMismatch = Integer.toUnsignedLong(
+                    counters.get(RECEIVER_GUIDE_MASS_MISMATCH_INDEX));
+            long receiverGuideThroughputMismatch = Integer.toUnsignedLong(
+                    counters.get(RECEIVER_GUIDE_THROUGHPUT_MISMATCH_INDEX));
+            long receiverGuidePdfMismatch = Integer.toUnsignedLong(
+                    counters.get(RECEIVER_GUIDE_PDF_MISMATCH_INDEX));
             long crossFrameReceiverReject = crossFrameReceiverSurfaceReject
                     + crossFrameReceiverSampleReject + crossFrameReceiverEdgeReject
                     + crossFrameReceiverTopologyReject + crossFrameReceiverDepthReject
@@ -532,7 +569,9 @@ final class RtPathReservoirHistory {
                              + "sampleRescue[eligible={},rescued={},edge={},topology={},depth={},"
                              + "transport={},footprint={}], "
                              + "edgeBreakdown[eligible={},missingValid={},depth={},event={},"
-                             + "mapping={},pdf={},finite={}]",
+                             + "mapping={},pdf={},finite={}], "
+                             + "receiverGuide[attempted={},invalid={},noStoredEdge={},"
+                             + "storedEligible={},accepted={},mass={},throughput={},pdf={}]",
                     total,
                     values[0], percent(values[0], total),
                     values[1], percent(values[1], total),
@@ -626,7 +665,11 @@ final class RtPathReservoirHistory {
                      crossFrameEdgeBreakdownEligible, crossFrameEdgeMissingValid,
                      crossFrameEdgeDepthReject, crossFrameEdgeEventReject,
                      crossFrameEdgeMappingReject, crossFrameEdgePdfReject,
-                     crossFrameEdgeFiniteReject);
+                     crossFrameEdgeFiniteReject,
+                     receiverGuideAttempted, receiverGuideInvalid,
+                     receiverGuideNoStoredEdge, receiverGuideStoredEligible,
+                     receiverGuideAccepted, receiverGuideMassMismatch,
+                     receiverGuideThroughputMismatch, receiverGuidePdfMismatch);
             spatialDiagnosticViewPending = 0;
             return;
         }
@@ -729,6 +772,14 @@ final class RtPathReservoirHistory {
                 BYTES_PER_RESERVOIR);
     }
 
+    static long shiftedReceiverGuideBytes(int width, int height) {
+        if (width <= 0 || height <= 0) {
+            throw new IllegalArgumentException("Shifted receiver-guide extent must be positive");
+        }
+        return Math.multiplyExact(Math.multiplyExact((long) width, height),
+                SHIFTED_RECEIVER_GUIDE_STRIDE);
+    }
+
     boolean ready() {
         return slots[0] != null && slots[1] != null
                 && spatialDiagnosticCounters != null && spatialDiagnosticPairs != null
@@ -755,6 +806,10 @@ final class RtPathReservoirHistory {
         if (shiftedMappedReservoirs != null) {
             shiftedMappedReservoirs.destroy();
             shiftedMappedReservoirs = null;
+        }
+        if (shiftedReceiverGuides != null) {
+            shiftedReceiverGuides.destroy();
+            shiftedReceiverGuides = null;
         }
         for (int slot = 0; slot < SLOT_COUNT; slot++) {
             if (slots[slot] != null) {

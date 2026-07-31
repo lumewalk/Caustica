@@ -66,7 +66,15 @@ public static const uint PATH_CROSS_FRAME_EDGE_EVENT_REJECT = 63u;
 public static const uint PATH_CROSS_FRAME_EDGE_MAPPING_REJECT = 64u;
 public static const uint PATH_CROSS_FRAME_EDGE_PDF_REJECT = 65u;
 public static const uint PATH_CROSS_FRAME_EDGE_FINITE_REJECT = 66u;
-public static const uint PATH_SHIFT_DIAGNOSTIC_COUNTER_COUNT = 47u;
+public static const uint PATH_RECEIVER_GUIDE_ATTEMPTED = 67u;
+public static const uint PATH_RECEIVER_GUIDE_INVALID = 68u;
+public static const uint PATH_RECEIVER_GUIDE_NO_STORED_EDGE = 69u;
+public static const uint PATH_RECEIVER_GUIDE_STORED_ELIGIBLE = 70u;
+public static const uint PATH_RECEIVER_GUIDE_ACCEPTED = 71u;
+public static const uint PATH_RECEIVER_GUIDE_MASS_MISMATCH = 72u;
+public static const uint PATH_RECEIVER_GUIDE_THROUGHPUT_MISMATCH = 73u;
+public static const uint PATH_RECEIVER_GUIDE_PDF_MISMATCH = 74u;
+public static const uint PATH_SHIFT_DIAGNOSTIC_COUNTER_COUNT = 75u;
 public static const uint PATH_SHIFT_DIAGNOSTIC_PAIR_MASK = 3u;
 public static const uint PATH_SHIFT_DIAGNOSTIC_MERGE_PAIR_OFFSET =
         PATH_SPATIAL_DIAGNOSTIC_PAIR_CAPACITY * 2u;

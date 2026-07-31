@@ -169,6 +169,24 @@ final class RtPathSpatialReuseReferenceTest {
         assertNotEquals(lowGuide.eventThroughput().r(), highGuide.eventThroughput().r());
         assertEquals(lowGuide.techniqueMass() * 0.5 / Math.PI,
                 lowGuide.directionalPdf(0.5), 1.0e-12);
+        var particleGuide = RtPathSpatialReuseReference.DiffuseReceiverGuide.particle(diffuse);
+        assertEquals(1.0, particleGuide.techniqueMass(), 0.0);
+        assertEquals(diffuse, particleGuide.eventThroughput());
+
+        assertEquals(RtPathSpatialReuseReference.ReceiverGuideComparison.ACCEPTED,
+                lowGuide.compareStored(lowGuide.eventThroughput(),
+                        lowGuide.directionalPdf(0.5), 0.5));
+        assertEquals(RtPathSpatialReuseReference.ReceiverGuideComparison.MASS_MISMATCH,
+                lowGuide.compareStored(new RtPathSpatialReuseReference.Rgb(0.625, 0.625, 0.625),
+                        lowGuide.directionalPdf(0.5), 0.5));
+        assertEquals(RtPathSpatialReuseReference.ReceiverGuideComparison.THROUGHPUT_MISMATCH,
+                lowGuide.compareStored(
+                        new RtPathSpatialReuseReference.Rgb(
+                                lowGuide.eventThroughput().r(), 0.1, 0.1),
+                        lowGuide.directionalPdf(0.5), 0.5));
+        assertEquals(RtPathSpatialReuseReference.ReceiverGuideComparison.PDF_MISMATCH,
+                lowGuide.compareStored(lowGuide.eventThroughput(),
+                        0.25, 0.5));
 
         var deltaOnly = new RtPathSpatialReuseReference.DiffuseReceiverMaterial(
                 new RtPathSpatialReuseReference.Rgb(0.0, 0.0, 0.0),
@@ -614,9 +632,20 @@ final class RtPathSpatialReuseReferenceTest {
         assertEquals(64, RtPathReservoirHistory.CROSS_FRAME_EDGE_MAPPING_REJECT_INDEX);
         assertEquals(65, RtPathReservoirHistory.CROSS_FRAME_EDGE_PDF_REJECT_INDEX);
         assertEquals(66, RtPathReservoirHistory.CROSS_FRAME_EDGE_FINITE_REJECT_INDEX);
-        assertEquals(67, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
-        assertEquals(67 * Integer.BYTES,
+        assertEquals(67, RtPathReservoirHistory.RECEIVER_GUIDE_ATTEMPTED_INDEX);
+        assertEquals(68, RtPathReservoirHistory.RECEIVER_GUIDE_INVALID_INDEX);
+        assertEquals(69, RtPathReservoirHistory.RECEIVER_GUIDE_NO_STORED_EDGE_INDEX);
+        assertEquals(70, RtPathReservoirHistory.RECEIVER_GUIDE_STORED_ELIGIBLE_INDEX);
+        assertEquals(71, RtPathReservoirHistory.RECEIVER_GUIDE_ACCEPTED_INDEX);
+        assertEquals(72, RtPathReservoirHistory.RECEIVER_GUIDE_MASS_MISMATCH_INDEX);
+        assertEquals(73, RtPathReservoirHistory.RECEIVER_GUIDE_THROUGHPUT_MISMATCH_INDEX);
+        assertEquals(74, RtPathReservoirHistory.RECEIVER_GUIDE_PDF_MISMATCH_INDEX);
+        assertEquals(75, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
+        assertEquals(75 * Integer.BYTES,
                 RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_COUNTER_BYTES);
+        assertEquals(16, RtPathReservoirHistory.SHIFTED_RECEIVER_GUIDE_STRIDE);
+        assertEquals(13_783_040L,
+                RtPathReservoirHistory.shiftedReceiverGuideBytes(1280, 673));
         assertEquals(160, PathSourceRootData.BYTE_SIZE);
         assertEquals(4096, RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_PAIR_CAPACITY);
         assertEquals(4096, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_DENSITY_PAIR_OFFSET);

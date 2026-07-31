@@ -270,8 +270,9 @@ The source-lifetime sub-gate adds a lazy view-20-only retained-root sidecar with
 position/material, normal/roughness, and both packed 48-byte source queue segments; positions are
 camera-relative so terrain rebasing does not invalidate the root. Same-frame mapping replay consumes
 this retained root instead of the transient current-frame queue. Extra counters expose root writes,
-invalid captures, and retained-root replay rejection. Together the 160-byte root and 176-byte mapped
-snapshot cost about 276.04 MiB at 1280x673, are absent from ordinary rendering, and are not committed
+invalid captures, and retained-root replay rejection. Together the 160-byte root, 176-byte mapped
+snapshot, and 16-byte exact receiver guide cost about 289.18 MiB at 1280x673, are absent from
+ordinary rendering, and are not committed
 as path history.
 
 The shader-independent `PersistentDiffuseRemap` reference defines the next history boundary. The
@@ -356,8 +357,24 @@ but the sampled diffuse event uses `eventThroughput = diffAlb / (1 - ps)` and di
 guide stores; material identity alone cannot reconstruct texture-evaluated F0. A shader-independent
 counterexample gives identical current guide terms but different technique mass/throughput for two
 F0 values. The minimal exact candidate contract is therefore one float4 containing exact RGB
-diffuse albedo plus diffuse technique mass. It would cost 16 B/pixel (about 13.14 MiB at 1280x673),
-but remains reference-only until lifecycle, consumers, and memory accounting are reviewed.
+diffuse albedo plus diffuse technique mass. View 20 now allocates that 16 B/pixel sidecar lazily
+(about 13.14 MiB at 1280x673) alongside its source-root/mapped snapshot buffers. Primary visibility
+writes it deterministically before endpoint selection, with opaque and particle rules matching the
+production path sampler; its BDA is zero outside view 20.
+
+The first consumer is comparison-only. Cross-frame replay counts surface-compatible receivers as
+invalid guide, no stored positive diffuse edge, or stored-edge eligible, then compares eligible
+records in the fixed order technique mass, throughput, and directional PDF. Exact accounting must
+hold for both partitions. The guide is not yet an admission substitute or a remapping input, and it
+does not enter committed history or the estimator until runtime comparison proves the contract.
+
+Runtime comparison proved the material half of the contract but not the outgoing-direction half.
+Across 29 stable readbacks, all 106191 stored-edge comparisons had a valid guide, throughput mismatch
+was zero, technique-mass mismatch was 299 (0.2816%), and directional-PDF mismatch was 25180
+(23.7120%). Both counter partitions were exact in every readback. A one-second camera move reduced
+the eligible population fail-closed and stationary counts recovered on the next readback. The next
+gate is therefore an exact replayable receiver outgoing direction/density, independent of endpoint
+selection; persistent reuse remains forbidden.
 
 ## Delivery Phases
 

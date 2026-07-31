@@ -188,9 +188,9 @@ View 20 dispatches that receiver-aware validation as a same-frame ray-generation
 snapshot merge. A lazy view-20-only 160-byte-per-pixel sidecar retains both packed source queue
 segments plus source and receiver position/material and normal/roughness guides. Segment origins and
 positions are stored camera-relative, so they do not depend on the capture frame's terrain rebase.
-Together with the separate 176-byte mapped snapshot this costs about 276.04 MiB at 1280x673 and is
-not allocated by ordinary rendering. The validation pass replays the retained source root rather
-than dereferencing the transient queue, checks
+Together with the separate 176-byte mapped snapshot and 16-byte exact receiver guide this costs
+about 289.18 MiB at 1280x673 and is not allocated by ordinary rendering. The validation pass replays
+the retained source root rather than dereferencing the transient queue, checks
 the source topology and proposal state, reconstructs the receiver-side geometry, directional PDF,
 PSS Jacobian and first-event throughput, traces receiver-to-second-hit visibility again, and compares
 the resulting shifted RGB/target with the snapshot record. Source-root written/invalid counters and a
@@ -267,8 +267,28 @@ The audit shows why the current RGBA16F albedo guide cannot supply exact mapping
 selection uses `ps(F0, diffAlb)`, so receiver throughput is `diffAlb/(1-ps)` and receiver PDF carries
 the same `(1-ps)` technique mass. F0 is texture-evaluated at the hit and is absent from the guide
 cache. `DiffuseReceiverMaterial` and `DiffuseReceiverGuide` now define the shader-independent
-contract and an explicit same-albedo/different-F0 counterexample. The smallest exact GPU form would
-be float4(exact diffuse RGB, diffuse technique mass), 16 B/pixel; it is not allocated yet.
+contract and an explicit same-albedo/different-F0 counterexample. View 20 now lazily allocates the
+minimal `float4(exact diffuse RGB, diffuse technique mass)` sidecar (16 B/pixel, about 13.14 MiB at
+1280x673). The primary pass writes it before canonical endpoint selection: opaque receivers use the
+same `ps(F0, diffAlb)` calculation as the path tracer, particles use diffuse mass 1, and unsupported
+dielectric/water receivers write mass 0. Ordinary rendering keeps its address zero and allocates no
+corresponding memory.
+
+Cross-frame replay currently uses the sidecar only as a shadow validation. `receiverGuide[...]`
+partitions every surface-compatible attempt into invalid guide, no positive stored diffuse edge, or
+stored-edge comparison; the latter is split into accepted, technique-mass, throughput, and PDF
+mismatch. The accounting identities are `attempted = invalid + noStoredEdge + storedEligible` and
+`storedEligible = accepted + mass + throughput + pdf`. These counters do not relax admission, feed
+mapping terms, select samples, update history, or change the estimator.
+
+The first runtime comparison covered 29 stable readbacks and 106191 stored-edge comparisons. Both
+accounting identities held in every readback. The exact guide was always valid, throughput mismatch
+was zero, and technique-mass mismatch was 299 records (0.2816%). Directional-PDF reconstruction
+rejected 25180 records (23.7120%), isolating the remaining blocker to the sampled outgoing direction
+or its exact density rather than to F0/material reconstruction. A brief camera move produced one
+fail-closed readback with only 33 stored-edge comparisons; the stationary population recovered on
+the next readback. The sidecar must not replace a current edge or enter persistent history until the
+directional contract is exact.
 
 ## Linux
 

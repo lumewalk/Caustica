@@ -625,7 +625,8 @@ public void pathMappingReplayValidate() {
             || pc.pathReservoirAddr == 0u
             || pc.pathReservoirPreviousAddr == 0u
             || worldPush.pathShiftDiagnosticCounterAddr == 0u
-            || worldPush.pathShiftSourceRootAddr == 0u) {
+            || worldPush.pathShiftSourceRootAddr == 0u
+            || worldPush.pathShiftReceiverGuideAddr == 0u) {
         return;
     }
 
@@ -834,6 +835,62 @@ public void pathMappingReplayValidate() {
                 ? PATH_CROSS_FRAME_RECEIVER_SURFACE_REJECT
                 : PATH_MAPPING_REPLAY_RECEIVER_REJECT], 1u);
         return;
+    }
+    if (crossFrame) {
+        // Validate the deterministic primary receiver contract independently of endpoint selection.
+        // Only positive stored diffuse edges participate in the numerical comparison; empty/unsupported
+        // current records remain an explicit category and never borrow the guide for actual remapping.
+        InterlockedAdd(counters[PATH_RECEIVER_GUIDE_ATTEMPTED], 1u);
+        if (!currentEdgeAvailable) {
+            InterlockedAdd(counters[PATH_RECEIVER_GUIDE_NO_STORED_EDGE], 1u);
+        } else {
+            float4 receiverGuide =
+                    ConstPtr<float4>(worldPush.pathShiftReceiverGuideAddr)[pixelIndex];
+            bool guideValid = all(isfinite(receiverGuide))
+                    && all(receiverGuide.xyz >= float3(0.0))
+                    && receiverGuide.w > 0.0 && receiverGuide.w <= 1.0;
+            if (!guideValid) {
+                InterlockedAdd(counters[PATH_RECEIVER_GUIDE_INVALID], 1u);
+            } else {
+                InterlockedAdd(counters[PATH_RECEIVER_GUIDE_STORED_ELIGIBLE], 1u);
+                float3 exactReceiverNormal =
+                        receiverNormalRoughness.xyz / receiverNormalLength;
+                // The stored PDF was evaluated for the sampled ray direction. Reconstruct that ray
+                // from its actual biased trace origin; the physical receiver->vertex chord differs
+                // slightly and is appropriate for mapping geometry, but not for this exact PDF check.
+                float3 sampledEdge = current.reconnectionVertex.xyz
+                        - (receiverPositionMaterial.xyz
+                                + exactReceiverNormal * SURF_BIAS);
+                float baseDensity = pathMappingDiffuseDensity(exactReceiverNormal,
+                        sampledEdge);
+                float expectedPdf = max(receiverGuide.w * baseDensity, 1.0e-20);
+                float3 expectedThroughput = receiverGuide.xyz / receiverGuide.w;
+                // Throughput stores diffAlb / techniqueMass exactly. Recover the material-only mass
+                // from the strongest channel so this check is independent of direction reconstruction.
+                float dominantAlbedo = receiverGuide.x;
+                float dominantThroughput = current.reconnectionThroughput.x;
+                if (receiverGuide.y > dominantAlbedo) {
+                    dominantAlbedo = receiverGuide.y;
+                    dominantThroughput = current.reconnectionThroughput.y;
+                }
+                if (receiverGuide.z > dominantAlbedo) {
+                    dominantAlbedo = receiverGuide.z;
+                    dominantThroughput = current.reconnectionThroughput.z;
+                }
+                float storedMass = dominantAlbedo > 0.0 && dominantThroughput > 0.0
+                        ? dominantAlbedo / dominantThroughput : 0.0;
+                uint comparison = !pathReplayFloatMatches(storedMass, receiverGuide.w)
+                        ? PATH_RECEIVER_GUIDE_MASS_MISMATCH
+                        : !pathReplayColorMatches(expectedThroughput,
+                                current.reconnectionThroughput.xyz)
+                                ? PATH_RECEIVER_GUIDE_THROUGHPUT_MISMATCH
+                                : !pathReplayFloatMatches(expectedPdf,
+                                        current.reconnectionNormalPdf.w)
+                                        ? PATH_RECEIVER_GUIDE_PDF_MISMATCH
+                                        : PATH_RECEIVER_GUIDE_ACCEPTED;
+                InterlockedAdd(counters[comparison], 1u);
+            }
+        }
     }
     bool currentSampleUsable = current.weights.y > 0.0
             && current.sampleRadianceTarget.w > 0.0;

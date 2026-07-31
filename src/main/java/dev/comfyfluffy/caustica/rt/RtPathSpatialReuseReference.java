@@ -485,7 +485,7 @@ final class RtPathSpatialReuseReference {
         }
     }
 
-    /** Material terms available at the deterministic primary receiver, before endpoint selection. */
+    /** Opaque material terms available at the deterministic primary receiver, before endpoint selection. */
     record DiffuseReceiverMaterial(Rgb diffuseAlbedo, Rgb f0, boolean exactSpecular) {
         DiffuseReceiverMaterial {
             if (diffuseAlbedo == null || f0 == null) {
@@ -525,6 +525,48 @@ final class RtPathSpatialReuseReference {
         double directionalPdf(double cosine) {
             return techniqueMass * diffuseShiftDirectionalDensity(cosine);
         }
+
+        static DiffuseReceiverGuide particle(Rgb diffuseAlbedo) {
+            return new DiffuseReceiverGuide(diffuseAlbedo, 1.0);
+        }
+
+        ReceiverGuideComparison compareStored(
+                Rgb storedThroughput, double storedDirectionalPdf, double cosine) {
+            if (storedThroughput == null || !positiveFinite(storedDirectionalPdf)) {
+                throw new IllegalArgumentException("invalid stored diffuse edge");
+            }
+            double dominantAlbedo = diffuseAlbedo.r();
+            double dominantThroughput = storedThroughput.r();
+            if (diffuseAlbedo.g() > dominantAlbedo) {
+                dominantAlbedo = diffuseAlbedo.g();
+                dominantThroughput = storedThroughput.g();
+            }
+            if (diffuseAlbedo.b() > dominantAlbedo) {
+                dominantAlbedo = diffuseAlbedo.b();
+                dominantThroughput = storedThroughput.b();
+            }
+            double storedTechniqueMass = dominantAlbedo > 0.0 && dominantThroughput > 0.0
+                    ? dominantAlbedo / dominantThroughput : 0.0;
+            if (!replayFloatMatches(techniqueMass, storedTechniqueMass)) {
+                return ReceiverGuideComparison.MASS_MISMATCH;
+            }
+            Rgb expectedThroughput = eventThroughput();
+            if (!replayFloatMatches(expectedThroughput.r(), storedThroughput.r())
+                    || !replayFloatMatches(expectedThroughput.g(), storedThroughput.g())
+                    || !replayFloatMatches(expectedThroughput.b(), storedThroughput.b())) {
+                return ReceiverGuideComparison.THROUGHPUT_MISMATCH;
+            }
+            return replayFloatMatches(directionalPdf(cosine), storedDirectionalPdf)
+                    ? ReceiverGuideComparison.ACCEPTED
+                    : ReceiverGuideComparison.PDF_MISMATCH;
+        }
+    }
+
+    enum ReceiverGuideComparison {
+        ACCEPTED,
+        MASS_MISMATCH,
+        THROUGHPUT_MISMATCH,
+        PDF_MISMATCH
     }
 
     /**

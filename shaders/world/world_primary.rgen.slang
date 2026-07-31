@@ -72,9 +72,18 @@ public PathSegment tracePrimary(PathSegment seg,
             float3 diffAlb = material == MATERIAL_PARTICLE
                     ? float3(payload.albedo) : float3(payload.albedo) * (1.0 - metal);
             if (bounce == 0) {
+                float diffuseTechniqueMass = 1.0;
+                if (material == MATERIAL_OPAQUE) {
+                    float ps = exactSpecular && luminance(diffAlb) <= 1.0e-6
+                            ? 1.0
+                            : clamp(luminance(payload.f0)
+                                    / (luminance(payload.f0) + luminance(diffAlb) + 1.0e-4),
+                                    0.1, 0.9);
+                    diffuseTechniqueMass = 1.0 - ps;
+                }
                 setRestirReceiver(hitPos, n, diffAlb, rough,
                         material == MATERIAL_PARTICLE ? 0.0 : payloadSss(), material,
-                        payloadMaterialKey());
+                        payloadMaterialKey(), diffuseTechniqueMass);
                 gv_normal = n;
                 gv_hitCamRel = hitPos - worldPush.camOffset;
                 gv_motionUseRefracted = false;
@@ -139,7 +148,7 @@ public PathSegment tracePrimary(PathSegment seg,
             // Dielectric direct-light reuse will be added with a dedicated transmissive target.
             // Preserve the first interface now, but leave its diffuse target at zero.
             setRestirReceiver(hitPos, n, float3(0.0, 0.0, 0.0), 0.0, 0.0, material,
-                    payloadMaterialKey());
+                    payloadMaterialKey(), 0.0);
             gv_normal = n;
             gv_rough = 0.0;
             gv_albedo = float3(0.0, 0.0, 0.0);

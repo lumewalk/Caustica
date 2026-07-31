@@ -28,6 +28,10 @@ public static float3 rv_albedo = float3(0.0, 0.0, 0.0);
 public static float rv_roughness = 1.0;
 public static float rv_sss = 0.0;
 public static uint rv_materialIdentity = 0x00FFFFFFu;
+// Exact first-edge diffuse mapping terms. Unlike gRestirAlbedoSss, this sidecar is FP32 and stores
+// the sampling-technique mass required to reconstruct both event throughput and directional PDF.
+public static float3 rv_exactDiffuseAlbedo = float3(0.0, 0.0, 0.0);
+public static float rv_diffuseTechniqueMass = 0.0;
 // Transmission replaces the ordinary guide tuple with the visible destination, so RR's specular inputs
 // (specular albedo + reflection MV) need the foreground glass/water interface kept separately. This is
 // the surface the reflection physically lives on; for an opaque primary hit it is that hit itself.
@@ -158,13 +162,16 @@ public void setTransmissionGuide(float3 hitCamRel, float3 motionPrev, float3 nor
 }
 
 public void setRestirReceiver(float3 position, float3 normal, float3 albedo,
-                       float roughness, float sss, uint material, uint materialKey) {
+                       float roughness, float sss, uint material, uint materialKey,
+                       float diffuseTechniqueMass) {
     rv_position = position;
     rv_normal = normal;
     rv_albedo = albedo;
     rv_roughness = roughness;
     rv_sss = sss;
     rv_materialIdentity = packReceiverMaterialIdentity(material, materialKey);
+    rv_exactDiffuseAlbedo = albedo;
+    rv_diffuseTechniqueMass = diffuseTechniqueMass;
 }
 
 // Deterministic ordinary guide behind the first transmitted interface. This is guide-only work:
@@ -293,6 +300,12 @@ public void writeGuides(int2 pix, float3 primaryDir, float2 jndc, float2 size, f
     gRestirPositionMaterial[pix] = float4(rv_position, float(rv_materialIdentity));
     gRestirNormalRoughness[pix] = float4(rv_normal, rv_roughness);
     gRestirAlbedoSss[pix] = float4(rv_albedo, rv_sss);
+    if (worldPush.pathShiftReceiverGuideAddr != 0u) {
+        uint3 dimensions = DispatchRaysDimensions();
+        uint pixelIndex = uint(pix.y) * dimensions.x + uint(pix.x);
+        DevicePtr<float4>(worldPush.pathShiftReceiverGuideAddr)[pixelIndex] =
+                float4(rv_exactDiffuseAlbedo, rv_diffuseTechniqueMass);
+    }
 }
 
 // 48-byte queue record. float3 + uint intentionally share the first 16-byte lane; every remaining
