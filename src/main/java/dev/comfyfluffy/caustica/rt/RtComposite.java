@@ -936,10 +936,13 @@ public final class RtComposite {
                              RtPathReservoirHistory.Frame pathReservoirFrame,
                              boolean restirPt) {
         int debugView = debugView();
+        boolean previousShiftedSnapshot = false;
         if (restirPt) {
             pathReservoirs.pollSpatialDiagnosticCounters(ctx, frameCounter);
             if (debugView == RtPathReservoirHistory.SHIFTED_RADIANCE_DEBUG_VIEW) {
                 pathReservoirs.ensureShiftedSourceRoots(ctx);
+                previousShiftedSnapshot = pathReservoirs.previousShiftedSnapshotAvailable(
+                        pathReservoirFrame, frameCounter);
             }
         }
         long dstImage = vkImage(nativeColor);
@@ -1126,10 +1129,10 @@ public final class RtComposite {
                     : directReservoirs.finalBuffer(reservoirFrame);
             ByteBuffer pushConstants = stack.malloc(WorldPushConstantsData.BYTE_SIZE);
             long pathPreviousOrScratchAddress = restirPt
-                    && debugView == RtPathReservoirHistory.SHIFTED_RADIANCE_DEBUG_VIEW
-                    ? pathReservoirs.scratchBuffer(pathReservoirFrame).deviceAddress
-                    : restirPt && pathReservoirFrame.previousAvailable()
-                            ? pathReservoirs.previousBuffer(pathReservoirFrame).deviceAddress : 0L;
+                     && debugView == RtPathReservoirHistory.SHIFTED_RADIANCE_DEBUG_VIEW
+                     ? pathReservoirs.shiftedMappedReservoirAddress()
+                     : restirPt && pathReservoirFrame.previousAvailable()
+                             ? pathReservoirs.previousBuffer(pathReservoirFrame).deviceAddress : 0L;
             int pathHistoryFlags =
                     (reservoirFrame.previousAvailable() && diagnosticDirectReuse ? 1 : 0)
                             | (restirDirect ? 2 : 0)
@@ -1151,8 +1154,9 @@ public final class RtComposite {
                     restirPt ? (int) pathReservoirFrame.generation() : 0);
             worldConstants.write(pushConstants);
             ByteBuffer mappingReplayPushConstants = null;
+            ByteBuffer crossFrameMappingReplayPushConstants = null;
             if (restirPt
-                    && debugView == RtPathReservoirHistory.SHIFTED_RADIANCE_DEBUG_VIEW) {
+                     && debugView == RtPathReservoirHistory.SHIFTED_RADIANCE_DEBUG_VIEW) {
                 mappingReplayPushConstants =
                         stack.malloc(WorldPushConstantsData.BYTE_SIZE);
                 new WorldPushConstantsData(
@@ -1174,7 +1178,32 @@ public final class RtComposite {
                         worldConstants.historyFlags()
                                 | RtPathReservoirHistory.MAPPING_REPLAY_PASS_FLAG,
                         worldConstants.historyGeneration())
-                        .write(mappingReplayPushConstants);
+                         .write(mappingReplayPushConstants);
+                if (previousShiftedSnapshot) {
+                    crossFrameMappingReplayPushConstants =
+                            stack.malloc(WorldPushConstantsData.BYTE_SIZE);
+                    new WorldPushConstantsData(
+                            worldConstants.worldPushAddr(),
+                            worldConstants.tableAddr(),
+                            worldConstants.entityTableAddr(),
+                            worldConstants.materialTableAddr(),
+                            worldConstants.lightBufAddr(),
+                            worldConstants.lightAliasAddr(),
+                            worldConstants.lightLocalAliasAddr(),
+                            worldConstants.lightGridCellAddr(),
+                            worldConstants.lightGridSpanAddr(),
+                            worldConstants.pathQueueAddr(),
+                            worldConstants.directReservoirAddr(),
+                            worldConstants.pathReservoirAddr(),
+                            worldConstants.pathReservoirPreviousAddr(),
+                            worldConstants.frameIndex(),
+                            worldConstants.debugView(),
+                            worldConstants.historyFlags()
+                                    | RtPathReservoirHistory.MAPPING_REPLAY_PASS_FLAG
+                                    | RtPathReservoirHistory.CROSS_FRAME_MAPPING_REPLAY_PASS_FLAG,
+                            worldConstants.historyGeneration())
+                            .write(crossFrameMappingReplayPushConstants);
+                }
             }
             try (RtFrameStats.Scope ignoredTrace = RtFrameStats.FRAME.stage("frame.trace")) {
                 try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd, "world primary trace");
@@ -1210,6 +1239,19 @@ public final class RtComposite {
                 if (debugView == RtPathReservoirHistory.SHIFTED_RADIANCE_DEBUG_VIEW) {
                     pathReservoirs.beginShiftedRadianceDiagnostics(cmd);
                     VulkanCommandEncoder.memoryBarrier(cmd, stack);
+                    if (previousShiftedSnapshot) {
+                        try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd,
+                                     "path cross-frame mapping replay");
+                             RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage(
+                                     "frame.pathCrossFrameMappingReplay")) {
+                            active.trace(cmd, renderW, renderH,
+                                    crossFrameMappingReplayPushConstants, 1);
+                        }
+                        VulkanCommandEncoder.memoryBarrier(cmd, stack);
+                    }
+                    // The previous snapshot has now been consumed. Clear only the mapped-record
+                    // gate; source-root lanes may remain stale because a zero mapping never reads them.
+                    pathReservoirs.beginCurrentShiftedSnapshot(cmd);
                     try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd,
                                  "path shifted radiance");
                          RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage(
@@ -1225,6 +1267,7 @@ public final class RtComposite {
                                 mappingReplayPushConstants, 1);
                     }
                     VulkanCommandEncoder.memoryBarrier(cmd, stack);
+                    pathReservoirs.commitShiftedSnapshot(pathReservoirFrame, frameCounter);
                 }
             }
             try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd, "direct reservoir initialize");

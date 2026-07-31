@@ -31,6 +31,7 @@ final class RtPathReservoirHistory {
     static final int RECONNECTION_DEBUG_VIEW = 19;
     static final int SHIFTED_RADIANCE_DEBUG_VIEW = 20;
     static final int MAPPING_REPLAY_PASS_FLAG = 1 << 5;
+    static final int CROSS_FRAME_MAPPING_REPLAY_PASS_FLAG = 1 << 6;
     static final int SPATIAL_DIAGNOSTIC_CATEGORY_COUNT = 9;
     static final int SPATIAL_DIAGNOSTIC_STRICT_PAIR_CURSOR_INDEX =
             SPATIAL_DIAGNOSTIC_CATEGORY_COUNT;
@@ -57,7 +58,21 @@ final class RtPathReservoirHistory {
     static final int SHIFTED_SOURCE_ROOT_WRITTEN_INDEX = 30;
     static final int SHIFTED_SOURCE_ROOT_INVALID_INDEX = 31;
     static final int MAPPING_REPLAY_SOURCE_ROOT_REJECT_INDEX = 32;
-    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 33;
+    static final int CROSS_FRAME_ATTEMPTED_INDEX = 33;
+    static final int CROSS_FRAME_RECEIVER_REPROJECTION_REJECT_INDEX = 34;
+    static final int CROSS_FRAME_MAPPED_EMPTY_INDEX = 35;
+    static final int CROSS_FRAME_ELIGIBLE_INDEX = 36;
+    static final int CROSS_FRAME_ACCEPTED_INDEX = 37;
+    static final int CROSS_FRAME_ABI_REJECT_INDEX = 38;
+    static final int CROSS_FRAME_SOURCE_ROOT_REJECT_INDEX = 39;
+    static final int CROSS_FRAME_SOURCE_REPROJECTION_REJECT_INDEX = 40;
+    static final int CROSS_FRAME_SOURCE_REPLAY_REJECT_INDEX = 41;
+    static final int CROSS_FRAME_RECEIVER_REJECT_INDEX = 42;
+    static final int CROSS_FRAME_GEOMETRY_REJECT_INDEX = 43;
+    static final int CROSS_FRAME_PDF_REJECT_INDEX = 44;
+    static final int CROSS_FRAME_VISIBILITY_REJECT_INDEX = 45;
+    static final int CROSS_FRAME_RADIANCE_REJECT_INDEX = 46;
+    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 47;
     static final int SPATIAL_DIAGNOSTIC_COUNTER_BYTES =
             SHIFTED_DIAGNOSTIC_COUNTER_COUNT * Integer.BYTES;
     static final int SPATIAL_DIAGNOSTIC_PAIR_CAPACITY = 4096;
@@ -106,11 +121,35 @@ final class RtPathReservoirHistory {
         }
     }
 
+    static final class ShiftedSnapshotState {
+        private long latestFrame = Long.MIN_VALUE;
+        private long latestGeneration = Long.MIN_VALUE;
+
+        boolean previousAvailable(Frame frame, long frameIndex) {
+            return frame.previousAvailable()
+                    && latestFrame != Long.MIN_VALUE
+                    && latestFrame + 1L == frameIndex
+                    && latestGeneration == frame.generation();
+        }
+
+        void commit(Frame frame, long frameIndex) {
+            latestFrame = frameIndex;
+            latestGeneration = frame.generation();
+        }
+
+        void reset() {
+            latestFrame = Long.MIN_VALUE;
+            latestGeneration = Long.MIN_VALUE;
+        }
+    }
+
     private final State state = new State();
+    private final ShiftedSnapshotState shiftedSnapshotState = new ShiftedSnapshotState();
     private final RtBuffer[] slots = new RtBuffer[SLOT_COUNT];
     private RtBuffer spatialDiagnosticCounters;
     private RtBuffer spatialDiagnosticPairs;
     private RtBuffer shiftedSourceRoots;
+    private RtBuffer shiftedMappedReservoirs;
     private RtPathTemporalPipeline temporalPipeline;
     private int spatialDiagnosticViewPending;
     private int width = -1;
@@ -142,6 +181,7 @@ final class RtPathReservoirHistory {
                 receiverPositionMaterial.view, receiverNormalRoughness.view,
                 spatialDiagnosticCounters.handle, spatialDiagnosticPairs.handle);
         state.reset();
+        shiftedSnapshotState.reset();
     }
 
     Frame beginFrame(RtHistoryState.Frame historyFrame) {
@@ -194,17 +234,24 @@ final class RtPathReservoirHistory {
         if (!ready()) {
             throw new IllegalStateException("Shifted source roots used before path allocation");
         }
-        if (shiftedSourceRoots != null) {
+        if (shiftedSourceRoots != null && shiftedMappedReservoirs != null) {
             return;
         }
-        long bytes = Math.multiplyExact(Math.multiplyExact((long) width, height),
+        long rootBytes = Math.multiplyExact(Math.multiplyExact((long) width, height),
                 PathSourceRootData.BYTE_SIZE);
-        shiftedSourceRoots = ctx.createBuffer(bytes, VK10.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+        long mappedBytes = bytesPerSlot(width, height);
+        shiftedSourceRoots = ctx.createBuffer(rootBytes, VK10.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
                 false, "path shifted source roots " + width + "x" + height);
+        shiftedMappedReservoirs = ctx.createBuffer(mappedBytes,
+                VK10.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK10.VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                false, "path shifted mapped snapshot " + width + "x" + height);
         CausticaMod.LOGGER.info(
-                "RT path shifted source roots: render={}x{}, stride={} B, bytes={}, gpuMiB={}",
-                width, height, PathSourceRootData.BYTE_SIZE, bytes,
-                String.format(Locale.ROOT, "%.2f", bytes / (1024.0 * 1024.0)));
+                "RT path shifted snapshot: render={}x{}, rootStride={} B, mappedStride={} B, "
+                        + "rootBytes={}, mappedBytes={}, gpuMiB={}",
+                width, height, PathSourceRootData.BYTE_SIZE, BYTES_PER_RESERVOIR,
+                rootBytes, mappedBytes,
+                String.format(Locale.ROOT, "%.2f", (rootBytes + mappedBytes) / (1024.0 * 1024.0)));
+        shiftedSnapshotState.reset();
     }
 
     long shiftedDiagnosticCounterAddress() {
@@ -217,6 +264,29 @@ final class RtPathReservoirHistory {
 
     long shiftedSourceRootAddress() {
         return shiftedSourceRoots == null ? 0L : shiftedSourceRoots.deviceAddress;
+    }
+
+    long shiftedMappedReservoirAddress() {
+        return shiftedMappedReservoirs == null ? 0L : shiftedMappedReservoirs.deviceAddress;
+    }
+
+    boolean previousShiftedSnapshotAvailable(Frame frame, long frameIndex) {
+        return shiftedSnapshotState.previousAvailable(frame, frameIndex);
+    }
+
+    void beginCurrentShiftedSnapshot(VkCommandBuffer cmd) {
+        if (shiftedMappedReservoirs == null) {
+            throw new IllegalStateException("Shifted mapped snapshot used before allocation");
+        }
+        VK10.vkCmdFillBuffer(cmd, shiftedMappedReservoirs.handle, 0L,
+                shiftedMappedReservoirs.size, 0);
+        try (var stack = org.lwjgl.system.MemoryStack.stackPush()) {
+            VulkanCommandEncoder.memoryBarrier(cmd, stack);
+        }
+    }
+
+    void commitShiftedSnapshot(Frame frame, long frameIndex) {
+        shiftedSnapshotState.commit(frame, frameIndex);
     }
 
     void pollSpatialDiagnosticCounters(RtContext ctx, long frameIndex) {
@@ -272,6 +342,34 @@ final class RtPathReservoirHistory {
                     counters.get(SHIFTED_SOURCE_ROOT_INVALID_INDEX));
             long mappingSourceRootReject = Integer.toUnsignedLong(
                     counters.get(MAPPING_REPLAY_SOURCE_ROOT_REJECT_INDEX));
+            long crossFrameAttempted = Integer.toUnsignedLong(
+                    counters.get(CROSS_FRAME_ATTEMPTED_INDEX));
+            long crossFrameReceiverReprojectionReject = Integer.toUnsignedLong(
+                    counters.get(CROSS_FRAME_RECEIVER_REPROJECTION_REJECT_INDEX));
+            long crossFrameMappedEmpty = Integer.toUnsignedLong(
+                    counters.get(CROSS_FRAME_MAPPED_EMPTY_INDEX));
+            long crossFrameEligible = Integer.toUnsignedLong(
+                    counters.get(CROSS_FRAME_ELIGIBLE_INDEX));
+            long crossFrameAccepted = Integer.toUnsignedLong(
+                    counters.get(CROSS_FRAME_ACCEPTED_INDEX));
+            long crossFrameAbiReject = Integer.toUnsignedLong(
+                    counters.get(CROSS_FRAME_ABI_REJECT_INDEX));
+            long crossFrameSourceRootReject = Integer.toUnsignedLong(
+                    counters.get(CROSS_FRAME_SOURCE_ROOT_REJECT_INDEX));
+            long crossFrameSourceReprojectionReject = Integer.toUnsignedLong(
+                    counters.get(CROSS_FRAME_SOURCE_REPROJECTION_REJECT_INDEX));
+            long crossFrameSourceReplayReject = Integer.toUnsignedLong(
+                    counters.get(CROSS_FRAME_SOURCE_REPLAY_REJECT_INDEX));
+            long crossFrameReceiverReject = Integer.toUnsignedLong(
+                    counters.get(CROSS_FRAME_RECEIVER_REJECT_INDEX));
+            long crossFrameGeometryReject = Integer.toUnsignedLong(
+                    counters.get(CROSS_FRAME_GEOMETRY_REJECT_INDEX));
+            long crossFramePdfReject = Integer.toUnsignedLong(
+                    counters.get(CROSS_FRAME_PDF_REJECT_INDEX));
+            long crossFrameVisibilityReject = Integer.toUnsignedLong(
+                    counters.get(CROSS_FRAME_VISIBILITY_REJECT_INDEX));
+            long crossFrameRadianceReject = Integer.toUnsignedLong(
+                    counters.get(CROSS_FRAME_RADIANCE_REJECT_INDEX));
             int capturedSamples = (int) Math.min(sampleAttempts, SPATIAL_DIAGNOSTIC_PAIR_CAPACITY);
             FloatBuffer samples = MemoryUtil.memFloatBuffer(
                     spatialDiagnosticPairs.mapped, SHIFTED_DIAGNOSTIC_PAIR_FLOAT_COUNT);
@@ -356,11 +454,14 @@ final class RtPathReservoirHistory {
                             + "mergeWeight[p50={},p95={},p99={}], "
                             + "currentWeightSum[p50={},p95={},p99={}], "
                             + "selectionProbability[p50={},p95={},p99={}], "
-                            + "sourceSelected={}/{} ({}%), "
-                            + "scratch[written={},selected={},invalid={}], "
-                            + "sourceRoot[written={},invalid={}], "
-                            + "mappingReplay[eligible={},accepted={},abi={},source={},receiver={},"
-                            + "geometry={},pdf={},visibility={},radiance={},root={}]",
+                             + "sourceSelected={}/{} ({}%), "
+                             + "scratch[written={},selected={},invalid={}], "
+                             + "sourceRoot[written={},invalid={}], "
+                             + "mappingReplay[eligible={},accepted={},abi={},source={},receiver={},"
+                             + "geometry={},pdf={},visibility={},radiance={},root={}], "
+                             + "crossFrame[attempted={},receiverReprojection={},mappedEmpty={},"
+                             + "eligible={},accepted={},abi={},root={},sourceReprojection={},"
+                             + "sourceReplay={},receiver={},geometry={},pdf={},visibility={},radiance={}]",
                     total,
                     values[0], percent(values[0], total),
                     values[1], percent(values[1], total),
@@ -431,9 +532,16 @@ final class RtPathReservoirHistory {
                     sourceRootWritten, sourceRootInvalid,
                     mappingEligible, mappingAccepted, mappingAbiReject,
                     mappingSourceReject, mappingReceiverReject,
-                    mappingGeometryReject, mappingPdfReject,
-                    mappingVisibilityReject, mappingRadianceReject,
-                    mappingSourceRootReject);
+                     mappingGeometryReject, mappingPdfReject,
+                     mappingVisibilityReject, mappingRadianceReject,
+                     mappingSourceRootReject,
+                     crossFrameAttempted, crossFrameReceiverReprojectionReject,
+                     crossFrameMappedEmpty, crossFrameEligible, crossFrameAccepted,
+                     crossFrameAbiReject, crossFrameSourceRootReject,
+                     crossFrameSourceReprojectionReject, crossFrameSourceReplayReject,
+                     crossFrameReceiverReject, crossFrameGeometryReject,
+                     crossFramePdfReject, crossFrameVisibilityReject,
+                     crossFrameRadianceReject);
             spatialDiagnosticViewPending = 0;
             return;
         }
@@ -509,6 +617,7 @@ final class RtPathReservoirHistory {
 
     void reset() {
         state.reset();
+        shiftedSnapshotState.reset();
     }
 
     RtBuffer finalBuffer(Frame frame) {
@@ -558,6 +667,10 @@ final class RtPathReservoirHistory {
             shiftedSourceRoots.destroy();
             shiftedSourceRoots = null;
         }
+        if (shiftedMappedReservoirs != null) {
+            shiftedMappedReservoirs.destroy();
+            shiftedMappedReservoirs = null;
+        }
         for (int slot = 0; slot < SLOT_COUNT; slot++) {
             if (slots[slot] != null) {
                 slots[slot].destroy();
@@ -568,6 +681,7 @@ final class RtPathReservoirHistory {
         height = -1;
         spatialDiagnosticViewPending = 0;
         state.reset();
+        shiftedSnapshotState.reset();
     }
 
     private static String percent(long value, long total) {

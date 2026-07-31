@@ -331,18 +331,23 @@ void main() {
                     }
                     if (chainComplete
                             && all(isfinite(segment0.ro))
-                            && all(isfinite(segment1.ro))
-                            && all(isfinite(shiftedSourcePositionMaterial))
-                            && all(isfinite(shiftedSourceNormalRoughness))) {
+                             && all(isfinite(segment1.ro))
+                             && all(isfinite(shiftedSourcePositionMaterial))
+                             && all(isfinite(shiftedSourceNormalRoughness))
+                             && all(isfinite(receiverPositionMaterial))
+                             && all(isfinite(receiverNormalRoughness))) {
                         // Persist camera-relative origins. A later cross-frame pass can reconstruct
                         // current rebased coordinates with currentCamOffset - cameraDelta without
                         // retaining the capture frame's terrain origin.
                         segment0.ro -= worldPush.camOffset;
                         segment1.ro -= worldPush.camOffset;
                         sourceRoot.sourcePositionMaterial = shiftedSourcePositionMaterial;
-                        sourceRoot.sourcePositionMaterial.xyz -= worldPush.camOffset;
-                        sourceRoot.sourceNormalRoughness = shiftedSourceNormalRoughness;
-                        sourceRoot.segment0 = segment0;
+                         sourceRoot.sourcePositionMaterial.xyz -= worldPush.camOffset;
+                         sourceRoot.sourceNormalRoughness = shiftedSourceNormalRoughness;
+                         sourceRoot.receiverPositionMaterial = receiverPositionMaterial;
+                         sourceRoot.receiverPositionMaterial.xyz -= worldPush.camOffset;
+                         sourceRoot.receiverNormalRoughness = receiverNormalRoughness;
+                         sourceRoot.segment0 = segment0;
                         sourceRoot.segment1 = segment1;
                         sourceRootValid = true;
                     }

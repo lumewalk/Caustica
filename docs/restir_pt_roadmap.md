@@ -241,11 +241,11 @@ is introduced. View 20 measures the resulting hypothetical selection probability
 effect on reservoir selection rather than on isolated absolute maxima. Runtime validation of this
 distribution and the stochastic selection gate is complete.
 
-View 20 writes an opt-in non-persistent scratch merge into the history
-slot that temporal admission has already consumed. It updates the accumulated weight, effective M,
-selected shifted target, and final W, but the frame still commits the untouched current candidate
-slot. Replay ABI 10 now uses the reserved `reconnectionThroughput.w` bits as a compact mapping
-control: identity is zero and a one-hop diffuse reconnection is one. A source-selected scratch record
+View 20 writes an opt-in diagnostic merge into a dedicated lazy mapped-snapshot buffer. It updates
+the accumulated weight, effective M, selected shifted target, and final W, but the frame still
+commits only the untouched current candidate slot. Replay ABI 10 uses the reserved
+`reconnectionThroughput.w` bits as a compact mapping
+control: identity is zero and a one-hop diffuse reconnection is one. A source-selected snapshot record
 retains the original source seeds/states, stores receiver PDF/throughput in the reconnection lanes,
 and marks the diffuse mapping. Generic identity replay rejects mapped records, and an already mapped
 record cannot be selected as another spatial source; this prevents silent mapping/Jacobian
@@ -257,7 +257,7 @@ result with the stored shifted RGB using the seeded-replay tolerance.
 A dedicated view-20-only same-frame GPU pass mirrors that boundary. It replays the stored source
 seed chain through the production path tracer, validates source state and receiver compatibility,
 recomputes geometry/PDF/Jacobian/receiver throughput, re-traces shifted visibility, and compares the
-reconstructed shifted sample with the non-persistent scratch record. Mapping-replay counters expose
+reconstructed shifted sample with the diagnostic snapshot record. Mapping-replay counters expose
 eligible/accepted records plus mutually exclusive ABI/source/receiver/geometry/PDF/visibility/
 radiance rejects (and the retained-root reject introduced below). This pass
 does not modify the diagnostic image, reservoirs, committed history, or the active estimator. Runtime
@@ -265,22 +265,46 @@ validation accepted 201419 of 201425 mapped records (99.997021%): every frame pr
 category accounting, all ABI/source/receiver/geometry/visibility/radiance rejects stayed zero, and
 six isolated PDF-tail records were safely rejected without relaxing replay tolerance.
 
-The next source-lifetime sub-gate adds a lazy view-20-only retained-root sidecar without changing
-the 176-byte reservoir or replay ABI 10. Each 128-byte record stores the source position/material,
-normal/roughness, and both packed 48-byte queue segments; positions are camera-relative so terrain
-rebasing does not invalidate the root. Same-frame mapping replay now consumes this retained root
-instead of the transient current-frame queue. Extra counters expose root writes, invalid captures,
-and retained-root replay rejection. The sidecar is about 105.15 MiB at 1280x673, is absent from
-ordinary rendering, and is not committed as path history.
+The source-lifetime sub-gate adds a lazy view-20-only retained-root sidecar without changing the
+176-byte reservoir or replay ABI 10. Each 160-byte record stores source and receiver
+position/material, normal/roughness, and both packed 48-byte source queue segments; positions are
+camera-relative so terrain rebasing does not invalidate the root. Same-frame mapping replay consumes
+this retained root instead of the transient current-frame queue. Extra counters expose root writes,
+invalid captures, and retained-root replay rejection. Together the 160-byte root and 176-byte mapped
+snapshot cost about 276.04 MiB at 1280x673, are absent from ordinary rendering, and are not committed
+as path history.
 
 The shader-independent `PersistentDiffuseRemap` reference defines the next history boundary. The
 original source remains the canonical replay root, so a cross-frame remap requires valid receiver
-reprojection, a stable source queue root, and exact source replay. The new source-to-current-receiver
-PDF and Jacobian are recomputed directly; the previous receiver's Jacobian is integrity metadata and
-must never be multiplied into the new Jacobian. Retaining the root solves transient queue lifetime
-only. The sidecar still needs independent ping-pong history, source-root reprojection (including
-validated object motion), receiver reprojection, and cross-frame replay diagnostics, so mapped
-records remain non-persistent until those requirements are implemented and diagnosed.
+reprojection, a stable source root, and exact source replay. View 20 now diagnoses that boundary with
+a single persistent read-before-clear snapshot: receiver motion locates the previous mapped record,
+while the retained source is independently projected into the current frame and a bounded 3x3 search
+requires its motion vector to return to the exact previous source pixel. Both roots must preserve
+position, normal, roughness, and full material identity after camera/terrain rebasing. This first
+policy intentionally rejects object motion rather than guessing it.
+
+For admitted static roots the original source is replayed, and the new source-to-current-receiver
+PDF, Jacobian, current receiver throughput, visibility, and radiance are recomputed directly. The
+previous receiver's Jacobian is integrity metadata and is never composed. Exclusive cross-frame
+counters separate receiver reprojection, empty snapshot, ABI, source-root/source-reprojection/source-
+replay, receiver, geometry, PDF, visibility, radiance, and accepted outcomes. After the cross-frame
+read, the mapped snapshot is cleared and rewritten for the current frame; generation reset or a
+one-frame view gap invalidates continuity. Mapped records remain outside committed path history and
+the estimator until receiver-policy diagnostics pass and moving-surface motion has an explicit
+contract.
+
+Fresh Vulkan/RTX 5060 Ti validation at 1280x673 preserved both exclusive accounting invariants on
+all 108 cross-frame readbacks, with zero ABI or retained-root rejects. During 90 settled-camera
+readbacks, 40,803 of 342,717 eligible records were accepted (11.905741%). The dominant terminal
+category was the combined strict receiver-path check (301,409); source reprojection rejected 16 and
+exact source replay rejected 489, while geometry, PDF, visibility, and radiance rejects stayed zero.
+The 15 moving-camera readbacks remained fail-closed (2 of 39,673 eligible accepted) and returned to
+the settled acceptance regime after motion stopped. Same-frame replay independently accepted
+382,448 of 382,485 records (99.990326%), with only three source-state and 34 finite PDF-tail rejects.
+This proves the diagnostic lifetime/reprojection boundary, but not persistent estimator admission:
+the next gate must split the receiver reject into surface identity versus path
+depth/topology/transport/footprint/first-edge categories and validate the intended policy before any
+mapped history write.
 
 ## Delivery Phases
 

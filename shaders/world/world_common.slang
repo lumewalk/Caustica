@@ -32,7 +32,7 @@ public struct WorldPushConstants {
     public uint64_t pathReservoirPreviousAddr; // generation-matched history slot (0 = unavailable)
     public uint frameIndex;
     public uint debugView;
-    public uint historyFlags;            // bit0 direct history, bit1 replacement, bit2 PT storage, bit3 PT history, bit4 canonical debug capture
+    public uint historyFlags;            // bits0-4 history/debug; bit5 mapping replay; bit6 cross-frame mapping replay
     public uint historyGeneration;       // low 24 bits are packed into path-sample compatibility metadata
 };
 
@@ -144,12 +144,14 @@ public struct PackedPathSegment {
 // source path. Their origins are stored camera-relative so the record can later be rebased without
 // depending on the transient queue or on the terrain rebase chosen for the capture frame.
 //
-// The source guide lanes are retained separately from the mapped receiver. They are the stable
-// source-root identity needed before a mapped reservoir can cross a frame boundary. This sidecar is
-// diagnostic-only and is not part of PathReservoir or the production estimator.
+// Source and receiver guide lanes are retained separately. Cross-frame diagnostics independently
+// reproject both roots, reject moving/changed surfaces, then replay the original source. This
+// sidecar is diagnostic-only and is not part of PathReservoir or the production estimator.
 public struct PathSourceRoot {
     public float4 sourcePositionMaterial;
     public float4 sourceNormalRoughness;
+    public float4 receiverPositionMaterial;
+    public float4 receiverNormalRoughness;
     public PackedPathSegment segment0;
     public PackedPathSegment segment1;
 };

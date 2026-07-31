@@ -170,17 +170,13 @@ performs a deterministic diagnostic Bernoulli draw using that probability; the h
 of eligible pairs and source selections. The CPU reads them once every 60 frames after `waitIdle`
 and logs state percentages plus finite sample percentiles. These atomics and readback waits are
 active only in view 20.
-View 20 also performs the first non-persistent scratch merge for finite accepted pairs. After
-temporal admission has consumed the previous slot, the pass writes the merged weight sum, effective
-count, selected target, and final weight into that otherwise unused slot. The normal current slot is
-still committed as history, so the scratch record is overwritten on the next frame and cannot affect
-temporal reuse or normal rendering. A source-selected scratch record retains the original source
-seeds/states and carries the ABI-10 one-hop diffuse-reconnection descriptor together with the receiver
-PDF/throughput. Generic identity replay rejects that mapping kind, and view 20 refuses an already
-mapped record as another spatial source. Receiver-aware replay is mandatory before any mapped
-record may be committed. The following same-frame validation proves that replay boundary, but it
-does not make the scratch slot persistent; cross-frame reuse remains blocked by the source-root
-requirements described below.
+View 20 also performs the first diagnostic spatial merge for finite accepted pairs. It writes the
+merged weight sum, effective count, selected target, and final weight into a dedicated lazy mapped-
+snapshot buffer; the normal current path slot is still the only slot committed by path history. A
+source-selected snapshot record retains the original source seeds/states and carries the ABI-10
+one-hop diffuse-reconnection descriptor together with the receiver PDF/throughput. Generic identity
+replay rejects that mapping kind, and view 20 refuses an already mapped record as another spatial
+source. Receiver-aware replay is mandatory before any mapped record may be committed.
 The pass does not update committed reservoirs, history weights, or the active estimator.
 The shader-independent `DiffuseMappingReplay` reference defines that boundary: replay ABI,
 mapping kind, and first-edge event must match; receiver PDF and PSS Jacobian must be finite and
@@ -188,16 +184,16 @@ positive; replayed source RGB is divided by its exact source throughput, multipl
 receiver throughput and freshly traced RGB transmittance, and compared with the stored shifted RGB
 using the same relative tolerance as GPU seeded replay.
 
-View 20 now dispatches that receiver-aware validation as a second same-frame ray-generation pass
-after the scratch merge. A lazy view-20-only 128-byte-per-pixel sidecar retains both packed source
-queue segments plus the source position/material and normal/roughness guides. Segment origins and
-the source position are stored camera-relative, so they do not depend on the capture frame's terrain
-rebase. At 1280x673 this diagnostic sidecar is about 105.15 MiB and is not allocated by ordinary
-rendering. The validation pass replays the retained source root rather than dereferencing the
-transient queue, checks
+View 20 dispatches that receiver-aware validation as a same-frame ray-generation pass after the
+snapshot merge. A lazy view-20-only 160-byte-per-pixel sidecar retains both packed source queue
+segments plus source and receiver position/material and normal/roughness guides. Segment origins and
+positions are stored camera-relative, so they do not depend on the capture frame's terrain rebase.
+Together with the separate 176-byte mapped snapshot this costs about 276.04 MiB at 1280x673 and is
+not allocated by ordinary rendering. The validation pass replays the retained source root rather
+than dereferencing the transient queue, checks
 the source topology and proposal state, reconstructs the receiver-side geometry, directional PDF,
 PSS Jacobian and first-event throughput, traces receiver-to-second-hit visibility again, and compares
-the resulting shifted RGB/target with the scratch record. Source-root written/invalid counters and a
+the resulting shifted RGB/target with the snapshot record. Source-root written/invalid counters and a
 separate source-root replay reject make this lifetime boundary explicit. A valid frame has
 `eligible == scratchSelected` and the sum of accepted plus all rejects equals eligible; the expected
 steady-state result is near-total acceptance, while isolated finite-density/PDF outliers may be
@@ -206,13 +202,31 @@ visibility, radiance, or retained-root rejects require investigation. The diagno
 unchanged by this validation dispatch. Mapped records still do not enter committed history or the
 normal estimator.
 
-For a later frame, replaying only the receiver is insufficient: the mapped record's original
-spatial source remains its canonical queue root. The CPU `PersistentDiffuseRemap` contract therefore
-requires receiver reprojection, a stable/reprojected source queue root, and exact source replay.
-It recomputes a direct source-to-current-receiver Jacobian and explicitly does not multiply by the
-stored previous-receiver Jacobian. The retained sidecar removes the transient-queue lifetime problem,
-but it is not yet double-buffered or separately reprojected, and moving source surfaces still require
-validated object motion. Persistence therefore remains disabled.
+The same buffers now form a strict one-frame diagnostic snapshot without a second ping-pong copy.
+After current guides are ready, the cross-frame pass first reads the previous snapshot. Receiver
+motion reprojects the current receiver to its previous pixel. The retained source position is
+independently projected into the current frame, a 3x3 search requires the candidate's motion vector
+to return to the exact previous source pixel, and source/receiver position, normal, roughness, and
+full material identity must match. Stored camera-relative positions and segment origins are rebuilt
+with `currentCamOffset - camDelta`. This initial policy is deliberately static-surface-only: object
+motion or changed geometry/material produces a fail-closed reprojection reject.
+
+Once both roots pass, the original source seeds are replayed exactly. The pass recomputes the direct
+source-to-current-receiver PDF and Jacobian, uses the current receiver throughput, traces current
+visibility, and never multiplies by the stored previous-receiver Jacobian. Exclusive `crossFrame[...]`
+counters enforce `attempted = receiverReprojection + mappedEmpty + eligible` and
+`eligible = accepted + terminal rejects`. Only after that read completes is the mapped snapshot cleared and rewritten by
+the current frame, followed by the existing same-frame replay. Snapshot continuity requires the
+immediately preceding frame and matching history generation, and resets/toggle gaps invalidate it.
+Mapped records still do not enter committed path history or the estimator. Vulkan validation on an
+RTX 5060 Ti preserved both accounting equalities for all 108 cross-frame readbacks and produced no
+ABI/root corruption. Ninety settled-camera readbacks accepted 40,803/342,717 eligible records
+(11.905741%); the combined strict receiver-path check accounted for 301,409 terminal rejects, while
+source reprojection/source replay accounted for 16/489 and all later geometry/PDF/visibility/radiance
+reject categories stayed zero. The moving-camera interval remained fail-closed and acceptance
+recovered after motion stopped. Before this boundary changes, split the receiver category into
+surface and path-policy causes, validate that policy, and define explicit moving-surface support;
+do not hide safe rejects by weakening replay tolerances.
 
 ## Linux
 

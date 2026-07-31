@@ -458,6 +458,7 @@ final class RtPathSpatialReuseReferenceTest {
         assertEquals(19, RtPathReservoirHistory.RECONNECTION_DEBUG_VIEW);
         assertEquals(20, RtPathReservoirHistory.SHIFTED_RADIANCE_DEBUG_VIEW);
         assertEquals(32, RtPathReservoirHistory.MAPPING_REPLAY_PASS_FLAG);
+        assertEquals(64, RtPathReservoirHistory.CROSS_FRAME_MAPPING_REPLAY_PASS_FLAG);
         assertEquals(9, RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_STRICT_PAIR_CURSOR_INDEX);
         assertEquals(10, RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_LIMITED_ADMITTED_INDEX);
         assertEquals(11, RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_TOPOLOGY_RESCUED_INDEX);
@@ -482,10 +483,26 @@ final class RtPathSpatialReuseReferenceTest {
         assertEquals(30, RtPathReservoirHistory.SHIFTED_SOURCE_ROOT_WRITTEN_INDEX);
         assertEquals(31, RtPathReservoirHistory.SHIFTED_SOURCE_ROOT_INVALID_INDEX);
         assertEquals(32, RtPathReservoirHistory.MAPPING_REPLAY_SOURCE_ROOT_REJECT_INDEX);
-        assertEquals(33, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
-        assertEquals(33 * Integer.BYTES,
+        assertEquals(33, RtPathReservoirHistory.CROSS_FRAME_ATTEMPTED_INDEX);
+        assertEquals(34,
+                RtPathReservoirHistory.CROSS_FRAME_RECEIVER_REPROJECTION_REJECT_INDEX);
+        assertEquals(35, RtPathReservoirHistory.CROSS_FRAME_MAPPED_EMPTY_INDEX);
+        assertEquals(36, RtPathReservoirHistory.CROSS_FRAME_ELIGIBLE_INDEX);
+        assertEquals(37, RtPathReservoirHistory.CROSS_FRAME_ACCEPTED_INDEX);
+        assertEquals(38, RtPathReservoirHistory.CROSS_FRAME_ABI_REJECT_INDEX);
+        assertEquals(39, RtPathReservoirHistory.CROSS_FRAME_SOURCE_ROOT_REJECT_INDEX);
+        assertEquals(40,
+                RtPathReservoirHistory.CROSS_FRAME_SOURCE_REPROJECTION_REJECT_INDEX);
+        assertEquals(41, RtPathReservoirHistory.CROSS_FRAME_SOURCE_REPLAY_REJECT_INDEX);
+        assertEquals(42, RtPathReservoirHistory.CROSS_FRAME_RECEIVER_REJECT_INDEX);
+        assertEquals(43, RtPathReservoirHistory.CROSS_FRAME_GEOMETRY_REJECT_INDEX);
+        assertEquals(44, RtPathReservoirHistory.CROSS_FRAME_PDF_REJECT_INDEX);
+        assertEquals(45, RtPathReservoirHistory.CROSS_FRAME_VISIBILITY_REJECT_INDEX);
+        assertEquals(46, RtPathReservoirHistory.CROSS_FRAME_RADIANCE_REJECT_INDEX);
+        assertEquals(47, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
+        assertEquals(47 * Integer.BYTES,
                 RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_COUNTER_BYTES);
-        assertEquals(128, PathSourceRootData.BYTE_SIZE);
+        assertEquals(160, PathSourceRootData.BYTE_SIZE);
         assertEquals(4096, RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_PAIR_CAPACITY);
         assertEquals(4096, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_DENSITY_PAIR_OFFSET);
         assertEquals(8192, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_MERGE_PAIR_OFFSET);

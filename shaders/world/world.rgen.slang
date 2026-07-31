@@ -621,6 +621,7 @@ static float pathMappingThroughputRatio(float sourceThroughput,
 // terminal counter. It never writes either reservoir slot or the output image.
 public void pathMappingReplayValidate() {
     if (pc.debugView != PATH_SHIFTED_RADIANCE_DEBUG_VIEW
+            || (pc.historyFlags & PATH_MAPPING_REPLAY_PASS_FLAG) == 0u
             || pc.pathReservoirAddr == 0u
             || pc.pathReservoirPreviousAddr == 0u
             || worldPush.pathShiftDiagnosticCounterAddr == 0u
@@ -628,19 +629,37 @@ public void pathMappingReplayValidate() {
         return;
     }
 
+    bool crossFrame = (pc.historyFlags & PATH_CROSS_FRAME_MAPPING_REPLAY_PASS_FLAG) != 0u;
     uint2 pixel = DispatchRaysIndex().xy;
     uint2 dimensions = DispatchRaysDimensions().xy;
     uint pixelIndex = pixel.y * dimensions.x + pixel.x;
     DevicePtr<uint> counters =
             DevicePtr<uint>(worldPush.pathShiftDiagnosticCounterAddr);
+    uint mappedPixelIndex = pixelIndex;
+    if (crossFrame) {
+        InterlockedAdd(counters[PATH_CROSS_FRAME_ATTEMPTED], 1u);
+        float2 previousPixel = float2(pixel) + 0.5 + gMotion[int2(pixel)];
+        int2 previousTexel = int2(floor(previousPixel));
+        if (any(previousTexel < int2(0, 0))
+                || any(previousTexel >= int2(dimensions))) {
+            InterlockedAdd(
+                    counters[PATH_CROSS_FRAME_RECEIVER_REPROJECTION_REJECT], 1u);
+            return;
+        }
+        mappedPixelIndex = uint(previousTexel.y) * dimensions.x + uint(previousTexel.x);
+    }
     PathReservoir mapped =
-            ConstPtr<PathReservoir>(pc.pathReservoirPreviousAddr)[pixelIndex];
+            ConstPtr<PathReservoir>(pc.pathReservoirPreviousAddr)[mappedPixelIndex];
     uint mappingControl = asuint(mapped.reconnectionThroughput.w);
     if ((mappingControl & PATH_MAPPING_KIND_MASK)
             != PATH_MAPPING_DIFFUSE_RECONNECTION) {
+        if (crossFrame) {
+            InterlockedAdd(counters[PATH_CROSS_FRAME_MAPPED_EMPTY], 1u);
+        }
         return;
     }
-    InterlockedAdd(counters[PATH_MAPPING_REPLAY_ELIGIBLE], 1u);
+    InterlockedAdd(counters[crossFrame
+            ? PATH_CROSS_FRAME_ELIGIBLE : PATH_MAPPING_REPLAY_ELIGIBLE], 1u);
 
     uint pixelCount = dimensions.x * dimensions.y;
     uint sourceIndex = mapped.identity.y;
@@ -650,17 +669,20 @@ public void pathMappingReplayValidate() {
             || mapped.replayControl.y > MAX_PATH_SEGMENTS
             || (mapped.replayControl.y < MAX_PATH_SEGMENTS
                     && any(mapped.replay.zw != uint2(0u)))
-            || asuint(mapped.proposalShift.w) != mapped.replayControl.z
-            || sourceIndex >= pixelCount) {
-        InterlockedAdd(counters[PATH_MAPPING_REPLAY_ABI_REJECT], 1u);
+             || asuint(mapped.proposalShift.w) != mapped.replayControl.z
+             || sourceIndex >= pixelCount) {
+        InterlockedAdd(counters[crossFrame
+                ? PATH_CROSS_FRAME_ABI_REJECT : PATH_MAPPING_REPLAY_ABI_REJECT], 1u);
         return;
     }
 
     uint expectedSegments = mapped.replayControl.y;
     PathSourceRoot sourceRoot =
-            ConstPtr<PathSourceRoot>(worldPush.pathShiftSourceRootAddr)[pixelIndex];
+            ConstPtr<PathSourceRoot>(worldPush.pathShiftSourceRootAddr)[mappedPixelIndex];
     bool sourceRootFinite = all(isfinite(sourceRoot.sourcePositionMaterial))
             && all(isfinite(sourceRoot.sourceNormalRoughness))
+            && all(isfinite(sourceRoot.receiverPositionMaterial))
+            && all(isfinite(sourceRoot.receiverNormalRoughness))
             && all(isfinite(sourceRoot.segment0.ro))
             && all(isfinite(sourceRoot.segment1.ro));
     bool sourceRootChainValid = expectedSegments == 1u
@@ -668,52 +690,116 @@ public void pathMappingReplayValidate() {
             : sourceRoot.segment0.nextRecord != PATH_NO_NEXT
                     && sourceRoot.segment1.nextRecord == PATH_NO_NEXT;
     if (!sourceRootFinite || !sourceRootChainValid) {
-        InterlockedAdd(counters[PATH_MAPPING_REPLAY_SOURCE_ROOT_REJECT], 1u);
+        InterlockedAdd(counters[crossFrame
+                ? PATH_CROSS_FRAME_SOURCE_ROOT_REJECT
+                : PATH_MAPPING_REPLAY_SOURCE_ROOT_REJECT], 1u);
         return;
     }
 
-    PathReplayAggregate replay = pathReplayAggregateEmpty();
-    uint2 sourcePixel = uint2(
+    uint2 previousSourcePixel = uint2(
             sourceIndex % dimensions.x, sourceIndex / dimensions.x);
+    float3 retainedRebase = worldPush.camOffset
+            - (crossFrame ? worldPush.camDelta : float3(0.0));
+    float4 retainedSourcePositionMaterial = sourceRoot.sourcePositionMaterial;
+    retainedSourcePositionMaterial.xyz += retainedRebase;
+    float4 retainedReceiverPositionMaterial = sourceRoot.receiverPositionMaterial;
+    retainedReceiverPositionMaterial.xyz += retainedRebase;
+
+    int2 receiverTexel = int2(pixel);
+    float4 receiverPositionMaterial = gRestirPositionMaterial[receiverTexel];
+    float4 receiverNormalRoughness = gRestirNormalRoughness[receiverTexel];
+    if (crossFrame
+            && (!pathReplayPositionMatches(retainedReceiverPositionMaterial.xyz,
+                        receiverPositionMaterial.xyz)
+                    || !pathReplayColorMatches(sourceRoot.receiverNormalRoughness.xyz,
+                        receiverNormalRoughness.xyz)
+                    || !pathReplayFloatMatches(sourceRoot.receiverNormalRoughness.w,
+                        receiverNormalRoughness.w)
+                    || uint(max(retainedReceiverPositionMaterial.w, 0.0))
+                            != uint(max(receiverPositionMaterial.w, 0.0)))) {
+        InterlockedAdd(counters[PATH_CROSS_FRAME_RECEIVER_REJECT], 1u);
+        return;
+    }
+
+    int2 sourceTexel = int2(previousSourcePixel);
+    float4 currentSourcePositionMaterial = float4(0.0);
+    float4 currentSourceNormalRoughness = float4(0.0);
+    bool sourceReprojected = !crossFrame;
+    if (crossFrame) {
+        float3 currentSourceCamRelative = sourceRoot.sourcePositionMaterial.xyz
+                - worldPush.camDelta;
+        float4 sourceClip = mul(worldPush.curViewProj,
+                float4(currentSourceCamRelative, 1.0));
+        if (sourceClip.w > 0.0 && all(isfinite(sourceClip))) {
+            float2 sourceNdc = sourceClip.xy / sourceClip.w;
+            int2 projectedSourceTexel = int2(floor(
+                    (sourceNdc * 0.5 + 0.5) * float2(dimensions)));
+            for (int oy = -1; oy <= 1 && !sourceReprojected; ++oy) {
+                for (int ox = -1; ox <= 1 && !sourceReprojected; ++ox) {
+                    int2 candidateTexel = projectedSourceTexel + int2(ox, oy);
+                    if (any(candidateTexel < int2(0, 0))
+                            || any(candidateTexel >= int2(dimensions))) continue;
+                    int2 candidatePreviousTexel = int2(floor(float2(candidateTexel)
+                            + 0.5 + gMotion[candidateTexel]));
+                    if (any(candidatePreviousTexel != int2(previousSourcePixel))) continue;
+                    float4 candidatePosition = gRestirPositionMaterial[candidateTexel];
+                    float4 candidateNormal = gRestirNormalRoughness[candidateTexel];
+                    if (pathReplayPositionMatches(retainedSourcePositionMaterial.xyz,
+                                candidatePosition.xyz)
+                            && pathReplayColorMatches(sourceRoot.sourceNormalRoughness.xyz,
+                                candidateNormal.xyz)
+                            && pathReplayFloatMatches(sourceRoot.sourceNormalRoughness.w,
+                                candidateNormal.w)
+                            && uint(max(retainedSourcePositionMaterial.w, 0.0))
+                                    == uint(max(candidatePosition.w, 0.0))) {
+                        sourceTexel = candidateTexel;
+                        currentSourcePositionMaterial = candidatePosition;
+                        currentSourceNormalRoughness = candidateNormal;
+                        sourceReprojected = true;
+                    }
+                }
+            }
+        }
+        if (!sourceReprojected) {
+            InterlockedAdd(
+                    counters[PATH_CROSS_FRAME_SOURCE_REPROJECTION_REJECT], 1u);
+            return;
+        }
+    } else {
+        currentSourcePositionMaterial = gRestirPositionMaterial[sourceTexel];
+        currentSourceNormalRoughness = gRestirNormalRoughness[sourceTexel];
+        if (!pathReplayPositionMatches(retainedSourcePositionMaterial.xyz,
+                    currentSourcePositionMaterial.xyz)
+                || !pathReplayColorMatches(sourceRoot.sourceNormalRoughness.xyz,
+                    currentSourceNormalRoughness.xyz)
+                || !pathReplayFloatMatches(sourceRoot.sourceNormalRoughness.w,
+                    currentSourceNormalRoughness.w)
+                || uint(max(retainedSourcePositionMaterial.w, 0.0))
+                        != uint(max(currentSourcePositionMaterial.w, 0.0))) {
+            InterlockedAdd(counters[PATH_MAPPING_REPLAY_SOURCE_ROOT_REJECT], 1u);
+            return;
+        }
+    }
+
+    PathReplayAggregate replay = pathReplayAggregateEmpty();
     for (uint leaf = 0u; leaf < MAX_PATH_SEGMENTS; ++leaf) {
         if (leaf >= expectedSegments) break;
         PackedPathSegment packed = leaf == 0u
                 ? sourceRoot.segment0 : sourceRoot.segment1;
-        // The sidecar stores capture-frame camera-relative origins. This same-frame validation adds
-        // the current offset only; the cross-frame gate will additionally subtract camDelta.
-        packed.ro += worldPush.camOffset;
+        // The sidecar stores capture-frame camera-relative origins. Cross-frame replay reconstructs
+        // static world geometry in the current terrain rebase and rejects object motion separately.
+        packed.ro += retainedRebase;
         PathSegment segment = unpackPathSegment(packed);
         uint replaySeed = leaf == 0u ? mapped.replay.x : mapped.replay.z;
         uint proposalReplaySeed = leaf == 0u ? mapped.replay.y : mapped.replay.w;
         PathTraceResult traced = tracePathSeeded(
-                segment, sourcePixel, true, replaySeed, proposalReplaySeed);
+                segment, uint2(sourceTexel), true, replaySeed, proposalReplaySeed);
         pathReplayAccumulate(replay, traced, leaf);
     }
     if (!pathMappingSourceReplayMatches(mapped, replay)) {
-        InterlockedAdd(counters[PATH_MAPPING_REPLAY_SOURCE_REJECT], 1u);
-        return;
-    }
-
-    int2 receiverTexel = int2(pixel);
-    int2 sourceTexel = int2(sourcePixel);
-    float4 receiverPositionMaterial = gRestirPositionMaterial[receiverTexel];
-    float4 receiverNormalRoughness = gRestirNormalRoughness[receiverTexel];
-    float4 currentSourcePositionMaterial = gRestirPositionMaterial[sourceTexel];
-    float4 currentSourceNormalRoughness = gRestirNormalRoughness[sourceTexel];
-    uint currentSourceMaterialIdentity =
-            uint(max(currentSourcePositionMaterial.w, 0.0));
-    float4 retainedSourcePositionMaterial = sourceRoot.sourcePositionMaterial;
-    retainedSourcePositionMaterial.xyz += worldPush.camOffset;
-    uint retainedSourceMaterialIdentity =
-            uint(max(retainedSourcePositionMaterial.w, 0.0));
-    if (!pathReplayPositionMatches(retainedSourcePositionMaterial.xyz,
-                currentSourcePositionMaterial.xyz)
-            || !pathReplayColorMatches(sourceRoot.sourceNormalRoughness.xyz,
-                currentSourceNormalRoughness.xyz)
-            || !pathReplayFloatMatches(sourceRoot.sourceNormalRoughness.w,
-                currentSourceNormalRoughness.w)
-            || retainedSourceMaterialIdentity != currentSourceMaterialIdentity) {
-        InterlockedAdd(counters[PATH_MAPPING_REPLAY_SOURCE_ROOT_REJECT], 1u);
+        InterlockedAdd(counters[crossFrame
+                ? PATH_CROSS_FRAME_SOURCE_REPLAY_REJECT
+                : PATH_MAPPING_REPLAY_SOURCE_REJECT], 1u);
         return;
     }
     float4 sourcePositionMaterial = retainedSourcePositionMaterial;
@@ -750,7 +836,9 @@ public void pathMappingReplayValidate() {
                     != pathMetadataDepth(mapped.identity.w)
             || pathMetadataTransport(current.identity.w)
                     != pathMetadataTransport(mapped.identity.w)) {
-        InterlockedAdd(counters[PATH_MAPPING_REPLAY_RECEIVER_REJECT], 1u);
+        InterlockedAdd(counters[crossFrame
+                ? PATH_CROSS_FRAME_RECEIVER_REJECT
+                : PATH_MAPPING_REPLAY_RECEIVER_REJECT], 1u);
         return;
     }
 
@@ -767,7 +855,9 @@ public void pathMappingReplayValidate() {
             || max(sourceFootprint, receiverFootprint)
                     / min(sourceFootprint, receiverFootprint)
                     > PATH_MAX_FOOTPRINT_RATIO) {
-        InterlockedAdd(counters[PATH_MAPPING_REPLAY_RECEIVER_REJECT], 1u);
+        InterlockedAdd(counters[crossFrame
+                ? PATH_CROSS_FRAME_RECEIVER_REJECT
+                : PATH_MAPPING_REPLAY_RECEIVER_REJECT], 1u);
         return;
     }
 
@@ -780,7 +870,9 @@ public void pathMappingReplayValidate() {
     float receiverDistance = length(receiverEdge);
     if (sharedNormalLength < 0.5 || sourceDistance <= 1.0e-4
             || receiverDistance <= 1.0e-4) {
-        InterlockedAdd(counters[PATH_MAPPING_REPLAY_GEOMETRY_REJECT], 1u);
+        InterlockedAdd(counters[crossFrame
+                ? PATH_CROSS_FRAME_GEOMETRY_REJECT
+                : PATH_MAPPING_REPLAY_GEOMETRY_REJECT], 1u);
         return;
     }
     float3 sharedNormal = sharedNormalValue / sharedNormalLength;
@@ -792,7 +884,9 @@ public void pathMappingReplayValidate() {
             receiverCosine * sourceDistance * sourceDistance
             / max(sourceCosine * receiverDistance * receiverDistance, 1.0e-8);
     if (!isfinite(geometryJacobian) || geometryJacobian <= 0.0) {
-        InterlockedAdd(counters[PATH_MAPPING_REPLAY_GEOMETRY_REJECT], 1u);
+        InterlockedAdd(counters[crossFrame
+                ? PATH_CROSS_FRAME_GEOMETRY_REJECT
+                : PATH_MAPPING_REPLAY_GEOMETRY_REJECT], 1u);
         return;
     }
 
@@ -815,14 +909,16 @@ public void pathMappingReplayValidate() {
             || !isfinite(currentTechniqueMass)
             || !isfinite(sourceTechniqueMass)
             || currentTechniqueMass <= 0.0 || sourceTechniqueMass <= 0.0
-            || !isfinite(receiverPdf) || receiverPdf <= 0.0
-            || !isfinite(pssJacobian) || pssJacobian <= 0.0
-            || !pathReplayFloatMatches(receiverPdf,
-                    mapped.reconnectionNormalPdf.w)
-            || !pathReplayFloatMatches(pssJacobian, mapped.proposalShift.y)
-            || !pathReplayColorMatches(current.reconnectionThroughput.xyz,
-                    mapped.reconnectionThroughput.xyz)) {
-        InterlockedAdd(counters[PATH_MAPPING_REPLAY_PDF_REJECT], 1u);
+             || !isfinite(receiverPdf) || receiverPdf <= 0.0
+             || !isfinite(pssJacobian) || pssJacobian <= 0.0
+             || (!crossFrame && (!pathReplayFloatMatches(receiverPdf,
+                         mapped.reconnectionNormalPdf.w)
+                     || !pathReplayFloatMatches(pssJacobian, mapped.proposalShift.y)
+                     || !pathReplayColorMatches(current.reconnectionThroughput.xyz,
+                         mapped.reconnectionThroughput.xyz)))) {
+        InterlockedAdd(counters[crossFrame
+                ? PATH_CROSS_FRAME_PDF_REJECT
+                : PATH_MAPPING_REPLAY_PDF_REJECT], 1u);
         return;
     }
 
@@ -832,7 +928,9 @@ public void pathMappingReplayValidate() {
     float3 toShared = sharedVertex - shadowOrigin;
     float shiftedDistance = length(toShared);
     if (shiftedDistance <= 1.0e-4) {
-        InterlockedAdd(counters[PATH_MAPPING_REPLAY_GEOMETRY_REJECT], 1u);
+        InterlockedAdd(counters[crossFrame
+                ? PATH_CROSS_FRAME_GEOMETRY_REJECT
+                : PATH_MAPPING_REPLAY_GEOMETRY_REJECT], 1u);
         return;
     }
     VisibilityResult shiftedVisibility = visibility(shadowOrigin,
@@ -840,13 +938,18 @@ public void pathMappingReplayValidate() {
     if (max(shiftedVisibility.transmittance.x,
             max(shiftedVisibility.transmittance.y,
                     shiftedVisibility.transmittance.z)) <= 0.0) {
-        InterlockedAdd(counters[PATH_MAPPING_REPLAY_VISIBILITY_REJECT], 1u);
+        InterlockedAdd(counters[crossFrame
+                ? PATH_CROSS_FRAME_VISIBILITY_REJECT
+                : PATH_MAPPING_REPLAY_VISIBILITY_REJECT], 1u);
         return;
     }
 
     float3 sourceRadiance = replay.canonicalRadiance;
     float3 sourceThroughput = replay.reconnectionThroughput;
-    float3 receiverThroughput = mapped.reconnectionThroughput.xyz;
+    // Persistent remapping always rebuilds the direct source -> current-receiver shift. The old
+    // receiver throughput/Jacobian are validation metadata, never factors to compose.
+    float3 receiverThroughput = crossFrame
+            ? current.reconnectionThroughput.xyz : mapped.reconnectionThroughput.xyz;
     bool invalidSourceChannel = any(sourceRadiance > float3(0.0)
             && sourceThroughput <= float3(0.0));
     float3 throughputRatio = float3(
@@ -868,22 +971,25 @@ public void pathMappingReplayValidate() {
             || any(sourceRadiance < float3(0.0))
             || any(sourceThroughput < float3(0.0))
             || any(receiverThroughput < float3(0.0))
-            || any(throughputRatio < float3(0.0))
-            || any(shiftedRadiance < float3(0.0))
-            || shiftedTarget <= 0.0
-            || !pathReplayColorMatches(
-                    shiftedRadiance, mapped.sampleRadianceTarget.xyz)
-            || !pathReplayFloatMatches(
-                    shiftedTarget, mapped.sampleRadianceTarget.w)
-            || !pathReplayColorMatches(
-                    shiftedRadiance, mapped.canonicalRadianceTarget.xyz)
-            || !pathReplayFloatMatches(
-                    shiftedTarget, mapped.canonicalRadianceTarget.w)) {
-        InterlockedAdd(counters[PATH_MAPPING_REPLAY_RADIANCE_REJECT], 1u);
+             || any(throughputRatio < float3(0.0))
+             || any(shiftedRadiance < float3(0.0))
+             || shiftedTarget <= 0.0
+             || (!crossFrame && (!pathReplayColorMatches(
+                         shiftedRadiance, mapped.sampleRadianceTarget.xyz)
+                     || !pathReplayFloatMatches(
+                         shiftedTarget, mapped.sampleRadianceTarget.w)
+                     || !pathReplayColorMatches(
+                         shiftedRadiance, mapped.canonicalRadianceTarget.xyz)
+                     || !pathReplayFloatMatches(
+                         shiftedTarget, mapped.canonicalRadianceTarget.w)))) {
+        InterlockedAdd(counters[crossFrame
+                ? PATH_CROSS_FRAME_RADIANCE_REJECT
+                : PATH_MAPPING_REPLAY_RADIANCE_REJECT], 1u);
         return;
     }
 
-    InterlockedAdd(counters[PATH_MAPPING_REPLAY_ACCEPTED], 1u);
+    InterlockedAdd(counters[crossFrame
+            ? PATH_CROSS_FRAME_ACCEPTED : PATH_MAPPING_REPLAY_ACCEPTED], 1u);
 }
 
 [shader("raygeneration")]

@@ -50,6 +50,23 @@ final class RtPathReservoirHistoryTest {
     }
 
     @Test
+    void shiftedSnapshotRequiresOneFrameContinuityAndMatchingGeneration() {
+        var snapshots = new RtPathReservoirHistory.ShiftedSnapshotState();
+        var first = new RtPathReservoirHistory.Frame(7L, 0, -1, false);
+        var second = new RtPathReservoirHistory.Frame(7L, 1, 0, true);
+        var nextGeneration = new RtPathReservoirHistory.Frame(8L, 0, 1, true);
+
+        assertFalse(snapshots.previousAvailable(first, 100L));
+        snapshots.commit(first, 100L);
+        assertTrue(snapshots.previousAvailable(second, 101L));
+        assertFalse(snapshots.previousAvailable(second, 102L));
+        assertFalse(snapshots.previousAvailable(nextGeneration, 101L));
+
+        snapshots.reset();
+        assertFalse(snapshots.previousAvailable(second, 101L));
+    }
+
+    @Test
     void memoryAccountingUsesTwoFullResolutionSlots() {
         long perSlot = RtPathReservoirHistory.bytesPerSlot(1280, 673);
         assertEquals(151_613_440L, perSlot);
