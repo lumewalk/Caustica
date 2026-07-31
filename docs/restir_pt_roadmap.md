@@ -349,6 +349,16 @@ diffuse material/PDF/throughput substrate independent of canonical endpoint sele
 whether the existing quantized guide is mathematically sufficient or whether an exact guide is
 required; do not allocate or admit it by assumption.
 
+The receiver-material audit proves the existing cache is insufficient for exact diffuse remapping.
+`gRestirAlbedoSss` stores deterministic `diffAlb` in RGBA16F and roughness is available separately,
+but the sampled diffuse event uses `eventThroughput = diffAlb / (1 - ps)` and directional density
+`(1 - ps) * |cos| / pi`. The lobe probability `ps` also depends on per-hit F0, which no receiver
+guide stores; material identity alone cannot reconstruct texture-evaluated F0. A shader-independent
+counterexample gives identical current guide terms but different technique mass/throughput for two
+F0 values. The minimal exact candidate contract is therefore one float4 containing exact RGB
+diffuse albedo plus diffuse technique mass. It would cost 16 B/pixel (about 13.14 MiB at 1280x673),
+but remains reference-only until lifecycle, consumers, and memory accounting are reviewed.
+
 ## Delivery Phases
 
 ### Phase 0 — Wavefront Integration Baseline

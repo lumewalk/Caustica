@@ -263,6 +263,13 @@ gate is a deterministic diffuse receiver-material contract independent of endpoi
 the precision and semantics of the existing albedo/material guides before introducing a new exact
 buffer or permitting persistence.
 
+The audit shows why the current RGBA16F albedo guide cannot supply exact mapping state. Diffuse path
+selection uses `ps(F0, diffAlb)`, so receiver throughput is `diffAlb/(1-ps)` and receiver PDF carries
+the same `(1-ps)` technique mass. F0 is texture-evaluated at the hit and is absent from the guide
+cache. `DiffuseReceiverMaterial` and `DiffuseReceiverGuide` now define the shader-independent
+contract and an explicit same-albedo/different-F0 counterexample. The smallest exact GPU form would
+be float4(exact diffuse RGB, diffuse technique mass), 16 B/pixel; it is not allocated yet.
+
 ## Linux
 
 Set `DLSS_SDK` and `VULKAN_SDK` before configuring CMake:

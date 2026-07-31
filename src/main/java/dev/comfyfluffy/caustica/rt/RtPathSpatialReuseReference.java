@@ -485,6 +485,48 @@ final class RtPathSpatialReuseReference {
         }
     }
 
+    /** Material terms available at the deterministic primary receiver, before endpoint selection. */
+    record DiffuseReceiverMaterial(Rgb diffuseAlbedo, Rgb f0, boolean exactSpecular) {
+        DiffuseReceiverMaterial {
+            if (diffuseAlbedo == null || f0 == null) {
+                throw new IllegalArgumentException("diffuse receiver material terms are required");
+            }
+        }
+
+        double specularTechniqueProbability() {
+            if (exactSpecular && diffuseAlbedo.luminance() <= 1.0e-6) return 1.0;
+            double raw = f0.luminance()
+                    / (f0.luminance() + diffuseAlbedo.luminance() + 1.0e-4);
+            return Math.max(0.1, Math.min(0.9, raw));
+        }
+
+        DiffuseReceiverGuide exactGuide() {
+            return new DiffuseReceiverGuide(
+                    diffuseAlbedo, 1.0 - specularTechniqueProbability());
+        }
+    }
+
+    /** Minimal exact float4 receiver contract: RGB diffuse albedo plus diffuse technique mass. */
+    record DiffuseReceiverGuide(Rgb diffuseAlbedo, double techniqueMass) {
+        DiffuseReceiverGuide {
+            if (diffuseAlbedo == null || !positiveFinite(techniqueMass)
+                    || techniqueMass > 1.0) {
+                throw new IllegalArgumentException("invalid exact diffuse receiver guide");
+            }
+        }
+
+        Rgb eventThroughput() {
+            return new Rgb(
+                    diffuseAlbedo.r() / techniqueMass,
+                    diffuseAlbedo.g() / techniqueMass,
+                    diffuseAlbedo.b() / techniqueMass);
+        }
+
+        double directionalPdf(double cosine) {
+            return techniqueMass * diffuseShiftDirectionalDensity(cosine);
+        }
+    }
+
     /**
      * Camera-relative storage for an exact retained source queue root. The capture frame's terrain
      * rebase is deliberately not part of persistent identity: reconstructing in a later frame adds

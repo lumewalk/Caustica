@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -151,6 +152,28 @@ final class RtPathSpatialReuseReferenceTest {
                 RtPathSpatialReuseReference.diffuseShiftDirectionalDensity(0.5), 1.0e-12);
         assertEquals(0.5 / Math.PI,
                 RtPathSpatialReuseReference.diffuseShiftDirectionalDensity(-0.5), 1.0e-12);
+    }
+
+    @Test
+    void deterministicReceiverGuideNeedsF0AndExactDiffuseTerms() {
+        var diffuse = new RtPathSpatialReuseReference.Rgb(0.5, 0.5, 0.5);
+        var lowF0 = new RtPathSpatialReuseReference.DiffuseReceiverMaterial(
+                diffuse, new RtPathSpatialReuseReference.Rgb(0.04, 0.04, 0.04), false);
+        var highF0 = new RtPathSpatialReuseReference.DiffuseReceiverMaterial(
+                diffuse, new RtPathSpatialReuseReference.Rgb(0.8, 0.8, 0.8), false);
+
+        var lowGuide = lowF0.exactGuide();
+        var highGuide = highF0.exactGuide();
+        assertEquals(0.9, lowGuide.techniqueMass(), 1.0e-12);
+        assertNotEquals(lowGuide.techniqueMass(), highGuide.techniqueMass());
+        assertNotEquals(lowGuide.eventThroughput().r(), highGuide.eventThroughput().r());
+        assertEquals(lowGuide.techniqueMass() * 0.5 / Math.PI,
+                lowGuide.directionalPdf(0.5), 1.0e-12);
+
+        var deltaOnly = new RtPathSpatialReuseReference.DiffuseReceiverMaterial(
+                new RtPathSpatialReuseReference.Rgb(0.0, 0.0, 0.0),
+                new RtPathSpatialReuseReference.Rgb(1.0, 1.0, 1.0), true);
+        assertThrows(IllegalArgumentException.class, deltaOnly::exactGuide);
     }
 
     @Test
