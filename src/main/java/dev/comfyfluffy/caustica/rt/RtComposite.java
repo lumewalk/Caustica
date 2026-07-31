@@ -938,6 +938,9 @@ public final class RtComposite {
         int debugView = debugView();
         if (restirPt) {
             pathReservoirs.pollSpatialDiagnosticCounters(ctx, frameCounter);
+            if (debugView == RtPathReservoirHistory.SHIFTED_RADIANCE_DEBUG_VIEW) {
+                pathReservoirs.ensureShiftedSourceRoots(ctx);
+            }
         }
         long dstImage = vkImage(nativeColor);
         var encoder = (VulkanCommandEncoder) ((CommandEncoderAccessor) RenderSystem.getDevice().createCommandEncoder()).caustica$getBackend();
@@ -1078,7 +1081,9 @@ public final class RtComposite {
                     restirPt && debugView == RtPathReservoirHistory.SHIFTED_RADIANCE_DEBUG_VIEW
                             ? pathReservoirs.shiftedDiagnosticCounterAddress() : 0L,
                     restirPt && debugView == RtPathReservoirHistory.SHIFTED_RADIANCE_DEBUG_VIEW
-                            ? pathReservoirs.shiftedDiagnosticPairAddress() : 0L
+                            ? pathReservoirs.shiftedDiagnosticPairAddress() : 0L,
+                    restirPt && debugView == RtPathReservoirHistory.SHIFTED_RADIANCE_DEBUG_VIEW
+                            ? pathReservoirs.shiftedSourceRootAddress() : 0L
             ).write(push);
             pushBuf.flush(0L, WORLD_PUSH_SIZE);
             // Upload any entity textures registered this frame into the bindless set before the trace.

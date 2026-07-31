@@ -5,6 +5,7 @@ import dev.comfyfluffy.caustica.CausticaMod;
 import dev.comfyfluffy.caustica.rt.accel.RtBuffer;
 import dev.comfyfluffy.caustica.rt.accel.RtImage;
 import dev.comfyfluffy.caustica.rt.gen.PathReservoirData;
+import dev.comfyfluffy.caustica.rt.gen.PathSourceRootData;
 import dev.comfyfluffy.caustica.rt.pipeline.RtPathTemporalPipeline;
 import java.nio.ByteBuffer;
 import java.nio.FloatBuffer;
@@ -53,7 +54,10 @@ final class RtPathReservoirHistory {
     static final int MAPPING_REPLAY_PDF_REJECT_INDEX = 27;
     static final int MAPPING_REPLAY_VISIBILITY_REJECT_INDEX = 28;
     static final int MAPPING_REPLAY_RADIANCE_REJECT_INDEX = 29;
-    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 30;
+    static final int SHIFTED_SOURCE_ROOT_WRITTEN_INDEX = 30;
+    static final int SHIFTED_SOURCE_ROOT_INVALID_INDEX = 31;
+    static final int MAPPING_REPLAY_SOURCE_ROOT_REJECT_INDEX = 32;
+    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 33;
     static final int SPATIAL_DIAGNOSTIC_COUNTER_BYTES =
             SHIFTED_DIAGNOSTIC_COUNTER_COUNT * Integer.BYTES;
     static final int SPATIAL_DIAGNOSTIC_PAIR_CAPACITY = 4096;
@@ -106,6 +110,7 @@ final class RtPathReservoirHistory {
     private final RtBuffer[] slots = new RtBuffer[SLOT_COUNT];
     private RtBuffer spatialDiagnosticCounters;
     private RtBuffer spatialDiagnosticPairs;
+    private RtBuffer shiftedSourceRoots;
     private RtPathTemporalPipeline temporalPipeline;
     private int spatialDiagnosticViewPending;
     private int width = -1;
@@ -185,12 +190,33 @@ final class RtPathReservoirHistory {
         spatialDiagnosticViewPending = SHIFTED_RADIANCE_DEBUG_VIEW;
     }
 
+    void ensureShiftedSourceRoots(RtContext ctx) {
+        if (!ready()) {
+            throw new IllegalStateException("Shifted source roots used before path allocation");
+        }
+        if (shiftedSourceRoots != null) {
+            return;
+        }
+        long bytes = Math.multiplyExact(Math.multiplyExact((long) width, height),
+                PathSourceRootData.BYTE_SIZE);
+        shiftedSourceRoots = ctx.createBuffer(bytes, VK10.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                false, "path shifted source roots " + width + "x" + height);
+        CausticaMod.LOGGER.info(
+                "RT path shifted source roots: render={}x{}, stride={} B, bytes={}, gpuMiB={}",
+                width, height, PathSourceRootData.BYTE_SIZE, bytes,
+                String.format(Locale.ROOT, "%.2f", bytes / (1024.0 * 1024.0)));
+    }
+
     long shiftedDiagnosticCounterAddress() {
         return spatialDiagnosticCounters == null ? 0L : spatialDiagnosticCounters.deviceAddress;
     }
 
     long shiftedDiagnosticPairAddress() {
         return spatialDiagnosticPairs == null ? 0L : spatialDiagnosticPairs.deviceAddress;
+    }
+
+    long shiftedSourceRootAddress() {
+        return shiftedSourceRoots == null ? 0L : shiftedSourceRoots.deviceAddress;
     }
 
     void pollSpatialDiagnosticCounters(RtContext ctx, long frameIndex) {
@@ -240,6 +266,12 @@ final class RtPathReservoirHistory {
                     counters.get(MAPPING_REPLAY_VISIBILITY_REJECT_INDEX));
             long mappingRadianceReject = Integer.toUnsignedLong(
                     counters.get(MAPPING_REPLAY_RADIANCE_REJECT_INDEX));
+            long sourceRootWritten = Integer.toUnsignedLong(
+                    counters.get(SHIFTED_SOURCE_ROOT_WRITTEN_INDEX));
+            long sourceRootInvalid = Integer.toUnsignedLong(
+                    counters.get(SHIFTED_SOURCE_ROOT_INVALID_INDEX));
+            long mappingSourceRootReject = Integer.toUnsignedLong(
+                    counters.get(MAPPING_REPLAY_SOURCE_ROOT_REJECT_INDEX));
             int capturedSamples = (int) Math.min(sampleAttempts, SPATIAL_DIAGNOSTIC_PAIR_CAPACITY);
             FloatBuffer samples = MemoryUtil.memFloatBuffer(
                     spatialDiagnosticPairs.mapped, SHIFTED_DIAGNOSTIC_PAIR_FLOAT_COUNT);
@@ -326,8 +358,9 @@ final class RtPathReservoirHistory {
                             + "selectionProbability[p50={},p95={},p99={}], "
                             + "sourceSelected={}/{} ({}%), "
                             + "scratch[written={},selected={},invalid={}], "
+                            + "sourceRoot[written={},invalid={}], "
                             + "mappingReplay[eligible={},accepted={},abi={},source={},receiver={},"
-                            + "geometry={},pdf={},visibility={},radiance={}]",
+                            + "geometry={},pdf={},visibility={},radiance={},root={}]",
                     total,
                     values[0], percent(values[0], total),
                     values[1], percent(values[1], total),
@@ -395,10 +428,12 @@ final class RtPathReservoirHistory {
                     sourceSelected, selectionEligible,
                     percent(sourceSelected, selectionEligible),
                     scratchWritten, scratchSelected, scratchInvalid,
+                    sourceRootWritten, sourceRootInvalid,
                     mappingEligible, mappingAccepted, mappingAbiReject,
                     mappingSourceReject, mappingReceiverReject,
                     mappingGeometryReject, mappingPdfReject,
-                    mappingVisibilityReject, mappingRadianceReject);
+                    mappingVisibilityReject, mappingRadianceReject,
+                    mappingSourceRootReject);
             spatialDiagnosticViewPending = 0;
             return;
         }
@@ -518,6 +553,10 @@ final class RtPathReservoirHistory {
         if (spatialDiagnosticPairs != null) {
             spatialDiagnosticPairs.destroy();
             spatialDiagnosticPairs = null;
+        }
+        if (shiftedSourceRoots != null) {
+            shiftedSourceRoots.destroy();
+            shiftedSourceRoots = null;
         }
         for (int slot = 0; slot < SLOT_COUNT; slot++) {
             if (slots[slot] != null) {

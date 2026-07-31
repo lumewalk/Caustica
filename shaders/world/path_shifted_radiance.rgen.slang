@@ -10,6 +10,7 @@ import world_common;
 import world_core;
 import trace;
 import sampling_core;
+import segment;
 import path_reservoir_common;
 
 static const float PATH_SHIFT_INV_PI = 0.31830988618;
@@ -64,6 +65,8 @@ void main() {
     float shiftedSelectionProbability = 0.0;
     PathReservoir shiftedSource = pathReservoirEmpty();
     float3 shiftedReceiverFirstThroughput = float3(0.0);
+    float4 shiftedSourcePositionMaterial = float4(0.0);
+    float4 shiftedSourceNormalRoughness = float4(0.0);
     if (receiverPresent) {
         float3 receiverNormal = receiverNormalRoughness.xyz / receiverNormalLength;
         uint currentReconnectionMetadata = asuint(current.reconnectionVertex.w);
@@ -207,6 +210,8 @@ void main() {
                 float3 sourceFirstThroughput = source.reconnectionThroughput.xyz;
                 float3 receiverFirstThroughput = current.reconnectionThroughput.xyz;
                 shiftedSource = source;
+                shiftedSourcePositionMaterial = sourcePositionMaterial;
+                shiftedSourceNormalRoughness = sourceNormalRoughness;
                 shiftedReceiverFirstThroughput = receiverFirstThroughput;
                 bool invalidSourceChannel = any(sourceRadiance > float3(0.0)
                         && sourceFirstThroughput <= float3(0.0));
@@ -305,6 +310,43 @@ void main() {
             }
             if (pc.pathReservoirPreviousAddr != 0u) {
                 PathReservoir scratch = current;
+                PathSourceRoot sourceRoot;
+                bool sourceRootValid = !sourceSelected;
+                if (sourceSelected && worldPush.pathShiftSourceRootAddr != 0u
+                        && pc.pathQueueAddr != 0u
+                        && shiftedSource.identity.y < dimensions.x * dimensions.y
+                        && shiftedSource.replayControl.y >= 1u
+                        && shiftedSource.replayControl.y <= MAX_PATH_SEGMENTS) {
+                    ConstPtr<PackedPathSegment> queue =
+                            ConstPtr<PackedPathSegment>(pc.pathQueueAddr);
+                    PackedPathSegment segment0 = queue[shiftedSource.identity.y];
+                    PackedPathSegment segment1 = segment0;
+                    bool chainComplete = false;
+                    if (shiftedSource.replayControl.y == 1u) {
+                        chainComplete = segment0.nextRecord == PATH_NO_NEXT;
+                    } else if (segment0.nextRecord != PATH_NO_NEXT
+                            && segment0.nextRecord < dimensions.x * dimensions.y * 2u) {
+                        segment1 = queue[segment0.nextRecord];
+                        chainComplete = segment1.nextRecord == PATH_NO_NEXT;
+                    }
+                    if (chainComplete
+                            && all(isfinite(segment0.ro))
+                            && all(isfinite(segment1.ro))
+                            && all(isfinite(shiftedSourcePositionMaterial))
+                            && all(isfinite(shiftedSourceNormalRoughness))) {
+                        // Persist camera-relative origins. A later cross-frame pass can reconstruct
+                        // current rebased coordinates with currentCamOffset - cameraDelta without
+                        // retaining the capture frame's terrain origin.
+                        segment0.ro -= worldPush.camOffset;
+                        segment1.ro -= worldPush.camOffset;
+                        sourceRoot.sourcePositionMaterial = shiftedSourcePositionMaterial;
+                        sourceRoot.sourcePositionMaterial.xyz -= worldPush.camOffset;
+                        sourceRoot.sourceNormalRoughness = shiftedSourceNormalRoughness;
+                        sourceRoot.segment0 = segment0;
+                        sourceRoot.segment1 = segment1;
+                        sourceRootValid = true;
+                    }
+                }
                 float sourceCount = min(
                         shiftedSource.weights.y, PATH_TEMPORAL_MAX_SOURCE_COUNT);
                 float nextWeightSum = min(
@@ -337,7 +379,8 @@ void main() {
                 scratch.weights.z = selectedTarget > 0.0 && nextM > 0.0
                         ? nextWeightSum / (nextM * selectedTarget) : 0.0;
                 scratch.weights.w = selectedTarget > 0.0 ? min(nextM * 0.25, 1.0) : 0.0;
-                bool scratchValid = all(isfinite(scratch.sampleRadianceTarget))
+                bool scratchValid = sourceRootValid
+                        && all(isfinite(scratch.sampleRadianceTarget))
                         && scratch.sampleRadianceTarget.w > 0.0
                         && all(isfinite(scratch.weights))
                         && scratch.weights.x > 0.0
@@ -355,10 +398,16 @@ void main() {
                     DevicePtr<PathReservoir>(pc.pathReservoirPreviousAddr)[pixelIndex] = scratch;
                     InterlockedAdd(counters[PATH_SHIFT_DIAGNOSTIC_SCRATCH_WRITTEN], 1u);
                     if (sourceSelected) {
+                        DevicePtr<PathSourceRoot>(worldPush.pathShiftSourceRootAddr)[pixelIndex] =
+                                sourceRoot;
                         InterlockedAdd(counters[PATH_SHIFT_DIAGNOSTIC_SCRATCH_SELECTED], 1u);
+                        InterlockedAdd(counters[PATH_SHIFT_SOURCE_ROOT_WRITTEN], 1u);
                     }
                 } else {
                     InterlockedAdd(counters[PATH_SHIFT_DIAGNOSTIC_SCRATCH_INVALID], 1u);
+                    if (sourceSelected && !sourceRootValid) {
+                        InterlockedAdd(counters[PATH_SHIFT_SOURCE_ROOT_INVALID], 1u);
+                    }
                 }
             }
             uint sampleHash = pathHash(pixelIndex ^ pc.frameIndex * 668265263u);

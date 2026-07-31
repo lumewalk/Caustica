@@ -1,5 +1,6 @@
 package dev.comfyfluffy.caustica.rt;
 
+import dev.comfyfluffy.caustica.rt.gen.PathSourceRootData;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -371,6 +372,32 @@ final class RtPathSpatialReuseReferenceTest {
     }
 
     @Test
+    void persistentSourceRootOriginSurvivesCameraAndTerrainRebase() {
+        var stored = RtPathSpatialReuseReference.PersistentSourceRootOrigin.capture(
+                15.0, 4.0, -7.0,
+                10.0, 2.0, -10.0);
+        assertEquals(5.0, stored.cameraRelativeX(), 1.0e-12);
+        assertEquals(2.0, stored.cameraRelativeY(), 1.0e-12);
+        assertEquals(3.0, stored.cameraRelativeZ(), 1.0e-12);
+
+        var sameFrame = stored.reconstruct(10.0, 2.0, -10.0, 0.0, 0.0, 0.0);
+        assertEquals(15.0, sameFrame.cameraRelativeX(), 1.0e-12);
+        assertEquals(4.0, sameFrame.cameraRelativeY(), 1.0e-12);
+        assertEquals(-7.0, sameFrame.cameraRelativeZ(), 1.0e-12);
+
+        // Camera moved by (+3,+1,-2), while the terrain rebase independently changed the current
+        // camera offset to (5,-4,8). The retained world root reconstructs in that new rebase.
+        var nextFrame = stored.reconstruct(5.0, -4.0, 8.0, 3.0, 1.0, -2.0);
+        assertEquals(7.0, nextFrame.cameraRelativeX(), 1.0e-12);
+        assertEquals(-3.0, nextFrame.cameraRelativeY(), 1.0e-12);
+        assertEquals(13.0, nextFrame.cameraRelativeZ(), 1.0e-12);
+
+        assertThrows(IllegalArgumentException.class,
+                () -> RtPathSpatialReuseReference.PersistentSourceRootOrigin.capture(
+                        Double.NaN, 0.0, 0.0, 0.0, 0.0, 0.0));
+    }
+
+    @Test
     void pairedMomentsExposeCovarianceAndCorrelationWithoutBatchStorage() {
         var moments = new RtPathSpatialReuseReference.PairMoments();
         moments.add(1.0, 2.0);
@@ -452,9 +479,13 @@ final class RtPathSpatialReuseReferenceTest {
         assertEquals(27, RtPathReservoirHistory.MAPPING_REPLAY_PDF_REJECT_INDEX);
         assertEquals(28, RtPathReservoirHistory.MAPPING_REPLAY_VISIBILITY_REJECT_INDEX);
         assertEquals(29, RtPathReservoirHistory.MAPPING_REPLAY_RADIANCE_REJECT_INDEX);
-        assertEquals(30, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
-        assertEquals(30 * Integer.BYTES,
+        assertEquals(30, RtPathReservoirHistory.SHIFTED_SOURCE_ROOT_WRITTEN_INDEX);
+        assertEquals(31, RtPathReservoirHistory.SHIFTED_SOURCE_ROOT_INVALID_INDEX);
+        assertEquals(32, RtPathReservoirHistory.MAPPING_REPLAY_SOURCE_ROOT_REJECT_INDEX);
+        assertEquals(33, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
+        assertEquals(33 * Integer.BYTES,
                 RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_COUNTER_BYTES);
+        assertEquals(128, PathSourceRootData.BYTE_SIZE);
         assertEquals(4096, RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_PAIR_CAPACITY);
         assertEquals(4096, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_DENSITY_PAIR_OFFSET);
         assertEquals(8192, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_MERGE_PAIR_OFFSET);

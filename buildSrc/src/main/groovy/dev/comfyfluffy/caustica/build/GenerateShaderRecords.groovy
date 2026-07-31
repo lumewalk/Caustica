@@ -248,6 +248,15 @@ abstract class GenerateShaderRecords extends DefaultTask {
         Map pathReservoirType = pathReservoirProbeArray.type.elementType as Map
         int pathReservoirByteSize = pathReservoirProbeArray.type.uniformStride as int
 
+        def pathSourceRootParameter = reflection.parameters.find { it.name == "pathSourceRootLayoutProbe" }
+        def pathSourceRootProbeArray = pathSourceRootParameter?.type?.resultType?.fields?.find { it.name == "values" }
+        if (pathSourceRootProbeArray?.type?.kind != "array"
+                || pathSourceRootProbeArray.type.elementType?.name != "PathSourceRoot") {
+            throw new GradleException("unexpected PathSourceRoot reflection probe shape")
+        }
+        Map pathSourceRootType = pathSourceRootProbeArray.type.elementType as Map
+        int pathSourceRootByteSize = pathSourceRootProbeArray.type.uniformStride as int
+
         def pushParameter = reflection.parameters.find { it.name == "pushConstantsLayoutProbe" }
         if (pushParameter?.type?.elementType?.name != "WorldPushConstants") {
             throw new GradleException("Slang reflection omitted pushConstantsLayoutProbe")
@@ -271,5 +280,7 @@ abstract class GenerateShaderRecords extends DefaultTask {
                 generateJava(directReservoirType, directReservoirByteSize, "DirectReservoirData"), "UTF-8")
         new File(packageDir, "PathReservoirData.java").setText(
                 generateJava(pathReservoirType, pathReservoirByteSize, "PathReservoirData"), "UTF-8")
+        new File(packageDir, "PathSourceRootData.java").setText(
+                generateJava(pathSourceRootType, pathSourceRootByteSize, "PathSourceRootData"), "UTF-8")
     }
 }

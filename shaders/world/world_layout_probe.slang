@@ -19,10 +19,15 @@ struct PathReservoirLayoutProbe {
     PathReservoir values[2]; // future ReSTIR PT path-reservoir stride
 };
 
+struct PathSourceRootLayoutProbe {
+    PathSourceRoot values[2]; // retained two-segment source replay root + source guides
+};
+
 [[vk::binding(0, 0)]] StructuredBuffer<WorldPushLayoutProbe, Std430DataLayout> worldPushLayoutProbe;
 [[vk::binding(1, 0)]] StructuredBuffer<MaterialHeaderLayoutProbe, Std430DataLayout> materialHeaderLayoutProbe;
 [[vk::binding(2, 0)]] StructuredBuffer<DirectReservoirLayoutProbe, Std430DataLayout> directReservoirLayoutProbe;
 [[vk::binding(3, 0)]] StructuredBuffer<PathReservoirLayoutProbe, Std430DataLayout> pathReservoirLayoutProbe;
+[[vk::binding(4, 0)]] StructuredBuffer<PathSourceRootLayoutProbe, Std430DataLayout> pathSourceRootLayoutProbe;
 [[vk::push_constant]] WorldPushConstants pushConstantsLayoutProbe;
 
 [shader("compute")]
@@ -34,6 +39,7 @@ void main(uint3 id : SV_DispatchThreadID) {
                 + materialHeaderLayoutProbe[0].values[0].params.x
                 + directReservoirLayoutProbe[0].values[0].weights.x
                 + pathReservoirLayoutProbe[0].values[0].weights.x
+                + pathSourceRootLayoutProbe[0].values[0].sourcePositionMaterial.x
                 + float(pushConstantsLayoutProbe.frameIndex);
     }
 }

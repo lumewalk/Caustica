@@ -486,6 +486,40 @@ final class RtPathSpatialReuseReference {
     }
 
     /**
+     * Camera-relative storage for an exact retained source queue root. The capture frame's terrain
+     * rebase is deliberately not part of persistent identity: reconstructing in a later frame adds
+     * the current camera offset and subtracts the camera translation since capture.
+     */
+    record PersistentSourceRootOrigin(double cameraRelativeX, double cameraRelativeY,
+                                      double cameraRelativeZ) {
+        PersistentSourceRootOrigin {
+            if (!Double.isFinite(cameraRelativeX) || !Double.isFinite(cameraRelativeY)
+                    || !Double.isFinite(cameraRelativeZ)) {
+                throw new IllegalArgumentException("persistent source-root origin must be finite");
+            }
+        }
+
+        static PersistentSourceRootOrigin capture(
+                double rootX, double rootY, double rootZ,
+                double cameraOffsetX, double cameraOffsetY, double cameraOffsetZ) {
+            return new PersistentSourceRootOrigin(
+                    rootX - cameraOffsetX,
+                    rootY - cameraOffsetY,
+                    rootZ - cameraOffsetZ);
+        }
+
+        PersistentSourceRootOrigin reconstruct(
+                double currentCameraOffsetX, double currentCameraOffsetY,
+                double currentCameraOffsetZ, double cameraDeltaX,
+                double cameraDeltaY, double cameraDeltaZ) {
+            return new PersistentSourceRootOrigin(
+                    cameraRelativeX + currentCameraOffsetX - cameraDeltaX,
+                    cameraRelativeY + currentCameraOffsetY - cameraDeltaY,
+                    cameraRelativeZ + currentCameraOffsetZ - cameraDeltaZ);
+        }
+    }
+
+    /**
      * Shader-independent receiver-aware replay boundary for an ABI-10 one-hop diffuse mapping.
      * The source path is replayed from its original seeds; this record then applies the stored
      * receiver factor and freshly traced transmittance. Generic identity replay must never consume

@@ -623,8 +623,8 @@ public void pathMappingReplayValidate() {
     if (pc.debugView != PATH_SHIFTED_RADIANCE_DEBUG_VIEW
             || pc.pathReservoirAddr == 0u
             || pc.pathReservoirPreviousAddr == 0u
-            || pc.pathQueueAddr == 0u
-            || worldPush.pathShiftDiagnosticCounterAddr == 0u) {
+            || worldPush.pathShiftDiagnosticCounterAddr == 0u
+            || worldPush.pathShiftSourceRootAddr == 0u) {
         return;
     }
 
@@ -656,34 +656,40 @@ public void pathMappingReplayValidate() {
         return;
     }
 
-    ConstPtr<PackedPathSegment> queue =
-            ConstPtr<PackedPathSegment>(pc.pathQueueAddr);
-    PathReplayAggregate replay = pathReplayAggregateEmpty();
     uint expectedSegments = mapped.replayControl.y;
-    uint recordIndex = sourceIndex;
+    PathSourceRoot sourceRoot =
+            ConstPtr<PathSourceRoot>(worldPush.pathShiftSourceRootAddr)[pixelIndex];
+    bool sourceRootFinite = all(isfinite(sourceRoot.sourcePositionMaterial))
+            && all(isfinite(sourceRoot.sourceNormalRoughness))
+            && all(isfinite(sourceRoot.segment0.ro))
+            && all(isfinite(sourceRoot.segment1.ro));
+    bool sourceRootChainValid = expectedSegments == 1u
+            ? sourceRoot.segment0.nextRecord == PATH_NO_NEXT
+            : sourceRoot.segment0.nextRecord != PATH_NO_NEXT
+                    && sourceRoot.segment1.nextRecord == PATH_NO_NEXT;
+    if (!sourceRootFinite || !sourceRootChainValid) {
+        InterlockedAdd(counters[PATH_MAPPING_REPLAY_SOURCE_ROOT_REJECT], 1u);
+        return;
+    }
+
+    PathReplayAggregate replay = pathReplayAggregateEmpty();
     uint2 sourcePixel = uint2(
             sourceIndex % dimensions.x, sourceIndex / dimensions.x);
-    bool chainComplete = true;
     for (uint leaf = 0u; leaf < MAX_PATH_SEGMENTS; ++leaf) {
-        if (leaf >= expectedSegments || recordIndex == PATH_NO_NEXT) break;
-        PackedPathSegment packed = queue[recordIndex];
+        if (leaf >= expectedSegments) break;
+        PackedPathSegment packed = leaf == 0u
+                ? sourceRoot.segment0 : sourceRoot.segment1;
+        // The sidecar stores capture-frame camera-relative origins. This same-frame validation adds
+        // the current offset only; the cross-frame gate will additionally subtract camDelta.
+        packed.ro += worldPush.camOffset;
         PathSegment segment = unpackPathSegment(packed);
         uint replaySeed = leaf == 0u ? mapped.replay.x : mapped.replay.z;
         uint proposalReplaySeed = leaf == 0u ? mapped.replay.y : mapped.replay.w;
         PathTraceResult traced = tracePathSeeded(
                 segment, sourcePixel, true, replaySeed, proposalReplaySeed);
         pathReplayAccumulate(replay, traced, leaf);
-        if (leaf + 1u == expectedSegments) {
-            chainComplete = packed.nextRecord == PATH_NO_NEXT;
-            break;
-        }
-        if (packed.nextRecord == PATH_NO_NEXT) {
-            chainComplete = false;
-            break;
-        }
-        recordIndex = packed.nextRecord;
     }
-    if (!chainComplete || !pathMappingSourceReplayMatches(mapped, replay)) {
+    if (!pathMappingSourceReplayMatches(mapped, replay)) {
         InterlockedAdd(counters[PATH_MAPPING_REPLAY_SOURCE_REJECT], 1u);
         return;
     }
@@ -692,8 +698,26 @@ public void pathMappingReplayValidate() {
     int2 sourceTexel = int2(sourcePixel);
     float4 receiverPositionMaterial = gRestirPositionMaterial[receiverTexel];
     float4 receiverNormalRoughness = gRestirNormalRoughness[receiverTexel];
-    float4 sourcePositionMaterial = gRestirPositionMaterial[sourceTexel];
-    float4 sourceNormalRoughness = gRestirNormalRoughness[sourceTexel];
+    float4 currentSourcePositionMaterial = gRestirPositionMaterial[sourceTexel];
+    float4 currentSourceNormalRoughness = gRestirNormalRoughness[sourceTexel];
+    uint currentSourceMaterialIdentity =
+            uint(max(currentSourcePositionMaterial.w, 0.0));
+    float4 retainedSourcePositionMaterial = sourceRoot.sourcePositionMaterial;
+    retainedSourcePositionMaterial.xyz += worldPush.camOffset;
+    uint retainedSourceMaterialIdentity =
+            uint(max(retainedSourcePositionMaterial.w, 0.0));
+    if (!pathReplayPositionMatches(retainedSourcePositionMaterial.xyz,
+                currentSourcePositionMaterial.xyz)
+            || !pathReplayColorMatches(sourceRoot.sourceNormalRoughness.xyz,
+                currentSourceNormalRoughness.xyz)
+            || !pathReplayFloatMatches(sourceRoot.sourceNormalRoughness.w,
+                currentSourceNormalRoughness.w)
+            || retainedSourceMaterialIdentity != currentSourceMaterialIdentity) {
+        InterlockedAdd(counters[PATH_MAPPING_REPLAY_SOURCE_ROOT_REJECT], 1u);
+        return;
+    }
+    float4 sourcePositionMaterial = retainedSourcePositionMaterial;
+    float4 sourceNormalRoughness = sourceRoot.sourceNormalRoughness;
     float receiverNormalLength = length(receiverNormalRoughness.xyz);
     float sourceNormalLength = length(sourceNormalRoughness.xyz);
     uint receiverMaterialIdentity =

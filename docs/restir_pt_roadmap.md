@@ -257,20 +257,30 @@ result with the stored shifted RGB using the seeded-replay tolerance.
 A dedicated view-20-only same-frame GPU pass mirrors that boundary. It replays the stored source
 seed chain through the production path tracer, validates source state and receiver compatibility,
 recomputes geometry/PDF/Jacobian/receiver throughput, re-traces shifted visibility, and compares the
-reconstructed shifted sample with the non-persistent scratch record. Nine mutually exclusive
-counters expose accepted and ABI/source/receiver/geometry/PDF/visibility/radiance rejects. This pass
+reconstructed shifted sample with the non-persistent scratch record. Mapping-replay counters expose
+eligible/accepted records plus mutually exclusive ABI/source/receiver/geometry/PDF/visibility/
+radiance rejects (and the retained-root reject introduced below). This pass
 does not modify the diagnostic image, reservoirs, committed history, or the active estimator. Runtime
 validation accepted 201419 of 201425 mapped records (99.997021%): every frame preserved exact
 category accounting, all ABI/source/receiver/geometry/visibility/radiance rejects stayed zero, and
 six isolated PDF-tail records were safely rejected without relaxing replay tolerance.
 
+The next source-lifetime sub-gate adds a lazy view-20-only retained-root sidecar without changing
+the 176-byte reservoir or replay ABI 10. Each 128-byte record stores the source position/material,
+normal/roughness, and both packed 48-byte queue segments; positions are camera-relative so terrain
+rebasing does not invalidate the root. Same-frame mapping replay now consumes this retained root
+instead of the transient current-frame queue. Extra counters expose root writes, invalid captures,
+and retained-root replay rejection. The sidecar is about 105.15 MiB at 1280x673, is absent from
+ordinary rendering, and is not committed as path history.
+
 The shader-independent `PersistentDiffuseRemap` reference defines the next history boundary. The
 original source remains the canonical replay root, so a cross-frame remap requires valid receiver
 reprojection, a stable source queue root, and exact source replay. The new source-to-current-receiver
 PDF and Jacobian are recomputed directly; the previous receiver's Jacobian is integrity metadata and
-must never be multiplied into the new Jacobian. Current GPU guide/history resources do not yet
-reproject that spatial source root, so mapped records remain non-persistent until this requirement is
-implemented and diagnosed.
+must never be multiplied into the new Jacobian. Retaining the root solves transient queue lifetime
+only. The sidecar still needs independent ping-pong history, source-root reprojection (including
+validated object motion), receiver reprojection, and cross-frame replay diagnostics, so mapped
+records remain non-persistent until those requirements are implemented and diagnosed.
 
 ## Delivery Phases
 

@@ -76,6 +76,7 @@ public struct WorldPush {
     // inline push-constant ABI stays below Vulkan's portable minimum limit; zero outside view 20.
     public uint64_t pathShiftDiagnosticCounterAddr;
     public uint64_t pathShiftDiagnosticPairAddr;
+    public uint64_t pathShiftSourceRootAddr; // retained exact source root sidecar (0 outside view 20)
 };
 
 // 32-byte hot area-light record. Radiance uses packed R11G11B10 and the grid-relative owner section
@@ -119,6 +120,38 @@ public struct LightGridSpan {
     public uint aliasFirstLight;
     public uint packedLightCounts; // low16 self, high16 alias
     public float accept;
+};
+
+// Packed continuation record shared by the transient queue and the view-20 retained-source sidecar.
+// Keeping this binding-free ABI in world_common lets the build-time layout probe reflect it without
+// importing world_core's live descriptor bindings. The final field is a uint, so Std430DataLayout
+// gives the record an exact 48-byte stride.
+public struct PackedPathSegment {
+    public float3 ro;
+    public uint rd;
+    public uint throughput;
+    public uint currentExtinction;
+    public uint outerExtinction;
+    public uint mediumIors;
+    public uint rayCone;
+    public uint seed;
+    public uint pathFlags;
+    public uint nextRecord;
+};
+
+// View-20-only retained replay root for a selected one-hop spatial mapping. The two packed
+// continuation records preserve the exact transient queue inputs that produced the canonical
+// source path. Their origins are stored camera-relative so the record can later be rebased without
+// depending on the transient queue or on the terrain rebase chosen for the capture frame.
+//
+// The source guide lanes are retained separately from the mapped receiver. They are the stable
+// source-root identity needed before a mapped reservoir can cross a frame boundary. This sidecar is
+// diagnostic-only and is not part of PathReservoir or the production estimator.
+public struct PathSourceRoot {
+    public float4 sourcePositionMaterial;
+    public float4 sourceNormalRoughness;
+    public PackedPathSegment segment0;
+    public PackedPathSegment segment1;
 };
 
 // One sample may carry the ordinary continuation plus one branch split at the primary dielectric.

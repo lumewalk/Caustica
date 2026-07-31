@@ -42,20 +42,6 @@ public PathSegment makePathSegment(float3 ro, float3 rd, float3 throughput, Medi
     s.showCelestial = showCelestial;
     return s;
 }
-// field is a uint, so Std430DataLayout gives this an exact 48-byte stride.
-public struct PackedPathSegment {
-    public float3 ro;
-    public uint rd;
-    public uint throughput;
-    public uint currentExtinction;
-    public uint outerExtinction;
-    public uint mediumIors;
-    public uint rayCone;
-    public uint seed;
-    public uint pathFlags;
-    public uint nextRecord;
-};
-
 public static const uint PATH_NO_NEXT = 0xffffffffu;
 
 public float2 octEncode(float3 direction) {

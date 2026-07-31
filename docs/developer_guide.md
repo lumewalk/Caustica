@@ -189,23 +189,30 @@ receiver throughput and freshly traced RGB transmittance, and compared with the 
 using the same relative tolerance as GPU seeded replay.
 
 View 20 now dispatches that receiver-aware validation as a second same-frame ray-generation pass
-after the scratch merge. It replays the original source queue chain from the stored seeds, checks
+after the scratch merge. A lazy view-20-only 128-byte-per-pixel sidecar retains both packed source
+queue segments plus the source position/material and normal/roughness guides. Segment origins and
+the source position are stored camera-relative, so they do not depend on the capture frame's terrain
+rebase. At 1280x673 this diagnostic sidecar is about 105.15 MiB and is not allocated by ordinary
+rendering. The validation pass replays the retained source root rather than dereferencing the
+transient queue, checks
 the source topology and proposal state, reconstructs the receiver-side geometry, directional PDF,
 PSS Jacobian and first-event throughput, traces receiver-to-second-hit visibility again, and compares
-the resulting shifted RGB/target with the scratch record. The pass writes only nine terminal
-counters: eligible, accepted, and seven mutually exclusive reject categories. A valid frame has
+the resulting shifted RGB/target with the scratch record. Source-root written/invalid counters and a
+separate source-root replay reject make this lifetime boundary explicit. A valid frame has
 `eligible == scratchSelected` and the sum of accepted plus all rejects equals eligible; the expected
 steady-state result is near-total acceptance, while isolated finite-density/PDF outliers may be
 rejected rather than admitted by weakening replay tolerances. ABI, source-state, receiver,
-visibility, or radiance rejects require investigation. The diagnostic image is unchanged by this
-validation dispatch. Mapped records still do not enter committed history or the normal estimator.
+visibility, radiance, or retained-root rejects require investigation. The diagnostic image is
+unchanged by this validation dispatch. Mapped records still do not enter committed history or the
+normal estimator.
 
 For a later frame, replaying only the receiver is insufficient: the mapped record's original
 spatial source remains its canonical queue root. The CPU `PersistentDiffuseRemap` contract therefore
 requires receiver reprojection, a stable/reprojected source queue root, and exact source replay.
 It recomputes a direct source-to-current-receiver Jacobian and explicitly does not multiply by the
-stored previous-receiver Jacobian. The current GPU history has receiver surface validation but no
-separate motion mapping for that spatial source root, so persistence remains disabled.
+stored previous-receiver Jacobian. The retained sidecar removes the transient-queue lifetime problem,
+but it is not yet double-buffered or separately reprojected, and moving source surfaces still require
+validated object motion. Persistence therefore remains disabled.
 
 ## Linux
 

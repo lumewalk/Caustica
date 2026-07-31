@@ -29,7 +29,10 @@ public static const uint PATH_MAPPING_REPLAY_GEOMETRY_REJECT = 26u;
 public static const uint PATH_MAPPING_REPLAY_PDF_REJECT = 27u;
 public static const uint PATH_MAPPING_REPLAY_VISIBILITY_REJECT = 28u;
 public static const uint PATH_MAPPING_REPLAY_RADIANCE_REJECT = 29u;
-public static const uint PATH_SHIFT_DIAGNOSTIC_COUNTER_COUNT = 30u;
+public static const uint PATH_SHIFT_SOURCE_ROOT_WRITTEN = 30u;
+public static const uint PATH_SHIFT_SOURCE_ROOT_INVALID = 31u;
+public static const uint PATH_MAPPING_REPLAY_SOURCE_ROOT_REJECT = 32u;
+public static const uint PATH_SHIFT_DIAGNOSTIC_COUNTER_COUNT = 33u;
 public static const uint PATH_SHIFT_DIAGNOSTIC_PAIR_MASK = 3u;
 public static const uint PATH_SHIFT_DIAGNOSTIC_MERGE_PAIR_OFFSET =
         PATH_SPATIAL_DIAGNOSTIC_PAIR_CAPACITY * 2u;
