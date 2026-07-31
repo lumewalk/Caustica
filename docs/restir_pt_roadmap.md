@@ -302,9 +302,23 @@ The 15 moving-camera readbacks remained fail-closed (2 of 39,673 eligible accept
 the settled acceptance regime after motion stopped. Same-frame replay independently accepted
 382,448 of 382,485 records (99.990326%), with only three source-state and 34 finite PDF-tail rejects.
 This proves the diagnostic lifetime/reprojection boundary, but not persistent estimator admission:
-the next gate must split the receiver reject into surface identity versus path
-depth/topology/transport/footprint/first-edge categories and validate the intended policy before any
-mapped history write.
+the receiver-policy checkpoint therefore splits that combined terminal counter into seven exclusive
+causes: surface/material compatibility, usable current sample, first-edge availability, topology,
+depth, transport, and footprint. Their sum is logged as `receiverTotal` so the original accounting
+identity remains directly auditable. The order is mirrored by a shader-independent CPU reference;
+admission rules and tolerances are unchanged. Runtime category ratios must guide a later policy A/B
+decision before any mapped history write.
+
+The first split-counter Vulkan run preserved all three accounting identities on 25/25 readbacks.
+For 20 settled-camera readbacks, 8,594/76,551 eligible records were accepted (11.226503%). The
+dominant exclusive rejection was `receiverSample`: 56,370 (73.637183% of eligible), followed by
+topology 6,357, first edge 2,477, footprint 1,105, and surface 356; depth and transport stayed zero.
+During five moving-camera readbacks, all 10,486 eligible records failed closed, with 10,457 surface
+rejects and 29 source-reprojection rejects. ABI/root and downstream geometry/PDF/visibility/radiance
+rejects remained zero. This localizes the next policy question: diagnose, without admitting it,
+whether a remap whose current canonical sample has zero weight/target but whose receiver edge and all
+remaining contracts are valid is a legitimate persistent-history rescue. Do not remove the positive
+current-sample requirement until that A/B population and CPU reference are explicit.
 
 ## Delivery Phases
 

@@ -67,12 +67,18 @@ final class RtPathReservoirHistory {
     static final int CROSS_FRAME_SOURCE_ROOT_REJECT_INDEX = 39;
     static final int CROSS_FRAME_SOURCE_REPROJECTION_REJECT_INDEX = 40;
     static final int CROSS_FRAME_SOURCE_REPLAY_REJECT_INDEX = 41;
-    static final int CROSS_FRAME_RECEIVER_REJECT_INDEX = 42;
+    static final int CROSS_FRAME_RECEIVER_SURFACE_REJECT_INDEX = 42;
     static final int CROSS_FRAME_GEOMETRY_REJECT_INDEX = 43;
     static final int CROSS_FRAME_PDF_REJECT_INDEX = 44;
     static final int CROSS_FRAME_VISIBILITY_REJECT_INDEX = 45;
     static final int CROSS_FRAME_RADIANCE_REJECT_INDEX = 46;
-    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 47;
+    static final int CROSS_FRAME_RECEIVER_SAMPLE_REJECT_INDEX = 47;
+    static final int CROSS_FRAME_RECEIVER_EDGE_REJECT_INDEX = 48;
+    static final int CROSS_FRAME_RECEIVER_TOPOLOGY_REJECT_INDEX = 49;
+    static final int CROSS_FRAME_RECEIVER_DEPTH_REJECT_INDEX = 50;
+    static final int CROSS_FRAME_RECEIVER_TRANSPORT_REJECT_INDEX = 51;
+    static final int CROSS_FRAME_RECEIVER_FOOTPRINT_REJECT_INDEX = 52;
+    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 53;
     static final int SPATIAL_DIAGNOSTIC_COUNTER_BYTES =
             SHIFTED_DIAGNOSTIC_COUNTER_COUNT * Integer.BYTES;
     static final int SPATIAL_DIAGNOSTIC_PAIR_CAPACITY = 4096;
@@ -360,8 +366,8 @@ final class RtPathReservoirHistory {
                     counters.get(CROSS_FRAME_SOURCE_REPROJECTION_REJECT_INDEX));
             long crossFrameSourceReplayReject = Integer.toUnsignedLong(
                     counters.get(CROSS_FRAME_SOURCE_REPLAY_REJECT_INDEX));
-            long crossFrameReceiverReject = Integer.toUnsignedLong(
-                    counters.get(CROSS_FRAME_RECEIVER_REJECT_INDEX));
+            long crossFrameReceiverSurfaceReject = Integer.toUnsignedLong(
+                    counters.get(CROSS_FRAME_RECEIVER_SURFACE_REJECT_INDEX));
             long crossFrameGeometryReject = Integer.toUnsignedLong(
                     counters.get(CROSS_FRAME_GEOMETRY_REJECT_INDEX));
             long crossFramePdfReject = Integer.toUnsignedLong(
@@ -370,6 +376,22 @@ final class RtPathReservoirHistory {
                     counters.get(CROSS_FRAME_VISIBILITY_REJECT_INDEX));
             long crossFrameRadianceReject = Integer.toUnsignedLong(
                     counters.get(CROSS_FRAME_RADIANCE_REJECT_INDEX));
+            long crossFrameReceiverSampleReject = Integer.toUnsignedLong(
+                    counters.get(CROSS_FRAME_RECEIVER_SAMPLE_REJECT_INDEX));
+            long crossFrameReceiverEdgeReject = Integer.toUnsignedLong(
+                    counters.get(CROSS_FRAME_RECEIVER_EDGE_REJECT_INDEX));
+            long crossFrameReceiverTopologyReject = Integer.toUnsignedLong(
+                    counters.get(CROSS_FRAME_RECEIVER_TOPOLOGY_REJECT_INDEX));
+            long crossFrameReceiverDepthReject = Integer.toUnsignedLong(
+                    counters.get(CROSS_FRAME_RECEIVER_DEPTH_REJECT_INDEX));
+            long crossFrameReceiverTransportReject = Integer.toUnsignedLong(
+                    counters.get(CROSS_FRAME_RECEIVER_TRANSPORT_REJECT_INDEX));
+            long crossFrameReceiverFootprintReject = Integer.toUnsignedLong(
+                    counters.get(CROSS_FRAME_RECEIVER_FOOTPRINT_REJECT_INDEX));
+            long crossFrameReceiverReject = crossFrameReceiverSurfaceReject
+                    + crossFrameReceiverSampleReject + crossFrameReceiverEdgeReject
+                    + crossFrameReceiverTopologyReject + crossFrameReceiverDepthReject
+                    + crossFrameReceiverTransportReject + crossFrameReceiverFootprintReject;
             int capturedSamples = (int) Math.min(sampleAttempts, SPATIAL_DIAGNOSTIC_PAIR_CAPACITY);
             FloatBuffer samples = MemoryUtil.memFloatBuffer(
                     spatialDiagnosticPairs.mapped, SHIFTED_DIAGNOSTIC_PAIR_FLOAT_COUNT);
@@ -461,7 +483,10 @@ final class RtPathReservoirHistory {
                              + "geometry={},pdf={},visibility={},radiance={},root={}], "
                              + "crossFrame[attempted={},receiverReprojection={},mappedEmpty={},"
                              + "eligible={},accepted={},abi={},root={},sourceReprojection={},"
-                             + "sourceReplay={},receiver={},geometry={},pdf={},visibility={},radiance={}]",
+                             + "sourceReplay={},receiverTotal={},receiverSurface={},receiverSample={},"
+                             + "receiverEdge={},receiverTopology={},receiverDepth={},"
+                             + "receiverTransport={},receiverFootprint={},geometry={},pdf={},"
+                             + "visibility={},radiance={}]",
                     total,
                     values[0], percent(values[0], total),
                     values[1], percent(values[1], total),
@@ -539,7 +564,11 @@ final class RtPathReservoirHistory {
                      crossFrameMappedEmpty, crossFrameEligible, crossFrameAccepted,
                      crossFrameAbiReject, crossFrameSourceRootReject,
                      crossFrameSourceReprojectionReject, crossFrameSourceReplayReject,
-                     crossFrameReceiverReject, crossFrameGeometryReject,
+                     crossFrameReceiverReject, crossFrameReceiverSurfaceReject,
+                     crossFrameReceiverSampleReject, crossFrameReceiverEdgeReject,
+                     crossFrameReceiverTopologyReject, crossFrameReceiverDepthReject,
+                     crossFrameReceiverTransportReject, crossFrameReceiverFootprintReject,
+                     crossFrameGeometryReject,
                      crossFramePdfReject, crossFrameVisibilityReject,
                      crossFrameRadianceReject);
             spatialDiagnosticViewPending = 0;

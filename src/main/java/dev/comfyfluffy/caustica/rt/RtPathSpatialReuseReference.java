@@ -637,6 +637,37 @@ final class RtPathSpatialReuseReference {
         }
     }
 
+    /** Ordered fail-closed receiver policy mirrored by the cross-frame GPU diagnostic counters. */
+    enum CrossFrameReceiverReject {
+        NONE,
+        SURFACE,
+        SAMPLE,
+        EDGE,
+        TOPOLOGY,
+        DEPTH,
+        TRANSPORT,
+        FOOTPRINT
+    }
+
+    record CrossFrameReceiverPolicy(boolean surfaceCompatible,
+                                    boolean sampleUsable,
+                                    boolean edgeAvailable,
+                                    boolean topologyMatches,
+                                    boolean depthMatches,
+                                    boolean transportMatches,
+                                    boolean footprintCompatible) {
+        CrossFrameReceiverReject firstReject() {
+            if (!surfaceCompatible) return CrossFrameReceiverReject.SURFACE;
+            if (!sampleUsable) return CrossFrameReceiverReject.SAMPLE;
+            if (!edgeAvailable) return CrossFrameReceiverReject.EDGE;
+            if (!topologyMatches) return CrossFrameReceiverReject.TOPOLOGY;
+            if (!depthMatches) return CrossFrameReceiverReject.DEPTH;
+            if (!transportMatches) return CrossFrameReceiverReject.TRANSPORT;
+            if (!footprintCompatible) return CrossFrameReceiverReject.FOOTPRINT;
+            return CrossFrameReceiverReject.NONE;
+        }
+    }
+
     /**
      * Re-evaluates one color channel of a diffuse reconnection. The stored source endpoint already
      * contains the source first-edge throughput, so the shift removes that exact stored factor,

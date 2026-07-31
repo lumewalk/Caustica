@@ -717,7 +717,7 @@ public void pathMappingReplayValidate() {
                         receiverNormalRoughness.w)
                     || uint(max(retainedReceiverPositionMaterial.w, 0.0))
                             != uint(max(receiverPositionMaterial.w, 0.0)))) {
-        InterlockedAdd(counters[PATH_CROSS_FRAME_RECEIVER_REJECT], 1u);
+        InterlockedAdd(counters[PATH_CROSS_FRAME_RECEIVER_SURFACE_REJECT], 1u);
         return;
     }
 
@@ -827,17 +827,41 @@ public void pathMappingReplayValidate() {
     if (receiverNormalLength < 0.5 || sourceNormalLength < 0.5
             || (receiverMaterial != MATERIAL_OPAQUE
                     && receiverMaterial != MATERIAL_PARTICLE)
-            || receiverMaterialIdentity != sourceMaterialIdentity
-            || current.weights.y <= 0.0
-            || current.sampleRadianceTarget.w <= 0.0
-            || !currentEdgeAvailable
-            || current.identity.z != mapped.identity.z
-            || pathMetadataDepth(current.identity.w)
-                    != pathMetadataDepth(mapped.identity.w)
-            || pathMetadataTransport(current.identity.w)
-                    != pathMetadataTransport(mapped.identity.w)) {
+            || receiverMaterialIdentity != sourceMaterialIdentity) {
         InterlockedAdd(counters[crossFrame
-                ? PATH_CROSS_FRAME_RECEIVER_REJECT
+                ? PATH_CROSS_FRAME_RECEIVER_SURFACE_REJECT
+                : PATH_MAPPING_REPLAY_RECEIVER_REJECT], 1u);
+        return;
+    }
+    if (current.weights.y <= 0.0 || current.sampleRadianceTarget.w <= 0.0) {
+        InterlockedAdd(counters[crossFrame
+                ? PATH_CROSS_FRAME_RECEIVER_SAMPLE_REJECT
+                : PATH_MAPPING_REPLAY_RECEIVER_REJECT], 1u);
+        return;
+    }
+    if (!currentEdgeAvailable) {
+        InterlockedAdd(counters[crossFrame
+                ? PATH_CROSS_FRAME_RECEIVER_EDGE_REJECT
+                : PATH_MAPPING_REPLAY_RECEIVER_REJECT], 1u);
+        return;
+    }
+    if (current.identity.z != mapped.identity.z) {
+        InterlockedAdd(counters[crossFrame
+                ? PATH_CROSS_FRAME_RECEIVER_TOPOLOGY_REJECT
+                : PATH_MAPPING_REPLAY_RECEIVER_REJECT], 1u);
+        return;
+    }
+    if (pathMetadataDepth(current.identity.w)
+            != pathMetadataDepth(mapped.identity.w)) {
+        InterlockedAdd(counters[crossFrame
+                ? PATH_CROSS_FRAME_RECEIVER_DEPTH_REJECT
+                : PATH_MAPPING_REPLAY_RECEIVER_REJECT], 1u);
+        return;
+    }
+    if (pathMetadataTransport(current.identity.w)
+            != pathMetadataTransport(mapped.identity.w)) {
+        InterlockedAdd(counters[crossFrame
+                ? PATH_CROSS_FRAME_RECEIVER_TRANSPORT_REJECT
                 : PATH_MAPPING_REPLAY_RECEIVER_REJECT], 1u);
         return;
     }
@@ -856,7 +880,7 @@ public void pathMappingReplayValidate() {
                     / min(sourceFootprint, receiverFootprint)
                     > PATH_MAX_FOOTPRINT_RATIO) {
         InterlockedAdd(counters[crossFrame
-                ? PATH_CROSS_FRAME_RECEIVER_REJECT
+                ? PATH_CROSS_FRAME_RECEIVER_FOOTPRINT_REJECT
                 : PATH_MAPPING_REPLAY_RECEIVER_REJECT], 1u);
         return;
     }

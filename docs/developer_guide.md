@@ -226,7 +226,20 @@ source reprojection/source replay accounted for 16/489 and all later geometry/PD
 reject categories stayed zero. The moving-camera interval remained fail-closed and acceptance
 recovered after motion stopped. Before this boundary changes, split the receiver category into
 surface and path-policy causes, validate that policy, and define explicit moving-surface support;
-do not hide safe rejects by weakening replay tolerances.
+do not hide safe rejects by weakening replay tolerances. The diagnostic now reports those causes as
+`receiverSurface`, `receiverSample`, `receiverEdge`, `receiverTopology`, `receiverDepth`,
+`receiverTransport`, and `receiverFootprint`, plus their derived `receiverTotal`. Each eligible
+record increments exactly one terminal counter in the same fail-closed order encoded by the CPU
+reference. This is instrumentation only: it does not relax admission or write mapped history.
+
+The initial split-counter capture found `receiverSample` to be the dominant settled-camera cause:
+56,370 of 76,551 eligible records (73.637183%), versus topology 6,357, edge 2,477, footprint 1,105,
+and surface 356. Acceptance was 8,594 (11.226503%); depth, transport, ABI/root, and all downstream
+mapping rejects were zero. Camera motion moved the terminal population to the expected fail-closed
+surface category. The next safe diagnostic is a counter-only sample-rescue A/B: count records with a
+zero current canonical weight/target that still have a valid receiver edge and pass topology, depth,
+transport, and footprint. It must not select those records, alter weights, or write history until the
+reference contract establishes whether current-sample positivity is mathematically required.
 
 ## Linux
 
