@@ -531,6 +531,21 @@ selected-ready equalled Bernoulli-selected, and the remaining post-selection out
 Bernoulli-retained. This proves the counter-only arithmetic/readiness contract, but still does not
 authorize copying sample metadata or writing scratch/persistent history.
 
+The next bounded gate copies a complete future reservoir sample into a shader-local register value.
+Selected records use shifted radiance/target, retain the original canonical source replay metadata,
+and replace only the receiver-dependent directional PDF, throughput, reconnection geometry, mapping
+control and current-generation identity. Retained records must preserve every current sample lane
+bit-for-bit; both outcomes receive only the already-proven post-selection weight/M/final-W values.
+An exclusive `guideSampleCopy` counter partition reports selected, retained, empty, metadata reject,
+or arithmetic reject. The local value is deliberately not stored in either reservoir slot or any
+sidecar, so this gate cannot reach committed history, a later frame, or the active estimator.
+
+Fresh Vulkan runtime passed the sample-copy boundary across 29 readbacks and 250194 eligible records:
+240654 source-selected payloads, 7279 exactly retained current payloads, 2261 empty no-ops, and zero
+metadata or arithmetic rejects. Every frame preserved equality with the post-selection eligible and
+terminal categories as well as its own exact terminal sum. The register-only full-sample contract is
+therefore proven; writing it to persistent mapped history remains a separate prohibited gate.
+
 ## Delivery Phases
 
 ### Phase 0 — Wavefront Integration Baseline

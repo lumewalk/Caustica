@@ -138,7 +138,13 @@ final class RtPathReservoirHistory {
     static final int GUIDE_POST_SELECTION_EMPTY_INDEX = 110;
     static final int GUIDE_POST_SELECTION_SAMPLE_REJECT_INDEX = 111;
     static final int GUIDE_POST_SELECTION_ARITHMETIC_REJECT_INDEX = 112;
-    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 113;
+    static final int GUIDE_SAMPLE_COPY_ELIGIBLE_INDEX = 113;
+    static final int GUIDE_SAMPLE_COPY_SELECTED_INDEX = 114;
+    static final int GUIDE_SAMPLE_COPY_RETAINED_INDEX = 115;
+    static final int GUIDE_SAMPLE_COPY_EMPTY_INDEX = 116;
+    static final int GUIDE_SAMPLE_COPY_METADATA_REJECT_INDEX = 117;
+    static final int GUIDE_SAMPLE_COPY_ARITHMETIC_REJECT_INDEX = 118;
+    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 119;
     static final int SHIFTED_RECEIVER_GUIDE_STRIDE = 8 * Float.BYTES;
     static final int SPATIAL_DIAGNOSTIC_COUNTER_BYTES =
             SHIFTED_DIAGNOSTIC_COUNTER_COUNT * Integer.BYTES;
@@ -581,6 +587,18 @@ final class RtPathReservoirHistory {
                     counters.get(GUIDE_POST_SELECTION_SAMPLE_REJECT_INDEX));
             long guidePostSelectionArithmeticReject = Integer.toUnsignedLong(
                     counters.get(GUIDE_POST_SELECTION_ARITHMETIC_REJECT_INDEX));
+            long guideSampleCopyEligible = Integer.toUnsignedLong(
+                    counters.get(GUIDE_SAMPLE_COPY_ELIGIBLE_INDEX));
+            long guideSampleCopySelected = Integer.toUnsignedLong(
+                    counters.get(GUIDE_SAMPLE_COPY_SELECTED_INDEX));
+            long guideSampleCopyRetained = Integer.toUnsignedLong(
+                    counters.get(GUIDE_SAMPLE_COPY_RETAINED_INDEX));
+            long guideSampleCopyEmpty = Integer.toUnsignedLong(
+                    counters.get(GUIDE_SAMPLE_COPY_EMPTY_INDEX));
+            long guideSampleCopyMetadataReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_SAMPLE_COPY_METADATA_REJECT_INDEX));
+            long guideSampleCopyArithmeticReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_SAMPLE_COPY_ARITHMETIC_REJECT_INDEX));
             long crossFrameReceiverReject = crossFrameReceiverSurfaceReject
                     + crossFrameReceiverSampleReject + crossFrameReceiverEdgeReject
                     + crossFrameReceiverTopologyReject + crossFrameReceiverDepthReject
@@ -695,7 +713,9 @@ final class RtPathReservoirHistory {
                              + "guideStableSelection[eligible={},positive={},zero={},invalid={}], "
                              + "guideStableBernoulli[eligible={},selected={},retained={},invalid={}], "
                              + "guidePostSelection[eligible={},selectedReady={},retainedReady={},"
-                             + "empty={},sample={},arithmetic={}]",
+                             + "empty={},sample={},arithmetic={}], "
+                             + "guideSampleCopy[eligible={},selected={},retained={},empty={},"
+                             + "metadata={},arithmetic={}]",
                     total,
                     values[0], percent(values[0], total),
                     values[1], percent(values[1], total),
@@ -809,7 +829,10 @@ final class RtPathReservoirHistory {
                      guideStableBernoulliRetained, guideStableBernoulliInvalid,
                      guidePostSelectionEligible, guidePostSelectionSelectedReady,
                      guidePostSelectionRetainedReady, guidePostSelectionEmpty,
-                     guidePostSelectionSampleReject, guidePostSelectionArithmeticReject);
+                     guidePostSelectionSampleReject, guidePostSelectionArithmeticReject,
+                     guideSampleCopyEligible, guideSampleCopySelected,
+                     guideSampleCopyRetained, guideSampleCopyEmpty,
+                     guideSampleCopyMetadataReject, guideSampleCopyArithmeticReject);
             spatialDiagnosticViewPending = 0;
             return;
         }

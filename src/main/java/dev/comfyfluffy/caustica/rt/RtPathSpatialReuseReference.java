@@ -529,6 +529,30 @@ final class RtPathSpatialReuseReference {
             return new SpatialShadowMerge(nextWeightSum, nextEffectiveCount,
                     selectedTarget, finalWeight, sourceSelected, false);
         }
+
+        /**
+         * Register-only authority for selecting an opaque complete sample payload after the
+         * arithmetic gate. Returning the original immutable payload object makes source-copy versus
+         * current-retention observable without introducing a history or estimator mutation.
+         */
+        SpatialSampleScratch stableSampleScratch(double currentWeightSum,
+                                                 double currentEffectiveCount,
+                                                 SpatialSamplePayload currentSample,
+                                                 SpatialSamplePayload shiftedSourceSample,
+                                                 double randomUnit) {
+            double currentTarget = currentSample == null ? 0.0 : currentSample.target();
+            SpatialShadowMerge arithmetic = stableShadowMerge(currentWeightSum,
+                    currentEffectiveCount, currentTarget, randomUnit);
+            if (arithmetic.empty()) {
+                return new SpatialSampleScratch(null, arithmetic);
+            }
+            SpatialSamplePayload selected = arithmetic.sourceSelected()
+                    ? shiftedSourceSample : currentSample;
+            if (selected == null || selected.target() != arithmetic.selectedTarget()) {
+                throw new IllegalArgumentException("missing or mismatched spatial scratch sample");
+            }
+            return new SpatialSampleScratch(selected, arithmetic);
+        }
     }
 
     record SpatialScratchMerge(double weightSum, double effectiveCount,
@@ -556,6 +580,26 @@ final class RtPathSpatialReuseReference {
             } else if (weightSum == 0.0 || effectiveCount == 0.0
                     || selectedTarget == 0.0 || finalWeight == 0.0) {
                 throw new IllegalArgumentException("invalid ready spatial shadow merge");
+            }
+        }
+    }
+
+    /** Opaque stand-in for every copied PathReservoir sample lane in the CPU authority. */
+    record SpatialSamplePayload(long metadataToken, double target) {
+        SpatialSamplePayload {
+            if (!positiveFinite(target)) {
+                throw new IllegalArgumentException("spatial scratch sample target must be positive");
+            }
+        }
+    }
+
+    record SpatialSampleScratch(SpatialSamplePayload sample, SpatialShadowMerge arithmetic) {
+        SpatialSampleScratch {
+            if (arithmetic == null || (arithmetic.empty() != (sample == null))) {
+                throw new IllegalArgumentException("invalid spatial sample scratch result");
+            }
+            if (sample != null && sample.target() != arithmetic.selectedTarget()) {
+                throw new IllegalArgumentException("scratch sample target does not match arithmetic");
             }
         }
     }

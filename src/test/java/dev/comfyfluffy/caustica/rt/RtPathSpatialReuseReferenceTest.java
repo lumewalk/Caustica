@@ -210,6 +210,37 @@ final class RtPathSpatialReuseReferenceTest {
     }
 
     @Test
+    void stableSampleScratchCopiesOnlyTheSelectedOpaquePayload() {
+        var weight = new RtPathSpatialReuseReference.SpatialGrisWeight(
+                3.0, 2.0, 12.0, 8.0, 0.25);
+        var current = new RtPathSpatialReuseReference.SpatialSamplePayload(0xCA11L, 5.0);
+        var shifted = new RtPathSpatialReuseReference.SpatialSamplePayload(0x50A2CEL, 3.0);
+
+        var selected = weight.stableSampleScratch(4.0, 2.0,
+                current, shifted, 0.74);
+        assertEquals(shifted, selected.sample());
+        assertTrue(selected.arithmetic().sourceSelected());
+        assertEquals(16.0 / 30.0, selected.arithmetic().finalWeight(), 1.0e-12);
+
+        var retained = weight.stableSampleScratch(4.0, 2.0,
+                current, shifted, 0.75);
+        assertEquals(current, retained.sample());
+        assertFalse(retained.arithmetic().sourceSelected());
+        assertEquals(16.0 / 50.0, retained.arithmetic().finalWeight(), 1.0e-12);
+
+        var zero = new RtPathSpatialReuseReference.SpatialGrisWeight(
+                0.0, 2.0, 1.0, 8.0, 1.0);
+        var empty = zero.stableSampleScratch(0.0, 0.0,
+                null, shifted, 0.0);
+        assertEquals(null, empty.sample());
+        assertTrue(empty.arithmetic().empty());
+
+        assertThrows(IllegalArgumentException.class,
+                () -> weight.stableSampleScratch(4.0, 2.0,
+                        current, null, 0.74));
+    }
+
+    @Test
     void diffuseShiftDensityReconstructsReceiverPdfAndPssJacobian() {
         var density = new RtPathSpatialReuseReference.DiffuseShiftDensity(
                 0.25, 0.50, 0.40, 0.60, 0.80);
@@ -887,8 +918,14 @@ final class RtPathSpatialReuseReferenceTest {
         assertEquals(110, RtPathReservoirHistory.GUIDE_POST_SELECTION_EMPTY_INDEX);
         assertEquals(111, RtPathReservoirHistory.GUIDE_POST_SELECTION_SAMPLE_REJECT_INDEX);
         assertEquals(112, RtPathReservoirHistory.GUIDE_POST_SELECTION_ARITHMETIC_REJECT_INDEX);
-        assertEquals(113, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
-        assertEquals(113 * Integer.BYTES,
+        assertEquals(113, RtPathReservoirHistory.GUIDE_SAMPLE_COPY_ELIGIBLE_INDEX);
+        assertEquals(114, RtPathReservoirHistory.GUIDE_SAMPLE_COPY_SELECTED_INDEX);
+        assertEquals(115, RtPathReservoirHistory.GUIDE_SAMPLE_COPY_RETAINED_INDEX);
+        assertEquals(116, RtPathReservoirHistory.GUIDE_SAMPLE_COPY_EMPTY_INDEX);
+        assertEquals(117, RtPathReservoirHistory.GUIDE_SAMPLE_COPY_METADATA_REJECT_INDEX);
+        assertEquals(118, RtPathReservoirHistory.GUIDE_SAMPLE_COPY_ARITHMETIC_REJECT_INDEX);
+        assertEquals(119, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
+        assertEquals(119 * Integer.BYTES,
                 RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_COUNTER_BYTES);
         assertEquals(32, RtPathReservoirHistory.SHIFTED_RECEIVER_GUIDE_STRIDE);
         assertEquals(27_566_080L,

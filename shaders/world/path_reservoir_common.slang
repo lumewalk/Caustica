@@ -112,7 +112,13 @@ public static const uint PATH_GUIDE_POST_SELECTION_RETAINED_READY = 109u;
 public static const uint PATH_GUIDE_POST_SELECTION_EMPTY = 110u;
 public static const uint PATH_GUIDE_POST_SELECTION_SAMPLE_REJECT = 111u;
 public static const uint PATH_GUIDE_POST_SELECTION_ARITHMETIC_REJECT = 112u;
-public static const uint PATH_SHIFT_DIAGNOSTIC_COUNTER_COUNT = 113u;
+public static const uint PATH_GUIDE_SAMPLE_COPY_ELIGIBLE = 113u;
+public static const uint PATH_GUIDE_SAMPLE_COPY_SELECTED = 114u;
+public static const uint PATH_GUIDE_SAMPLE_COPY_RETAINED = 115u;
+public static const uint PATH_GUIDE_SAMPLE_COPY_EMPTY = 116u;
+public static const uint PATH_GUIDE_SAMPLE_COPY_METADATA_REJECT = 117u;
+public static const uint PATH_GUIDE_SAMPLE_COPY_ARITHMETIC_REJECT = 118u;
+public static const uint PATH_SHIFT_DIAGNOSTIC_COUNTER_COUNT = 119u;
 public static const uint PATH_SHIFT_DIAGNOSTIC_PAIR_MASK = 3u;
 public static const uint PATH_SHIFT_DIAGNOSTIC_MERGE_PAIR_OFFSET =
         PATH_SPATIAL_DIAGNOSTIC_PAIR_CAPACITY * 2u;
@@ -137,6 +143,57 @@ public float pathStableSelectionProbability(float currentWeightSum, float mergeW
     }
     float ratio = mergeWeight / currentWeightSum;
     return ratio / (1.0 + ratio);
+}
+
+// Exact register-only comparison for the sample lanes of a reservoir. The weight lane is excluded
+// because the post-selection gate deliberately replaces it after copying or retaining the sample.
+public bool pathReservoirSampleMetadataMatches(PathReservoir left, PathReservoir right)
+{
+    return all(asuint(left.sampleRadianceTarget) == asuint(right.sampleRadianceTarget))
+            && all(asuint(left.proposalShift) == asuint(right.proposalShift))
+            && all(asuint(left.proposalComponents) == asuint(right.proposalComponents))
+            && all(asuint(left.canonicalRadianceTarget)
+                    == asuint(right.canonicalRadianceTarget))
+            && all(left.identity == right.identity)
+            && all(left.replay == right.replay)
+            && all(left.replayControl == right.replayControl)
+            && all(asuint(left.reconnectionVertex) == asuint(right.reconnectionVertex))
+            && all(asuint(left.reconnectionNormalPdf)
+                    == asuint(right.reconnectionNormalPdf))
+            && all(asuint(left.reconnectionThroughput)
+                    == asuint(right.reconnectionThroughput));
+}
+
+public bool pathReservoirSampleMetadataReady(PathReservoir reservoir)
+{
+    uint packedEvents = asuint(reservoir.proposalComponents.w);
+    float expectedSampleTarget = pathLuminance(reservoir.sampleRadianceTarget.xyz);
+    float expectedCanonicalTarget = pathLuminance(reservoir.canonicalRadianceTarget.xyz);
+    float sampleTolerance = max(1.0e-5, expectedSampleTarget * 1.0e-4);
+    float canonicalTolerance = max(1.0e-5, expectedCanonicalTarget * 1.0e-4);
+    return all(isfinite(reservoir.sampleRadianceTarget))
+            && all(reservoir.sampleRadianceTarget >= float4(0.0))
+            && reservoir.sampleRadianceTarget.w > 0.0
+            && abs(expectedSampleTarget - reservoir.sampleRadianceTarget.w) <= sampleTolerance
+            && all(isfinite(reservoir.proposalShift.xyz))
+            && all(reservoir.proposalShift.xyz > float3(0.0))
+            && all(isfinite(reservoir.proposalComponents.xyz))
+            && all(reservoir.proposalComponents.xyz >= float3(0.0))
+            && (packedEvents & PATH_PROPOSAL_CANONICAL_VALID) != 0u
+            && (packedEvents & PATH_PROPOSAL_RESERVED_MASK) == 0u
+            && all(isfinite(reservoir.canonicalRadianceTarget))
+            && all(reservoir.canonicalRadianceTarget >= float4(0.0))
+            && abs(expectedCanonicalTarget - reservoir.canonicalRadianceTarget.w)
+                    <= canonicalTolerance
+            && reservoir.replayControl.x == PATH_REPLAY_VERSION
+            && reservoir.replayControl.y >= 1u
+            && reservoir.replayControl.y <= MAX_PATH_SEGMENTS
+            && asuint(reservoir.proposalShift.w) == reservoir.replayControl.z
+            && all(isfinite(reservoir.reconnectionVertex.xyz))
+            && all(isfinite(reservoir.reconnectionNormalPdf))
+            && all(isfinite(reservoir.reconnectionThroughput.xyz))
+            && all(reservoir.reconnectionThroughput.xyz >= float3(0.0))
+            && pathMappingControlValid(reservoir);
 }
 
 public static const uint PATH_TRANSPORT_DIFFUSE = 1u;

@@ -1118,6 +1118,7 @@ public void pathMappingReplayValidate() {
                                         bool guidePostSampleValid =
                                                 isfinite(guidePostSelectedTarget)
                                                 && guidePostSelectedTarget >= 0.0;
+                                        float guidePostFinalWeight = 0.0;
                                         uint guidePostSelectionResult;
                                         if (!guidePostBaseValid) {
                                             guidePostSelectionResult =
@@ -1134,7 +1135,7 @@ public void pathMappingReplayValidate() {
                                         } else {
                                             float guidePostDenominator = guidePostEffectiveCount
                                                     * guidePostSelectedTarget;
-                                            float guidePostFinalWeight = guidePostWeightSum
+                                            guidePostFinalWeight = guidePostWeightSum
                                                     / guidePostDenominator;
                                             bool guidePostArithmeticValid =
                                                     guidePostEffectiveCount > 0.0
@@ -1151,6 +1152,136 @@ public void pathMappingReplayValidate() {
                                         }
                                         InterlockedAdd(
                                                 counters[guidePostSelectionResult], 1u);
+
+                                        // Build the complete future sample only in registers. A
+                                        // source selection receives the current receiver mapping;
+                                        // a retained selection must preserve every current sample
+                                        // bit. This value is never written to a reservoir slot.
+                                        InterlockedAdd(
+                                                counters[PATH_GUIDE_SAMPLE_COPY_ELIGIBLE], 1u);
+                                        uint guideSampleCopyResult;
+                                        if (guidePostSelectionResult
+                                                == PATH_GUIDE_POST_SELECTION_EMPTY) {
+                                            guideSampleCopyResult = PATH_GUIDE_SAMPLE_COPY_EMPTY;
+                                        } else if (guidePostSelectionResult
+                                                == PATH_GUIDE_POST_SELECTION_SAMPLE_REJECT) {
+                                            guideSampleCopyResult =
+                                                    PATH_GUIDE_SAMPLE_COPY_METADATA_REJECT;
+                                        } else if (guidePostSelectionResult
+                                                == PATH_GUIDE_POST_SELECTION_ARITHMETIC_REJECT) {
+                                            guideSampleCopyResult =
+                                                    PATH_GUIDE_SAMPLE_COPY_ARITHMETIC_REJECT;
+                                        } else {
+                                            PathReservoir guideScratch = current;
+                                            if (guideSourceSelected) {
+                                                guideScratch.sampleRadianceTarget = float4(
+                                                        guideVisibleRadiance,
+                                                        guideShiftedTarget);
+                                                guideScratch.proposalShift = float4(
+                                                        mapped.proposalShift.x,
+                                                        guidePssJacobian,
+                                                        max(mapped.proposalShift.z, 1.0e-5),
+                                                        asfloat(mapped.replayControl.z));
+                                                guideScratch.proposalComponents =
+                                                        mapped.proposalComponents;
+                                                guideScratch.canonicalRadianceTarget = float4(
+                                                        guideVisibleRadiance,
+                                                        guideShiftedTarget);
+                                                guideScratch.identity = uint4(
+                                                        mapped.identity.x,
+                                                        mapped.identity.y,
+                                                        replay.topologyKey,
+                                                        pathPackMetadata(pc.historyGeneration,
+                                                                replay.depth,
+                                                                replay.transportMask));
+                                                guideScratch.replay = mapped.replay;
+                                                guideScratch.replayControl = mapped.replayControl;
+                                                guideScratch.reconnectionVertex = float4(
+                                                        replay.reconnectionVertex,
+                                                        asfloat(pathPackReconnectionMetadata(
+                                                                replay.reconnectionDepth,
+                                                                replay.reconnectionEventKind,
+                                                                replay.reconnectionValid != 0u)));
+                                                guideScratch.reconnectionNormalPdf = float4(
+                                                        replay.reconnectionNormal,
+                                                        guideReceiverPdf);
+                                                guideScratch.reconnectionThroughput = float4(
+                                                        guideReceiverThroughput,
+                                                        asfloat(
+                                                                PATH_MAPPING_DIFFUSE_RECONNECTION));
+                                            }
+                                            guideScratch.weights = float4(
+                                                    guidePostWeightSum,
+                                                    guidePostEffectiveCount,
+                                                    guidePostFinalWeight,
+                                                    min(guidePostEffectiveCount * 0.25, 1.0));
+
+                                            bool guideScratchWeightsValid =
+                                                    all(isfinite(guideScratch.weights))
+                                                    && all(guideScratch.weights
+                                                            > float4(0.0));
+                                            bool guideScratchMetadataValid;
+                                            if (guideSourceSelected) {
+                                                uint guideScratchReconnection = asuint(
+                                                        guideScratch.reconnectionVertex.w);
+                                                guideScratchMetadataValid =
+                                                        pathReservoirSampleMetadataReady(
+                                                                guideScratch)
+                                                        && pathReplayColorMatches(
+                                                                guideScratch
+                                                                        .sampleRadianceTarget.xyz,
+                                                                guideVisibleRadiance)
+                                                        && pathReplayFloatMatches(
+                                                                guideScratch
+                                                                        .sampleRadianceTarget.w,
+                                                                guideShiftedTarget)
+                                                        && all(asuint(guideScratch
+                                                                        .canonicalRadianceTarget)
+                                                                == asuint(guideScratch
+                                                                        .sampleRadianceTarget))
+                                                        && guideScratch.identity.y
+                                                                == mapped.identity.y
+                                                        && guideScratch.replayControl.x
+                                                                == PATH_REPLAY_VERSION
+                                                        && asuint(guideScratch.proposalShift.w)
+                                                                == guideScratch.replayControl.z
+                                                        && pathMappingControlValid(guideScratch)
+                                                        && pathMappingKind(guideScratch)
+                                                                == PATH_MAPPING_DIFFUSE_RECONNECTION
+                                                        && (guideScratchReconnection
+                                                                & PATH_RECONNECTION_VALID) != 0u
+                                                        && pathReconnectionEvent(
+                                                                guideScratchReconnection)
+                                                                == PATH_RECONNECTION_EVENT_DIFFUSE
+                                                        && all(isfinite(guideScratch
+                                                                .reconnectionNormalPdf))
+                                                        && guideScratch
+                                                                .reconnectionNormalPdf.w > 0.0
+                                                        && all(isfinite(guideScratch
+                                                                .reconnectionThroughput.xyz))
+                                                        && all(guideScratch
+                                                                .reconnectionThroughput.xyz
+                                                                >= float3(0.0));
+                                            } else {
+                                                guideScratchMetadataValid =
+                                                        pathReservoirSampleMetadataReady(
+                                                                guideScratch)
+                                                        && pathReservoirSampleMetadataMatches(
+                                                                guideScratch, current)
+                                                        && pathReplayFloatMatches(
+                                                                guideScratch
+                                                                        .sampleRadianceTarget.w,
+                                                                guidePostSelectedTarget);
+                                            }
+                                            guideSampleCopyResult = !guideScratchWeightsValid
+                                                    ? PATH_GUIDE_SAMPLE_COPY_ARITHMETIC_REJECT
+                                                    : !guideScratchMetadataValid
+                                                            ? PATH_GUIDE_SAMPLE_COPY_METADATA_REJECT
+                                                            : guideSourceSelected
+                                                                    ? PATH_GUIDE_SAMPLE_COPY_SELECTED
+                                                                    : PATH_GUIDE_SAMPLE_COPY_RETAINED;
+                                        }
+                                        InterlockedAdd(counters[guideSampleCopyResult], 1u);
                                     }
                                 }
                             }
