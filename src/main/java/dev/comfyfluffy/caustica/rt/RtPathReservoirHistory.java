@@ -101,7 +101,7 @@ final class RtPathReservoirHistory {
     static final int RECEIVER_GUIDE_THROUGHPUT_MISMATCH_INDEX = 73;
     static final int RECEIVER_GUIDE_PDF_MISMATCH_INDEX = 74;
     static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 75;
-    static final int SHIFTED_RECEIVER_GUIDE_STRIDE = 4 * Float.BYTES;
+    static final int SHIFTED_RECEIVER_GUIDE_STRIDE = 8 * Float.BYTES;
     static final int SPATIAL_DIAGNOSTIC_COUNTER_BYTES =
             SHIFTED_DIAGNOSTIC_COUNTER_COUNT * Integer.BYTES;
     static final int SPATIAL_DIAGNOSTIC_PAIR_CAPACITY = 4096;

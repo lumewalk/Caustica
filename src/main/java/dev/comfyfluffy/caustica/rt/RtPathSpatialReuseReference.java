@@ -506,7 +506,37 @@ final class RtPathSpatialReuseReference {
         }
     }
 
-    /** Minimal exact float4 receiver contract: RGB diffuse albedo plus diffuse technique mass. */
+    /**
+     * Exact Pass-B outgoing edge geometry. The origin is captured after the production surface bias;
+     * it must not be reconstructed from a separately traced Pass-A guide hit.
+     */
+    record DiffuseReceiverEdge(double originX, double originY, double originZ,
+                               double vertexX, double vertexY, double vertexZ,
+                               double normalX, double normalY, double normalZ) {
+        DiffuseReceiverEdge {
+            if (!Double.isFinite(originX) || !Double.isFinite(originY)
+                    || !Double.isFinite(originZ) || !Double.isFinite(vertexX)
+                    || !Double.isFinite(vertexY) || !Double.isFinite(vertexZ)
+                    || !Double.isFinite(normalX) || !Double.isFinite(normalY)
+                    || !Double.isFinite(normalZ)) {
+                throw new IllegalArgumentException("receiver edge terms must be finite");
+            }
+        }
+
+        double cosine() {
+            double edgeX = vertexX - originX;
+            double edgeY = vertexY - originY;
+            double edgeZ = vertexZ - originZ;
+            double edgeLength = Math.sqrt(edgeX * edgeX + edgeY * edgeY + edgeZ * edgeZ);
+            double normalLength = Math.sqrt(
+                    normalX * normalX + normalY * normalY + normalZ * normalZ);
+            if (!(edgeLength > 0.0) || !(normalLength > 0.0)) return 0.0;
+            return Math.abs((normalX * edgeX + normalY * edgeY + normalZ * edgeZ)
+                    / (normalLength * edgeLength));
+        }
+    }
+
+    /** First lane of the exact receiver sidecar: RGB diffuse albedo plus technique mass. */
     record DiffuseReceiverGuide(Rgb diffuseAlbedo, double techniqueMass) {
         DiffuseReceiverGuide {
             if (diffuseAlbedo == null || !positiveFinite(techniqueMass)

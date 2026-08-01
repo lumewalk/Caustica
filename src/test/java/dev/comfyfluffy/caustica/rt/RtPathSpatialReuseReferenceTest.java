@@ -188,6 +188,18 @@ final class RtPathSpatialReuseReferenceTest {
                 lowGuide.compareStored(lowGuide.eventThroughput(),
                         0.25, 0.5));
 
+        var exactEdge = new RtPathSpatialReuseReference.DiffuseReceiverEdge(
+                0.0, 0.01, 0.0, 10.0, 0.02, 0.0, 0.0, 1.0, 0.0);
+        var mixedPassEdge = new RtPathSpatialReuseReference.DiffuseReceiverEdge(
+                0.0, 0.0, 0.0, 10.0, 0.02, 0.0, 0.0, 1.0, 0.0);
+        double exactStoredPdf = lowGuide.directionalPdf(exactEdge.cosine());
+        assertEquals(RtPathSpatialReuseReference.ReceiverGuideComparison.ACCEPTED,
+                lowGuide.compareStored(lowGuide.eventThroughput(),
+                        exactStoredPdf, exactEdge.cosine()));
+        assertEquals(RtPathSpatialReuseReference.ReceiverGuideComparison.PDF_MISMATCH,
+                lowGuide.compareStored(lowGuide.eventThroughput(),
+                        exactStoredPdf, mixedPassEdge.cosine()));
+
         var deltaOnly = new RtPathSpatialReuseReference.DiffuseReceiverMaterial(
                 new RtPathSpatialReuseReference.Rgb(0.0, 0.0, 0.0),
                 new RtPathSpatialReuseReference.Rgb(1.0, 1.0, 1.0), true);
@@ -643,8 +655,8 @@ final class RtPathSpatialReuseReferenceTest {
         assertEquals(75, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
         assertEquals(75 * Integer.BYTES,
                 RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_COUNTER_BYTES);
-        assertEquals(16, RtPathReservoirHistory.SHIFTED_RECEIVER_GUIDE_STRIDE);
-        assertEquals(13_783_040L,
+        assertEquals(32, RtPathReservoirHistory.SHIFTED_RECEIVER_GUIDE_STRIDE);
+        assertEquals(27_566_080L,
                 RtPathReservoirHistory.shiftedReceiverGuideBytes(1280, 673));
         assertEquals(160, PathSourceRootData.BYTE_SIZE);
         assertEquals(4096, RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_PAIR_CAPACITY);

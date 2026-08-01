@@ -77,7 +77,7 @@ public struct WorldPush {
     public uint64_t pathShiftDiagnosticCounterAddr;
     public uint64_t pathShiftDiagnosticPairAddr;
     public uint64_t pathShiftSourceRootAddr; // retained exact source root sidecar (0 outside view 20)
-    public uint64_t pathShiftReceiverGuideAddr; // exact float4(diffuse albedo, technique mass)
+    public uint64_t pathShiftReceiverGuideAddr; // exact two-float4 material + Pass-B ray origin
 };
 
 // 32-byte hot area-light record. Radiance uses packed R11G11B10 and the grid-relative owner section

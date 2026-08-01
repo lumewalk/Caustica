@@ -188,8 +188,8 @@ View 20 dispatches that receiver-aware validation as a same-frame ray-generation
 snapshot merge. A lazy view-20-only 160-byte-per-pixel sidecar retains both packed source queue
 segments plus source and receiver position/material and normal/roughness guides. Segment origins and
 positions are stored camera-relative, so they do not depend on the capture frame's terrain rebase.
-Together with the separate 176-byte mapped snapshot and 16-byte exact receiver guide this costs
-about 289.18 MiB at 1280x673 and is not allocated by ordinary rendering. The validation pass replays
+Together with the separate 176-byte mapped snapshot and 32-byte exact receiver sidecar this costs
+about 302.32 MiB at 1280x673 and is not allocated by ordinary rendering. The validation pass replays
 the retained source root rather than dereferencing the transient queue, checks
 the source topology and proposal state, reconstructs the receiver-side geometry, directional PDF,
 PSS Jacobian and first-event throughput, traces receiver-to-second-hit visibility again, and compares
@@ -267,12 +267,14 @@ The audit shows why the current RGBA16F albedo guide cannot supply exact mapping
 selection uses `ps(F0, diffAlb)`, so receiver throughput is `diffAlb/(1-ps)` and receiver PDF carries
 the same `(1-ps)` technique mass. F0 is texture-evaluated at the hit and is absent from the guide
 cache. `DiffuseReceiverMaterial` and `DiffuseReceiverGuide` now define the shader-independent
-contract and an explicit same-albedo/different-F0 counterexample. View 20 now lazily allocates the
-minimal `float4(exact diffuse RGB, diffuse technique mass)` sidecar (16 B/pixel, about 13.14 MiB at
-1280x673). The primary pass writes it before canonical endpoint selection: opaque receivers use the
-same `ps(F0, diffAlb)` calculation as the path tracer, particles use diffuse mass 1, and unsupported
-dielectric/water receivers write mass 0. Ordinary rendering keeps its address zero and allocates no
-corresponding memory.
+contract and an explicit same-albedo/different-F0 counterexample. View 20 lazily allocates a
+two-lane FP32 sidecar (32 B/pixel, about 26.29 MiB at 1280x673). The first
+`float4(exact diffuse RGB, diffuse technique mass)` lane is written by primary visibility before
+canonical endpoint selection: opaque receivers use the same `ps(F0, diffAlb)` calculation as the
+path tracer, particles use diffuse mass 1, and unsupported dielectric/water receivers write mass 0.
+Pass A clears the second lane every frame; Pass B fills it with the exact biased outgoing-ray origin
+for the unsplit camera receiver before lobe or endpoint selection. Replay dispatches cannot overwrite
+that lane. Ordinary rendering keeps the BDA zero and allocates no corresponding memory.
 
 Cross-frame replay currently uses the sidecar only as a shadow validation. `receiverGuide[...]`
 partitions every surface-compatible attempt into invalid guide, no positive stored diffuse edge, or
@@ -289,6 +291,22 @@ or its exact density rather than to F0/material reconstruction. A brief camera m
 fail-closed readback with only 33 stored-edge comparisons; the stationary population recovered on
 the next readback. The sidecar must not replace a current edge or enter persistent history until the
 directional contract is exact.
+
+The PDF follow-up does not store another sampled path or change the reservoir. Instead it removes a
+mixed-coordinate reconstruction: the selected second-hit vertex comes from Pass B, while the old
+origin was rebuilt from the separately traced Pass-A guide hit. The shadow comparison now forms the
+sampled edge from Pass B's exact stored biased origin. Guide validity is checked before stored-edge
+availability, so the `noStoredEdge` population also proves that the material/origin substrate exists
+independently of a positive canonical endpoint. Runtime counters must show whether this removes the
+PDF mismatch before the sidecar is allowed to feed remapping.
+
+The fresh exact-origin run passed that gate. Across 15 stationary readbacks, all 207213 attempted
+receivers had valid material and origin state, including 164116 records with no stored canonical
+edge. Of 43097 stored-edge comparisons, 42899 were accepted, 175 failed the material-mass check,
+throughput mismatch stayed zero, and only 23 failed PDF reconstruction (0.053368%, down from
+23.7120%). Both accounting identities held in every frame. The remaining finite PDF-tail records
+stay fail-closed under the existing tolerance. The next step is a reference/counter-only guide-remap
+A/B for the no-edge population; it must not bypass strict history admission or write an estimator.
 
 ## Linux
 

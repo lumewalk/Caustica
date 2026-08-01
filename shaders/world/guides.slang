@@ -303,8 +303,13 @@ public void writeGuides(int2 pix, float3 primaryDir, float2 jndc, float2 size, f
     if (worldPush.pathShiftReceiverGuideAddr != 0u) {
         uint3 dimensions = DispatchRaysDimensions();
         uint pixelIndex = uint(pix.y) * dimensions.x + uint(pix.x);
-        DevicePtr<float4>(worldPush.pathShiftReceiverGuideAddr)[pixelIndex] =
+        DevicePtr<float4> receiverGuide =
+                DevicePtr<float4>(worldPush.pathShiftReceiverGuideAddr);
+        receiverGuide[pixelIndex * 2u] =
                 float4(rv_exactDiffuseAlbedo, rv_diffuseTechniqueMass);
+        // Pass B fills this lane from its exact retraced hit before endpoint selection. Clear it in
+        // Pass A every frame so an unsupported/absent continuation can never inherit a stale origin.
+        receiverGuide[pixelIndex * 2u + 1u] = float4(0.0);
     }
 }
 

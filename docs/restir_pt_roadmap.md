@@ -271,7 +271,7 @@ position/material, normal/roughness, and both packed 48-byte source queue segmen
 camera-relative so terrain rebasing does not invalidate the root. Same-frame mapping replay consumes
 this retained root instead of the transient current-frame queue. Extra counters expose root writes,
 invalid captures, and retained-root replay rejection. Together the 160-byte root, 176-byte mapped
-snapshot, and 16-byte exact receiver guide cost about 289.18 MiB at 1280x673, are absent from
+snapshot, and 32-byte exact receiver sidecar cost about 302.32 MiB at 1280x673, are absent from
 ordinary rendering, and are not committed
 as path history.
 
@@ -356,11 +356,13 @@ but the sampled diffuse event uses `eventThroughput = diffAlb / (1 - ps)` and di
 `(1 - ps) * |cos| / pi`. The lobe probability `ps` also depends on per-hit F0, which no receiver
 guide stores; material identity alone cannot reconstruct texture-evaluated F0. A shader-independent
 counterexample gives identical current guide terms but different technique mass/throughput for two
-F0 values. The minimal exact candidate contract is therefore one float4 containing exact RGB
-diffuse albedo plus diffuse technique mass. View 20 now allocates that 16 B/pixel sidecar lazily
-(about 13.14 MiB at 1280x673) alongside its source-root/mapped snapshot buffers. Primary visibility
-writes it deterministically before endpoint selection, with opaque and particle rules matching the
-production path sampler; its BDA is zero outside view 20.
+F0 values. The exact view-20 sidecar now uses two float4 lanes (32 B/pixel, about 26.29 MiB at
+1280x673) alongside its source-root/mapped snapshot buffers. Primary visibility writes exact RGB
+diffuse albedo plus diffuse technique mass deterministically before endpoint selection, with opaque
+and particle rules matching the production path sampler. Pass A clears the second lane and Pass B
+writes the exact biased outgoing-ray origin for the unsplit camera receiver before lobe or endpoint
+selection. Mapping-replay dispatches are forbidden from overwriting it, and its BDA is zero outside
+view 20.
 
 The first consumer is comparison-only. Cross-frame replay counts surface-compatible receivers as
 invalid guide, no stored positive diffuse edge, or stored-edge eligible, then compares eligible
@@ -375,6 +377,23 @@ was zero, technique-mass mismatch was 299 (0.2816%), and directional-PDF mismatc
 the eligible population fail-closed and stationary counts recovered on the next readback. The next
 gate is therefore an exact replayable receiver outgoing direction/density, independent of endpoint
 selection; persistent reuse remains forbidden.
+
+The first outgoing-density correction is comparison-only. The prior check combined a selected
+Pass-B second-hit vertex with an origin reconstructed from the separately traced Pass-A guide hit.
+It now uses the exact Pass-B biased origin from the sidecar. Validity is evaluated before
+stored-edge availability, so a `noStoredEdge` result still proves that exact material/origin state
+was produced independently of endpoint selection. This does not add a sampled path, change
+reservoir ABI/replay ABI, or authorize remapping/history; runtime must first demonstrate exact PDF
+reconstruction and counter accounting.
+
+Runtime exact-origin validation passed. Fifteen stationary readbacks contained 207213 attempted
+receivers with zero invalid material/origin records; 164116 of them had no canonical edge, proving
+that the sidecar is endpoint-independent. The 43097 stored-edge comparisons produced 42899 accepted,
+175 technique-mass rejects, zero throughput rejects, and 23 PDF rejects (0.053368%, reduced from
+23.7120%). Both partitions were exact in every frame. The strict tolerance remains unchanged and
+the finite residual tails fail closed. Before any persistent admission, define a shader-independent
+guide-only remap policy and a counter-only A/B over the no-edge population; do not silently remove
+the existing topology/depth/transport/footprint gates.
 
 ## Delivery Phases
 

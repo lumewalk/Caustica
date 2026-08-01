@@ -33,6 +33,21 @@ import lighting;
 import direct_reservoir_common;
 import path_reservoir_common;
 
+static void writeExactReceiverRayOrigin(PathSegment segment, uint2 pix,
+                                        int hitDepth, float3 rayOrigin) {
+    // View 20 alone supplies this address. Only the unsplit camera segment owns the deterministic
+    // receiver; retained-source/mapping replay dispatches must never overwrite the current sidecar.
+    if (worldPush.pathShiftReceiverGuideAddr == 0u
+            || (pc.historyFlags & PATH_MAPPING_REPLAY_PASS_FLAG) != 0u
+            || segment.bounce != 0 || hitDepth != 0) {
+        return;
+    }
+    uint2 dimensions = DispatchRaysDimensions().xy;
+    uint pixelIndex = pix.y * dimensions.x + pix.x;
+    DevicePtr<float4>(worldPush.pathShiftReceiverGuideAddr)[pixelIndex * 2u + 1u] =
+            float4(rayOrigin, 1.0);
+}
+
 public PathTraceResult tracePathSeeded(PathSegment seg, uint2 pix, bool captureMetadata,
                                        uint replaySeed, uint proposalReplaySeed) {
     float3 L = float3(0.0, 0.0, 0.0);
@@ -310,11 +325,12 @@ public PathTraceResult tracePathSeeded(PathSegment seg, uint2 pix, bool captureM
                                                  true, 0.0);
             }
 
+            ro = hitPos + n * SURF_BIAS;
+            writeExactReceiverRayOrigin(seg, pix, hitDepth, ro);
             if (bounce >= maxBounces) {
                 break;
             }
             throughput *= albedo;
-            ro = hitPos + n * SURF_BIAS;
             rd = cosineDir(n, seed);
             float directionalPdf = max(abs(dot(n, rd)) * INV_PI, 1.0e-20);
             pathAccumulateProposal(continuationProposalPdf, continuationProposalEvents,
@@ -339,6 +355,7 @@ public PathTraceResult tracePathSeeded(PathSegment seg, uint2 pix, bool captureM
         float3 albedo = payload.albedo;
         float sss = payloadSss(); // LabPBR SSS strength (0 when absent)
         float3 p = hitPos + n * SURF_BIAS;
+        writeExactReceiverRayOrigin(seg, pix, hitDepth, p);
         float3 v = -rd; // view direction (toward the camera / incoming ray)
 
         // Material split. Metals tint F0 by albedo and have no diffuse lobe; dielectrics use a fixed
@@ -841,55 +858,58 @@ public void pathMappingReplayValidate() {
         // Only positive stored diffuse edges participate in the numerical comparison; empty/unsupported
         // current records remain an explicit category and never borrow the guide for actual remapping.
         InterlockedAdd(counters[PATH_RECEIVER_GUIDE_ATTEMPTED], 1u);
-        if (!currentEdgeAvailable) {
+        ConstPtr<float4> receiverGuides =
+                ConstPtr<float4>(worldPush.pathShiftReceiverGuideAddr);
+        float4 receiverGuide = receiverGuides[pixelIndex * 2u];
+        float4 receiverRayOrigin = receiverGuides[pixelIndex * 2u + 1u];
+        bool guideValid = all(isfinite(receiverGuide))
+                && all(isfinite(receiverRayOrigin))
+                && all(receiverGuide.xyz >= float3(0.0))
+                && receiverGuide.w > 0.0 && receiverGuide.w <= 1.0
+                && receiverRayOrigin.w == 1.0;
+        if (!guideValid) {
+            InterlockedAdd(counters[PATH_RECEIVER_GUIDE_INVALID], 1u);
+        } else if (!currentEdgeAvailable) {
+            // The exact material/origin substrate is valid even when endpoint selection publishes
+            // no canonical edge. This is the population the eventual receiver remap must serve.
             InterlockedAdd(counters[PATH_RECEIVER_GUIDE_NO_STORED_EDGE], 1u);
         } else {
-            float4 receiverGuide =
-                    ConstPtr<float4>(worldPush.pathShiftReceiverGuideAddr)[pixelIndex];
-            bool guideValid = all(isfinite(receiverGuide))
-                    && all(receiverGuide.xyz >= float3(0.0))
-                    && receiverGuide.w > 0.0 && receiverGuide.w <= 1.0;
-            if (!guideValid) {
-                InterlockedAdd(counters[PATH_RECEIVER_GUIDE_INVALID], 1u);
-            } else {
-                InterlockedAdd(counters[PATH_RECEIVER_GUIDE_STORED_ELIGIBLE], 1u);
-                float3 exactReceiverNormal =
-                        receiverNormalRoughness.xyz / receiverNormalLength;
-                // The stored PDF was evaluated for the sampled ray direction. Reconstruct that ray
-                // from its actual biased trace origin; the physical receiver->vertex chord differs
-                // slightly and is appropriate for mapping geometry, but not for this exact PDF check.
-                float3 sampledEdge = current.reconnectionVertex.xyz
-                        - (receiverPositionMaterial.xyz
-                                + exactReceiverNormal * SURF_BIAS);
-                float baseDensity = pathMappingDiffuseDensity(exactReceiverNormal,
-                        sampledEdge);
-                float expectedPdf = max(receiverGuide.w * baseDensity, 1.0e-20);
-                float3 expectedThroughput = receiverGuide.xyz / receiverGuide.w;
-                // Throughput stores diffAlb / techniqueMass exactly. Recover the material-only mass
-                // from the strongest channel so this check is independent of direction reconstruction.
-                float dominantAlbedo = receiverGuide.x;
-                float dominantThroughput = current.reconnectionThroughput.x;
-                if (receiverGuide.y > dominantAlbedo) {
-                    dominantAlbedo = receiverGuide.y;
-                    dominantThroughput = current.reconnectionThroughput.y;
-                }
-                if (receiverGuide.z > dominantAlbedo) {
-                    dominantAlbedo = receiverGuide.z;
-                    dominantThroughput = current.reconnectionThroughput.z;
-                }
-                float storedMass = dominantAlbedo > 0.0 && dominantThroughput > 0.0
-                        ? dominantAlbedo / dominantThroughput : 0.0;
-                uint comparison = !pathReplayFloatMatches(storedMass, receiverGuide.w)
-                        ? PATH_RECEIVER_GUIDE_MASS_MISMATCH
-                        : !pathReplayColorMatches(expectedThroughput,
-                                current.reconnectionThroughput.xyz)
-                                ? PATH_RECEIVER_GUIDE_THROUGHPUT_MISMATCH
-                                : !pathReplayFloatMatches(expectedPdf,
-                                        current.reconnectionNormalPdf.w)
-                                        ? PATH_RECEIVER_GUIDE_PDF_MISMATCH
-                                        : PATH_RECEIVER_GUIDE_ACCEPTED;
-                InterlockedAdd(counters[comparison], 1u);
+            InterlockedAdd(counters[PATH_RECEIVER_GUIDE_STORED_ELIGIBLE], 1u);
+            float3 exactReceiverNormal =
+                    receiverNormalRoughness.xyz / receiverNormalLength;
+            // Use the exact Pass-B biased origin captured before lobe/endpoint selection. The
+            // Pass-A guide position is appropriate for surface reprojection, but mixing it with
+            // a Pass-B vertex is not an exact sampled-direction reconstruction.
+            float3 sampledEdge = current.reconnectionVertex.xyz
+                    - receiverRayOrigin.xyz;
+            float baseDensity = pathMappingDiffuseDensity(exactReceiverNormal,
+                    sampledEdge);
+            float expectedPdf = max(receiverGuide.w * baseDensity, 1.0e-20);
+            float3 expectedThroughput = receiverGuide.xyz / receiverGuide.w;
+            // Throughput stores diffAlb / techniqueMass exactly. Recover the material-only mass
+            // from the strongest channel so this check is independent of direction reconstruction.
+            float dominantAlbedo = receiverGuide.x;
+            float dominantThroughput = current.reconnectionThroughput.x;
+            if (receiverGuide.y > dominantAlbedo) {
+                dominantAlbedo = receiverGuide.y;
+                dominantThroughput = current.reconnectionThroughput.y;
             }
+            if (receiverGuide.z > dominantAlbedo) {
+                dominantAlbedo = receiverGuide.z;
+                dominantThroughput = current.reconnectionThroughput.z;
+            }
+            float storedMass = dominantAlbedo > 0.0 && dominantThroughput > 0.0
+                    ? dominantAlbedo / dominantThroughput : 0.0;
+            uint comparison = !pathReplayFloatMatches(storedMass, receiverGuide.w)
+                    ? PATH_RECEIVER_GUIDE_MASS_MISMATCH
+                    : !pathReplayColorMatches(expectedThroughput,
+                            current.reconnectionThroughput.xyz)
+                            ? PATH_RECEIVER_GUIDE_THROUGHPUT_MISMATCH
+                            : !pathReplayFloatMatches(expectedPdf,
+                                    current.reconnectionNormalPdf.w)
+                                    ? PATH_RECEIVER_GUIDE_PDF_MISMATCH
+                                    : PATH_RECEIVER_GUIDE_ACCEPTED;
+            InterlockedAdd(counters[comparison], 1u);
         }
     }
     bool currentSampleUsable = current.weights.y > 0.0
