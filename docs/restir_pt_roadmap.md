@@ -546,6 +546,19 @@ metadata or arithmetic rejects. Every frame preserved equality with the post-sel
 terminal categories as well as its own exact terminal sum. The register-only full-sample contract is
 therefore proven; writing it to persistent mapped history remains a separate prohibited gate.
 
+The write-isolated storage/lifetime gate is also proven. View 20 lazily allocates a distinct
+full-resolution 176 B/pixel scratch, clears it every frame, writes either the complete guide sample or
+an ABI/generation terminal sentinel, then reads that device memory in a separate raygen dispatch after
+a Vulkan barrier. Across 17 readbacks and 257204 eligible records, storage classified 249186 selected,
+7854 retained and 164 empty outcomes, with zero metadata, arithmetic or malformed/stale rejects. Every
+frame had exact category equality with the register-only sample copy, all six deltas were zero, and
+`eligible = terminal`. At 1280x673 the buffer is 151613440 bytes and the full lazy view-20 diagnostic
+allocation is 446.91 MiB. It never aliases either committed history slot or the existing mapped
+snapshot, and ordinary rendering receives a zero BDA. Before any persistent ping-pong history is
+introduced, the next gate must pair both selected and retained stored records with the exact original
+source-root provenance required for future one-frame replay; mapping composition and estimator use
+remain prohibited.
+
 ## Delivery Phases
 
 ### Phase 0 — Wavefront Integration Baseline

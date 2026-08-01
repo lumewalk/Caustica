@@ -118,7 +118,14 @@ public static const uint PATH_GUIDE_SAMPLE_COPY_RETAINED = 115u;
 public static const uint PATH_GUIDE_SAMPLE_COPY_EMPTY = 116u;
 public static const uint PATH_GUIDE_SAMPLE_COPY_METADATA_REJECT = 117u;
 public static const uint PATH_GUIDE_SAMPLE_COPY_ARITHMETIC_REJECT = 118u;
-public static const uint PATH_SHIFT_DIAGNOSTIC_COUNTER_COUNT = 119u;
+public static const uint PATH_GUIDE_SCRATCH_STORAGE_ELIGIBLE = 119u;
+public static const uint PATH_GUIDE_SCRATCH_STORAGE_SELECTED = 120u;
+public static const uint PATH_GUIDE_SCRATCH_STORAGE_RETAINED = 121u;
+public static const uint PATH_GUIDE_SCRATCH_STORAGE_EMPTY = 122u;
+public static const uint PATH_GUIDE_SCRATCH_STORAGE_METADATA_REJECT = 123u;
+public static const uint PATH_GUIDE_SCRATCH_STORAGE_ARITHMETIC_REJECT = 124u;
+public static const uint PATH_GUIDE_SCRATCH_STORAGE_INVALID = 125u;
+public static const uint PATH_SHIFT_DIAGNOSTIC_COUNTER_COUNT = 126u;
 public static const uint PATH_SHIFT_DIAGNOSTIC_PAIR_MASK = 3u;
 public static const uint PATH_SHIFT_DIAGNOSTIC_MERGE_PAIR_OFFSET =
         PATH_SPATIAL_DIAGNOSTIC_PAIR_CAPACITY * 2u;
@@ -222,6 +229,11 @@ public static const uint PATH_RECONNECTION_EVENT_TRANSMISSION = 4u;
 public static const uint PATH_CANONICAL_MODE_FLAG = 16u;
 public static const uint PATH_MAPPING_REPLAY_PASS_FLAG = 32u;
 public static const uint PATH_CROSS_FRAME_MAPPING_REPLAY_PASS_FLAG = 64u;
+public static const uint PATH_GUIDE_SCRATCH_VALIDATE_PASS_FLAG = 128u;
+// replayControl.y == 0 keeps a terminal sentinel outside the valid replay-segment domain. The
+// magic prevents a cleared or partially written record from being mistaken for an intentional
+// sample-copy terminal state.
+public static const uint PATH_GUIDE_SCRATCH_SENTINEL_MAGIC = 0x47534352u;
 public static const uint PATH_PROPOSAL_CANONICAL_VALID = 1u << 30u;
 public static const uint PATH_PROPOSAL_RESERVED_MASK = 1u << 31u;
 // Debug-view 13 admission states. These numeric values are mirrored by

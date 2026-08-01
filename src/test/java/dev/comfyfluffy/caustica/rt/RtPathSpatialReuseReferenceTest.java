@@ -809,6 +809,7 @@ final class RtPathSpatialReuseReferenceTest {
         assertEquals(20, RtPathReservoirHistory.SHIFTED_RADIANCE_DEBUG_VIEW);
         assertEquals(32, RtPathReservoirHistory.MAPPING_REPLAY_PASS_FLAG);
         assertEquals(64, RtPathReservoirHistory.CROSS_FRAME_MAPPING_REPLAY_PASS_FLAG);
+        assertEquals(128, RtPathReservoirHistory.GUIDE_SCRATCH_VALIDATE_PASS_FLAG);
         assertEquals(9, RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_STRICT_PAIR_CURSOR_INDEX);
         assertEquals(10, RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_LIMITED_ADMITTED_INDEX);
         assertEquals(11, RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_TOPOLOGY_RESCUED_INDEX);
@@ -924,8 +925,15 @@ final class RtPathSpatialReuseReferenceTest {
         assertEquals(116, RtPathReservoirHistory.GUIDE_SAMPLE_COPY_EMPTY_INDEX);
         assertEquals(117, RtPathReservoirHistory.GUIDE_SAMPLE_COPY_METADATA_REJECT_INDEX);
         assertEquals(118, RtPathReservoirHistory.GUIDE_SAMPLE_COPY_ARITHMETIC_REJECT_INDEX);
-        assertEquals(119, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
-        assertEquals(119 * Integer.BYTES,
+        assertEquals(119, RtPathReservoirHistory.GUIDE_SCRATCH_STORAGE_ELIGIBLE_INDEX);
+        assertEquals(120, RtPathReservoirHistory.GUIDE_SCRATCH_STORAGE_SELECTED_INDEX);
+        assertEquals(121, RtPathReservoirHistory.GUIDE_SCRATCH_STORAGE_RETAINED_INDEX);
+        assertEquals(122, RtPathReservoirHistory.GUIDE_SCRATCH_STORAGE_EMPTY_INDEX);
+        assertEquals(123, RtPathReservoirHistory.GUIDE_SCRATCH_STORAGE_METADATA_REJECT_INDEX);
+        assertEquals(124, RtPathReservoirHistory.GUIDE_SCRATCH_STORAGE_ARITHMETIC_REJECT_INDEX);
+        assertEquals(125, RtPathReservoirHistory.GUIDE_SCRATCH_STORAGE_INVALID_INDEX);
+        assertEquals(126, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
+        assertEquals(126 * Integer.BYTES,
                 RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_COUNTER_BYTES);
         assertEquals(32, RtPathReservoirHistory.SHIFTED_RECEIVER_GUIDE_STRIDE);
         assertEquals(27_566_080L,

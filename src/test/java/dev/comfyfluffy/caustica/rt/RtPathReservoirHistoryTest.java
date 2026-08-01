@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.comfyfluffy.caustica.rt.gen.PathReservoirData;
+import dev.comfyfluffy.caustica.rt.gen.WorldPushData;
 import org.junit.jupiter.api.Test;
 
 final class RtPathReservoirHistoryTest {
@@ -13,6 +14,7 @@ final class RtPathReservoirHistoryTest {
     void reflectedAbiIncludesReplayAndReconnectionGeometryLanes() {
         assertEquals(176, PathReservoirData.BYTE_SIZE);
         assertEquals(176, RtPathReservoirHistory.BYTES_PER_RESERVOIR);
+        assertEquals(640, WorldPushData.BYTE_SIZE);
     }
 
     @Test
@@ -71,6 +73,9 @@ final class RtPathReservoirHistoryTest {
         long perSlot = RtPathReservoirHistory.bytesPerSlot(1280, 673);
         assertEquals(151_613_440L, perSlot);
         assertEquals(303_226_880L, Math.multiplyExact(perSlot, 2L));
+        // View 20 lazily adds one separate full-record scratch. It is not one of the two committed
+        // history slots and cannot alias the persistent mapped snapshot that cross-frame replay reads.
+        assertEquals(151_613_440L, RtPathReservoirHistory.bytesPerSlot(1280, 673));
     }
 
     @Test

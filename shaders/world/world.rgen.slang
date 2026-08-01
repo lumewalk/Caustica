@@ -643,7 +643,8 @@ public void pathMappingReplayValidate() {
             || pc.pathReservoirPreviousAddr == 0u
             || worldPush.pathShiftDiagnosticCounterAddr == 0u
             || worldPush.pathShiftSourceRootAddr == 0u
-            || worldPush.pathShiftReceiverGuideAddr == 0u) {
+            || worldPush.pathShiftReceiverGuideAddr == 0u
+            || worldPush.pathShiftGuideScratchAddr == 0u) {
         return;
     }
 
@@ -1160,6 +1161,7 @@ public void pathMappingReplayValidate() {
                                         InterlockedAdd(
                                                 counters[PATH_GUIDE_SAMPLE_COPY_ELIGIBLE], 1u);
                                         uint guideSampleCopyResult;
+                                        PathReservoir guideStoredScratch = pathReservoirEmpty();
                                         if (guidePostSelectionResult
                                                 == PATH_GUIDE_POST_SELECTION_EMPTY) {
                                             guideSampleCopyResult = PATH_GUIDE_SAMPLE_COPY_EMPTY;
@@ -1280,8 +1282,27 @@ public void pathMappingReplayValidate() {
                                                             : guideSourceSelected
                                                                     ? PATH_GUIDE_SAMPLE_COPY_SELECTED
                                                                     : PATH_GUIDE_SAMPLE_COPY_RETAINED;
+                                            if (guideSampleCopyResult
+                                                    == PATH_GUIDE_SAMPLE_COPY_SELECTED
+                                                    || guideSampleCopyResult
+                                                            == PATH_GUIDE_SAMPLE_COPY_RETAINED) {
+                                                guideStoredScratch = guideScratch;
+                                            }
                                         }
                                         InterlockedAdd(counters[guideSampleCopyResult], 1u);
+                                        if (guideSampleCopyResult != PATH_GUIDE_SAMPLE_COPY_SELECTED
+                                                && guideSampleCopyResult
+                                                        != PATH_GUIDE_SAMPLE_COPY_RETAINED) {
+                                            guideStoredScratch.identity.w =
+                                                    pc.historyGeneration & PATH_GENERATION_MASK;
+                                            guideStoredScratch.replayControl = uint4(
+                                                    PATH_REPLAY_VERSION, 0u,
+                                                    PATH_GUIDE_SCRATCH_SENTINEL_MAGIC,
+                                                    guideSampleCopyResult);
+                                        }
+                                        DevicePtr<PathReservoir>(
+                                                worldPush.pathShiftGuideScratchAddr)[pixelIndex] =
+                                                guideStoredScratch;
                                     }
                                 }
                             }
@@ -1565,9 +1586,77 @@ public void pathMappingReplayValidate() {
             ? PATH_CROSS_FRAME_ACCEPTED : PATH_MAPPING_REPLAY_ACCEPTED], 1u);
 }
 
+// Storage/lifetime audit for the future guide-driven sample. The cross-frame replay dispatch writes
+// one complete PathReservoir or one ABI-tagged terminal sentinel per eligible receiver. A distinct
+// same-frame dispatch reads that device memory after a barrier; it never consumes or updates history.
+public void pathGuideScratchValidate() {
+    if (pc.debugView != PATH_SHIFTED_RADIANCE_DEBUG_VIEW
+            || (pc.historyFlags & PATH_GUIDE_SCRATCH_VALIDATE_PASS_FLAG) == 0u
+            || worldPush.pathShiftDiagnosticCounterAddr == 0u
+            || worldPush.pathShiftGuideScratchAddr == 0u) {
+        return;
+    }
+
+    uint2 pixel = DispatchRaysIndex().xy;
+    uint2 dimensions = DispatchRaysDimensions().xy;
+    uint pixelIndex = pixel.y * dimensions.x + pixel.x;
+    PathReservoir stored =
+            ConstPtr<PathReservoir>(worldPush.pathShiftGuideScratchAddr)[pixelIndex];
+    DevicePtr<uint> counters =
+            DevicePtr<uint>(worldPush.pathShiftDiagnosticCounterAddr);
+
+    // vkCmdFillBuffer produces an exact all-zero untouched record. Intentional terminal sentinels
+    // always carry the replay ABI, zero segment count, magic, category, and current generation.
+    if (all(stored.replayControl == uint4(0u)) && stored.identity.w == 0u) {
+        return;
+    }
+    InterlockedAdd(counters[PATH_GUIDE_SCRATCH_STORAGE_ELIGIBLE], 1u);
+
+    uint currentGeneration = pc.historyGeneration & PATH_GENERATION_MASK;
+    if (stored.replayControl.y == 0u) {
+        uint terminal = stored.replayControl.w;
+        bool sentinelValid = stored.replayControl.x == PATH_REPLAY_VERSION
+                && stored.replayControl.z == PATH_GUIDE_SCRATCH_SENTINEL_MAGIC
+                && stored.identity.w == currentGeneration
+                && (terminal == PATH_GUIDE_SAMPLE_COPY_EMPTY
+                        || terminal == PATH_GUIDE_SAMPLE_COPY_METADATA_REJECT
+                        || terminal == PATH_GUIDE_SAMPLE_COPY_ARITHMETIC_REJECT);
+        if (!sentinelValid) {
+            InterlockedAdd(counters[PATH_GUIDE_SCRATCH_STORAGE_INVALID], 1u);
+            return;
+        }
+        uint storageTerminal = terminal == PATH_GUIDE_SAMPLE_COPY_EMPTY
+                ? PATH_GUIDE_SCRATCH_STORAGE_EMPTY
+                : terminal == PATH_GUIDE_SAMPLE_COPY_METADATA_REJECT
+                        ? PATH_GUIDE_SCRATCH_STORAGE_METADATA_REJECT
+                        : PATH_GUIDE_SCRATCH_STORAGE_ARITHMETIC_REJECT;
+        InterlockedAdd(counters[storageTerminal], 1u);
+        return;
+    }
+
+    bool weightsValid = all(isfinite(stored.weights))
+            && all(stored.weights > float4(0.0));
+    bool metadataValid = pathReservoirSampleMetadataReady(stored)
+            && (stored.identity.w & PATH_GENERATION_MASK) == currentGeneration;
+    uint mappingKind = pathMappingKind(stored);
+    if (!weightsValid || !metadataValid
+            || (mappingKind != PATH_MAPPING_IDENTITY
+                    && mappingKind != PATH_MAPPING_DIFFUSE_RECONNECTION)) {
+        InterlockedAdd(counters[PATH_GUIDE_SCRATCH_STORAGE_INVALID], 1u);
+        return;
+    }
+    InterlockedAdd(counters[mappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION
+            ? PATH_GUIDE_SCRATCH_STORAGE_SELECTED
+            : PATH_GUIDE_SCRATCH_STORAGE_RETAINED], 1u);
+}
+
 [shader("raygeneration")]
 void main() {
     worldPush = ConstPtr<WorldPush>(pc.worldPushAddr)[0];
+    if ((pc.historyFlags & PATH_GUIDE_SCRATCH_VALIDATE_PASS_FLAG) != 0u) {
+        pathGuideScratchValidate();
+        return;
+    }
     if ((pc.historyFlags & PATH_MAPPING_REPLAY_PASS_FLAG) != 0u) {
         pathMappingReplayValidate();
         return;

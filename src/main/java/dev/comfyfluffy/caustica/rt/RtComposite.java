@@ -1088,7 +1088,9 @@ public final class RtComposite {
                     restirPt && debugView == RtPathReservoirHistory.SHIFTED_RADIANCE_DEBUG_VIEW
                             ? pathReservoirs.shiftedSourceRootAddress() : 0L,
                     restirPt && debugView == RtPathReservoirHistory.SHIFTED_RADIANCE_DEBUG_VIEW
-                            ? pathReservoirs.shiftedReceiverGuideAddress() : 0L
+                            ? pathReservoirs.shiftedReceiverGuideAddress() : 0L,
+                    restirPt && debugView == RtPathReservoirHistory.SHIFTED_RADIANCE_DEBUG_VIEW
+                            ? pathReservoirs.shiftedGuideScratchAddress() : 0L
             ).write(push);
             pushBuf.flush(0L, WORLD_PUSH_SIZE);
             // Upload any entity textures registered this frame into the bindless set before the trace.
@@ -1157,6 +1159,7 @@ public final class RtComposite {
             worldConstants.write(pushConstants);
             ByteBuffer mappingReplayPushConstants = null;
             ByteBuffer crossFrameMappingReplayPushConstants = null;
+            ByteBuffer guideScratchValidatePushConstants = null;
             if (restirPt
                      && debugView == RtPathReservoirHistory.SHIFTED_RADIANCE_DEBUG_VIEW) {
                 mappingReplayPushConstants =
@@ -1205,6 +1208,28 @@ public final class RtComposite {
                                     | RtPathReservoirHistory.CROSS_FRAME_MAPPING_REPLAY_PASS_FLAG,
                             worldConstants.historyGeneration())
                             .write(crossFrameMappingReplayPushConstants);
+                    guideScratchValidatePushConstants =
+                            stack.malloc(WorldPushConstantsData.BYTE_SIZE);
+                    new WorldPushConstantsData(
+                            worldConstants.worldPushAddr(),
+                            worldConstants.tableAddr(),
+                            worldConstants.entityTableAddr(),
+                            worldConstants.materialTableAddr(),
+                            worldConstants.lightBufAddr(),
+                            worldConstants.lightAliasAddr(),
+                            worldConstants.lightLocalAliasAddr(),
+                            worldConstants.lightGridCellAddr(),
+                            worldConstants.lightGridSpanAddr(),
+                            worldConstants.pathQueueAddr(),
+                            worldConstants.directReservoirAddr(),
+                            worldConstants.pathReservoirAddr(),
+                            worldConstants.pathReservoirPreviousAddr(),
+                            worldConstants.frameIndex(),
+                            worldConstants.debugView(),
+                            worldConstants.historyFlags()
+                                    | RtPathReservoirHistory.GUIDE_SCRATCH_VALIDATE_PASS_FLAG,
+                            worldConstants.historyGeneration())
+                            .write(guideScratchValidatePushConstants);
                 }
             }
             try (RtFrameStats.Scope ignoredTrace = RtFrameStats.FRAME.stage("frame.trace")) {
@@ -1248,6 +1273,14 @@ public final class RtComposite {
                                      "frame.pathCrossFrameMappingReplay")) {
                             active.trace(cmd, renderW, renderH,
                                     crossFrameMappingReplayPushConstants, 1);
+                        }
+                        VulkanCommandEncoder.memoryBarrier(cmd, stack);
+                        try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd,
+                                     "path guide scratch validate");
+                             RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage(
+                                     "frame.pathGuideScratchValidate")) {
+                            active.trace(cmd, renderW, renderH,
+                                    guideScratchValidatePushConstants, 1);
                         }
                         VulkanCommandEncoder.memoryBarrier(cmd, stack);
                     }
