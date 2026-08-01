@@ -226,6 +226,13 @@ final class RtPathSpatialReuseReferenceTest {
         assertEquals(2.4, shifted.r(), 1.0e-12);
         assertEquals(0.8, shifted.g(), 1.0e-12);
         assertEquals(0.2, shifted.b(), 1.0e-12);
+        var tinted = remap.shiftedRadiance(
+                new RtPathSpatialReuseReference.Rgb(0.5, 0.25, 0.0));
+        assertEquals(1.2, tinted.r(), 1.0e-12);
+        assertEquals(0.2, tinted.g(), 1.0e-12);
+        assertEquals(0.0, tinted.b(), 1.0e-12);
+        assertThrows(IllegalArgumentException.class, () -> remap.shiftedRadiance(
+                new RtPathSpatialReuseReference.Rgb(1.01, 1.0, 1.0)));
 
         assertEquals(RtPathSpatialReuseReference.GuideOnlyRemapDecision.GEOMETRY_REJECT,
                 new RtPathSpatialReuseReference.GuideOnlyRemapPolicy(false, false, false)
@@ -239,6 +246,19 @@ final class RtPathSpatialReuseReferenceTest {
         assertEquals(RtPathSpatialReuseReference.GuideOnlyRemapDecision.READY,
                 new RtPathSpatialReuseReference.GuideOnlyRemapPolicy(true, true, true)
                         .firstReject());
+
+        assertEquals(RtPathSpatialReuseReference.GuideOnlyVisibilityDecision.ARITHMETIC_REJECT,
+                new RtPathSpatialReuseReference.GuideOnlyVisibilityPolicy(false, true, true)
+                        .result());
+        assertEquals(RtPathSpatialReuseReference.GuideOnlyVisibilityDecision.OCCLUDED,
+                new RtPathSpatialReuseReference.GuideOnlyVisibilityPolicy(true, false, false)
+                        .result());
+        assertEquals(RtPathSpatialReuseReference.GuideOnlyVisibilityDecision.CLEAR,
+                new RtPathSpatialReuseReference.GuideOnlyVisibilityPolicy(true, true, true)
+                        .result());
+        assertEquals(RtPathSpatialReuseReference.GuideOnlyVisibilityDecision.TINTED,
+                new RtPathSpatialReuseReference.GuideOnlyVisibilityPolicy(true, true, false)
+                        .result());
     }
 
     @Test
@@ -692,8 +712,13 @@ final class RtPathSpatialReuseReferenceTest {
         assertEquals(77, RtPathReservoirHistory.GUIDE_REMAP_GEOMETRY_REJECT_INDEX);
         assertEquals(78, RtPathReservoirHistory.GUIDE_REMAP_PDF_REJECT_INDEX);
         assertEquals(79, RtPathReservoirHistory.GUIDE_REMAP_THROUGHPUT_REJECT_INDEX);
-        assertEquals(80, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
-        assertEquals(80 * Integer.BYTES,
+        assertEquals(80, RtPathReservoirHistory.GUIDE_VISIBILITY_ELIGIBLE_INDEX);
+        assertEquals(81, RtPathReservoirHistory.GUIDE_VISIBILITY_CLEAR_INDEX);
+        assertEquals(82, RtPathReservoirHistory.GUIDE_VISIBILITY_TINTED_INDEX);
+        assertEquals(83, RtPathReservoirHistory.GUIDE_VISIBILITY_OCCLUDED_INDEX);
+        assertEquals(84, RtPathReservoirHistory.GUIDE_VISIBILITY_INVALID_INDEX);
+        assertEquals(85, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
+        assertEquals(85 * Integer.BYTES,
                 RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_COUNTER_BYTES);
         assertEquals(32, RtPathReservoirHistory.SHIFTED_RECEIVER_GUIDE_STRIDE);
         assertEquals(27_566_080L,

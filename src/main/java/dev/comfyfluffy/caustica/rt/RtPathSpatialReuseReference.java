@@ -643,15 +643,22 @@ final class RtPathSpatialReuseReference {
             return receiverGuide.eventThroughput();
         }
 
-        Rgb unoccludedShiftedRadiance() {
+        Rgb shiftedRadiance(Rgb transmittance) {
+            if (transmittance == null) {
+                throw new IllegalArgumentException("guide-only visibility is required");
+            }
             Rgb receiver = receiverThroughput();
             return new Rgb(
                     shiftedDiffuseRadiance(sourceRadiance.r(), sourceThroughput.r(),
-                            receiver.r(), 1.0),
+                            receiver.r(), transmittance.r()),
                     shiftedDiffuseRadiance(sourceRadiance.g(), sourceThroughput.g(),
-                            receiver.g(), 1.0),
+                            receiver.g(), transmittance.g()),
                     shiftedDiffuseRadiance(sourceRadiance.b(), sourceThroughput.b(),
-                            receiver.b(), 1.0));
+                            receiver.b(), transmittance.b()));
+        }
+
+        Rgb unoccludedShiftedRadiance() {
+            return shiftedRadiance(new Rgb(1.0, 1.0, 1.0));
         }
     }
 
@@ -670,6 +677,24 @@ final class RtPathSpatialReuseReference {
             if (!pdfValid) return GuideOnlyRemapDecision.PDF_REJECT;
             if (!throughputValid) return GuideOnlyRemapDecision.THROUGHPUT_REJECT;
             return GuideOnlyRemapDecision.READY;
+        }
+    }
+
+    enum GuideOnlyVisibilityDecision {
+        CLEAR,
+        TINTED,
+        OCCLUDED,
+        ARITHMETIC_REJECT
+    }
+
+    /** Ordered production-shadow result used only by the guide visibility counter audit. */
+    record GuideOnlyVisibilityPolicy(boolean arithmeticValid, boolean anyTransmission,
+                                     boolean fullyClear) {
+        GuideOnlyVisibilityDecision result() {
+            if (!arithmeticValid) return GuideOnlyVisibilityDecision.ARITHMETIC_REJECT;
+            if (!anyTransmission) return GuideOnlyVisibilityDecision.OCCLUDED;
+            if (fullyClear) return GuideOnlyVisibilityDecision.CLEAR;
+            return GuideOnlyVisibilityDecision.TINTED;
         }
     }
 

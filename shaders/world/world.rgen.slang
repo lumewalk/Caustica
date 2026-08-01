@@ -949,9 +949,39 @@ public void pathMappingReplayValidate() {
                             && all(guideReceiverThroughput >= float3(0.0))
                             && all(guideThroughputRatio >= float3(0.0))
                             && all(guideShiftedRadiance >= float3(0.0));
-                    InterlockedAdd(counters[guideThroughputValid
-                            ? PATH_GUIDE_REMAP_READY
-                            : PATH_GUIDE_REMAP_THROUGHPUT_REJECT], 1u);
+                    if (!guideThroughputValid) {
+                        InterlockedAdd(counters[PATH_GUIDE_REMAP_THROUGHPUT_REJECT], 1u);
+                    } else {
+                        InterlockedAdd(counters[PATH_GUIDE_REMAP_READY], 1u);
+                        InterlockedAdd(counters[PATH_GUIDE_VISIBILITY_ELIGIBLE], 1u);
+
+                        // Visibility shadow A/B only. Use the exact Pass-B biased receiver origin
+                        // and the production shadow SBT, but publish counters rather than radiance.
+                        float3 guideToShared = guideSharedVertex - receiverRayOrigin.xyz;
+                        float guideVisibilityDistance = length(guideToShared);
+                        if (!isfinite(guideVisibilityDistance)
+                                || guideVisibilityDistance <= 1.0e-4) {
+                            InterlockedAdd(counters[PATH_GUIDE_VISIBILITY_INVALID], 1u);
+                        } else {
+                            VisibilityResult guideVisibility = visibility(receiverRayOrigin.xyz,
+                                    guideToShared / guideVisibilityDistance,
+                                    guideVisibilityDistance * 0.999);
+                            float3 guideTransmittance = guideVisibility.transmittance;
+                            bool guideVisibilityValid = all(isfinite(guideTransmittance))
+                                    && all(guideTransmittance >= float3(0.0))
+                                    && all(guideTransmittance <= float3(1.0));
+                            uint guideVisibilityResult = !guideVisibilityValid
+                                    ? PATH_GUIDE_VISIBILITY_INVALID
+                                    : max(guideTransmittance.x,
+                                            max(guideTransmittance.y,
+                                                    guideTransmittance.z)) <= 0.0
+                                            ? PATH_GUIDE_VISIBILITY_OCCLUDED
+                                            : all(guideTransmittance == float3(1.0))
+                                                    ? PATH_GUIDE_VISIBILITY_CLEAR
+                                                    : PATH_GUIDE_VISIBILITY_TINTED;
+                            InterlockedAdd(counters[guideVisibilityResult], 1u);
+                        }
+                    }
                 }
             }
         } else {

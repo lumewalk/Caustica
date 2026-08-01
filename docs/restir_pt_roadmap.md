@@ -410,6 +410,19 @@ identities were exact in every readback. The next bounded gate is a view-20-only
 audit for the ready population. It must remain observational and cannot turn ready records into
 persistent mapped history or estimator inputs.
 
+That bounded visibility audit now reuses the production shadow SBT from the exact stored Pass-B
+receiver origin. It partitions every pre-visibility-ready record into clear, tinted, occluded, or
+invalid transmittance. Required identities are `guideVisibility.eligible = guideRemap.ready` and
+`guideVisibility.eligible = clear + tinted + occluded + invalid`. The traced result remains
+counter-only: no shifted-radiance output, reservoir/history write, selection, weighting, strict-gate
+relaxation, or estimator contribution is permitted.
+
+Runtime passed this boundary across 26 stable readbacks. All 395053 ready records were accounted for:
+394614 clear (99.8889%), 439 occluded (0.1111%), zero tinted in this scene, and zero invalid. Both
+identities were exact in every frame. The next bounded gate may apply the returned RGB transmittance
+to the already proven throughput ratio and audit the resulting shifted radiance/target with counters
+only; it still cannot authorize persistent history or estimator use.
+
 ## Delivery Phases
 
 ### Phase 0 — Wavefront Integration Baseline

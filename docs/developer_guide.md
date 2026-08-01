@@ -326,6 +326,22 @@ not shifted visibility. The next experiment may trace receiver-to-shared-vertex 
 population in view 20 only; it must retain the same shadow-only isolation and must not write mapped
 history or feed the estimator.
 
+The visibility experiment now uses the exact Pass-B biased receiver origin and calls the same
+production `visibility(...)` shadow SBT as the established shifted-radiance path. Every pre-visibility
+`ready` record increments one mutually exclusive terminal counter: `clear`, `tinted`, `occluded`, or
+`invalid`. Runtime must prove `guideVisibility.eligible = guideRemap.ready` and
+`guideVisibility.eligible = clear + tinted + occluded + invalid`. The call observes alpha-tested,
+translucent, and water traversal, but its result is not written to the debug image or any reservoir;
+it cannot select a path, alter weights/history, relax strict admission, or feed the estimator.
+
+Runtime passed the visibility gate. Across 26 stable readbacks, all 395053 pre-visibility-ready
+records entered the visibility partition: 394614 were clear (99.8889%), 439 were correctly occluded
+(0.1111%), and tinted/invalid were both zero in the tested scene. Both identities held in every
+readback, and Vulkan RT reported no device, GPU, or shader failure. Zero tinted records describe this
+capture rather than removing RGB transmittance from the contract. The next bounded experiment is a
+counter-only post-visibility shifted-radiance/target audit for visible records; persistent history,
+weights, and the estimator remain out of scope.
+
 ## Linux
 
 Set `DLSS_SDK` and `VULKAN_SDK` before configuring CMake:

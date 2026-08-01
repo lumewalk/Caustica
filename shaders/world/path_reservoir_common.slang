@@ -79,7 +79,12 @@ public static const uint PATH_GUIDE_REMAP_READY = 76u;
 public static const uint PATH_GUIDE_REMAP_GEOMETRY_REJECT = 77u;
 public static const uint PATH_GUIDE_REMAP_PDF_REJECT = 78u;
 public static const uint PATH_GUIDE_REMAP_THROUGHPUT_REJECT = 79u;
-public static const uint PATH_SHIFT_DIAGNOSTIC_COUNTER_COUNT = 80u;
+public static const uint PATH_GUIDE_VISIBILITY_ELIGIBLE = 80u;
+public static const uint PATH_GUIDE_VISIBILITY_CLEAR = 81u;
+public static const uint PATH_GUIDE_VISIBILITY_TINTED = 82u;
+public static const uint PATH_GUIDE_VISIBILITY_OCCLUDED = 83u;
+public static const uint PATH_GUIDE_VISIBILITY_INVALID = 84u;
+public static const uint PATH_SHIFT_DIAGNOSTIC_COUNTER_COUNT = 85u;
 public static const uint PATH_SHIFT_DIAGNOSTIC_PAIR_MASK = 3u;
 public static const uint PATH_SHIFT_DIAGNOSTIC_MERGE_PAIR_OFFSET =
         PATH_SPATIAL_DIAGNOSTIC_PAIR_CAPACITY * 2u;
