@@ -600,6 +600,80 @@ final class RtPathSpatialReuseReference {
     }
 
     /**
+     * Endpoint-independent diffuse remap terms available before any visibility query. This is a
+     * mathematical readiness contract only; it does not authorize history admission or weighting.
+     */
+    record GuideOnlyDiffuseRemap(DiffuseReceiverGuide receiverGuide,
+                                 DiffuseReceiverEdge receiverEdge,
+                                 double sourceDistance, double receiverDistance,
+                                 double sourceCosine, double receiverCosine,
+                                 double sourceDirectionalPdf,
+                                 Rgb sourceRadiance, Rgb sourceThroughput) {
+        GuideOnlyDiffuseRemap {
+            if (receiverGuide == null || receiverEdge == null
+                    || !positiveFinite(sourceDistance) || !positiveFinite(receiverDistance)
+                    || !positiveFinite(sourceCosine) || !positiveFinite(receiverCosine)
+                    || !positiveFinite(sourceDirectionalPdf)
+                    || sourceRadiance == null || sourceThroughput == null) {
+                throw new IllegalArgumentException("invalid guide-only diffuse remap terms");
+            }
+            double receiverPdf = receiverGuide.directionalPdf(receiverEdge.cosine());
+            new ReconnectionGeometry(sourceDistance, receiverDistance,
+                    sourceCosine, receiverCosine, sourceDirectionalPdf, receiverPdf);
+            Rgb receiverThroughput = receiverGuide.eventThroughput();
+            shiftedDiffuseRadiance(sourceRadiance.r(), sourceThroughput.r(),
+                    receiverThroughput.r(), 1.0);
+            shiftedDiffuseRadiance(sourceRadiance.g(), sourceThroughput.g(),
+                    receiverThroughput.g(), 1.0);
+            shiftedDiffuseRadiance(sourceRadiance.b(), sourceThroughput.b(),
+                    receiverThroughput.b(), 1.0);
+        }
+
+        double receiverDirectionalPdf() {
+            return receiverGuide.directionalPdf(receiverEdge.cosine());
+        }
+
+        double primarySampleJacobian() {
+            return new ReconnectionGeometry(sourceDistance, receiverDistance,
+                    sourceCosine, receiverCosine, sourceDirectionalPdf,
+                    receiverDirectionalPdf()).primarySampleJacobian();
+        }
+
+        Rgb receiverThroughput() {
+            return receiverGuide.eventThroughput();
+        }
+
+        Rgb unoccludedShiftedRadiance() {
+            Rgb receiver = receiverThroughput();
+            return new Rgb(
+                    shiftedDiffuseRadiance(sourceRadiance.r(), sourceThroughput.r(),
+                            receiver.r(), 1.0),
+                    shiftedDiffuseRadiance(sourceRadiance.g(), sourceThroughput.g(),
+                            receiver.g(), 1.0),
+                    shiftedDiffuseRadiance(sourceRadiance.b(), sourceThroughput.b(),
+                            receiver.b(), 1.0));
+        }
+    }
+
+    enum GuideOnlyRemapDecision {
+        READY,
+        GEOMETRY_REJECT,
+        PDF_REJECT,
+        THROUGHPUT_REJECT
+    }
+
+    /** Ordered shadow-counter policy; strict cross-frame admission remains a separate decision. */
+    record GuideOnlyRemapPolicy(boolean geometryValid, boolean pdfValid,
+                                boolean throughputValid) {
+        GuideOnlyRemapDecision firstReject() {
+            if (!geometryValid) return GuideOnlyRemapDecision.GEOMETRY_REJECT;
+            if (!pdfValid) return GuideOnlyRemapDecision.PDF_REJECT;
+            if (!throughputValid) return GuideOnlyRemapDecision.THROUGHPUT_REJECT;
+            return GuideOnlyRemapDecision.READY;
+        }
+    }
+
+    /**
      * Camera-relative storage for an exact retained source queue root. The capture frame's terrain
      * rebase is deliberately not part of persistent identity: reconstructing in a later frame adds
      * the current camera offset and subtracts the camera translation since capture.

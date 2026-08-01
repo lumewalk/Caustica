@@ -873,6 +873,87 @@ public void pathMappingReplayValidate() {
             // The exact material/origin substrate is valid even when endpoint selection publishes
             // no canonical edge. This is the population the eventual receiver remap must serve.
             InterlockedAdd(counters[PATH_RECEIVER_GUIDE_NO_STORED_EDGE], 1u);
+            InterlockedAdd(counters[PATH_GUIDE_REMAP_ELIGIBLE], 1u);
+
+            // Shadow A/B only: evaluate whether the replayed source and endpoint-independent receiver
+            // state provide finite pre-visibility remap terms. Strict admission below is unchanged.
+            float3 guideReceiverNormal =
+                    receiverNormalRoughness.xyz / receiverNormalLength;
+            float3 guideSharedVertex = replay.reconnectionVertex;
+            float guideSharedNormalLength = length(replay.reconnectionNormal);
+            float3 guideSourceEdge = guideSharedVertex - sourcePositionMaterial.xyz;
+            float3 guideReceiverEdge = guideSharedVertex - receiverPositionMaterial.xyz;
+            float guideSourceDistance = length(guideSourceEdge);
+            float guideReceiverDistance = length(guideReceiverEdge);
+            bool guideGeometryValid = replay.reconnectionValid != 0u
+                    && replay.reconnectionDepth == 1u
+                    && replay.reconnectionEventKind == PATH_RECONNECTION_EVENT_DIFFUSE
+                    && guideSharedNormalLength >= 0.5
+                    && guideSourceDistance > 1.0e-4
+                    && guideReceiverDistance > 1.0e-4;
+            float guideGeometryJacobian = 0.0;
+            if (guideGeometryValid) {
+                float3 guideSharedNormal =
+                        replay.reconnectionNormal / guideSharedNormalLength;
+                float guideSourceCosine = abs(dot(guideSharedNormal,
+                        -guideSourceEdge / guideSourceDistance));
+                float guideReceiverCosine = abs(dot(guideSharedNormal,
+                        guideReceiverEdge / guideReceiverDistance));
+                guideGeometryJacobian = guideReceiverCosine
+                        * guideSourceDistance * guideSourceDistance
+                        / max(guideSourceCosine
+                                * guideReceiverDistance * guideReceiverDistance, 1.0e-8);
+                guideGeometryValid = guideSourceCosine > 0.0
+                        && guideReceiverCosine > 0.0
+                        && isfinite(guideGeometryJacobian)
+                        && guideGeometryJacobian > 0.0;
+            }
+            if (!guideGeometryValid) {
+                InterlockedAdd(counters[PATH_GUIDE_REMAP_GEOMETRY_REJECT], 1u);
+            } else {
+                float3 guideSampledEdge = guideSharedVertex - receiverRayOrigin.xyz;
+                float guideReceiverPdf = receiverGuide.w
+                        * pathMappingDiffuseDensity(guideReceiverNormal, guideSampledEdge);
+                float guideSourcePdf = replay.reconnectionSourcePdf;
+                float guidePssJacobian = guideGeometryJacobian
+                        * guideReceiverPdf / guideSourcePdf;
+                bool guidePdfValid = isfinite(guideReceiverPdf)
+                        && guideReceiverPdf > 0.0
+                        && isfinite(guideSourcePdf) && guideSourcePdf > 0.0
+                        && isfinite(guidePssJacobian) && guidePssJacobian > 0.0;
+                if (!guidePdfValid) {
+                    InterlockedAdd(counters[PATH_GUIDE_REMAP_PDF_REJECT], 1u);
+                } else {
+                    float3 guideSourceRadiance = replay.canonicalRadiance;
+                    float3 guideSourceThroughput = replay.reconnectionThroughput;
+                    float3 guideReceiverThroughput = receiverGuide.xyz / receiverGuide.w;
+                    bool guideInvalidSourceChannel = any(guideSourceRadiance > float3(0.0)
+                            && guideSourceThroughput <= float3(0.0));
+                    float3 guideThroughputRatio = float3(
+                            pathMappingThroughputRatio(guideSourceThroughput.x,
+                                    guideReceiverThroughput.x),
+                            pathMappingThroughputRatio(guideSourceThroughput.y,
+                                    guideReceiverThroughput.y),
+                            pathMappingThroughputRatio(guideSourceThroughput.z,
+                                    guideReceiverThroughput.z));
+                    float3 guideShiftedRadiance =
+                            guideSourceRadiance * guideThroughputRatio;
+                    bool guideThroughputValid = !guideInvalidSourceChannel
+                            && all(isfinite(guideSourceRadiance))
+                            && all(isfinite(guideSourceThroughput))
+                            && all(isfinite(guideReceiverThroughput))
+                            && all(isfinite(guideThroughputRatio))
+                            && all(isfinite(guideShiftedRadiance))
+                            && all(guideSourceRadiance >= float3(0.0))
+                            && all(guideSourceThroughput >= float3(0.0))
+                            && all(guideReceiverThroughput >= float3(0.0))
+                            && all(guideThroughputRatio >= float3(0.0))
+                            && all(guideShiftedRadiance >= float3(0.0));
+                    InterlockedAdd(counters[guideThroughputValid
+                            ? PATH_GUIDE_REMAP_READY
+                            : PATH_GUIDE_REMAP_THROUGHPUT_REJECT], 1u);
+                }
+            }
         } else {
             InterlockedAdd(counters[PATH_RECEIVER_GUIDE_STORED_ELIGIBLE], 1u);
             float3 exactReceiverNormal =

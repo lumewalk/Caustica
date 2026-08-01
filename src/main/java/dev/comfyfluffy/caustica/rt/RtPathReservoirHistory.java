@@ -100,7 +100,12 @@ final class RtPathReservoirHistory {
     static final int RECEIVER_GUIDE_MASS_MISMATCH_INDEX = 72;
     static final int RECEIVER_GUIDE_THROUGHPUT_MISMATCH_INDEX = 73;
     static final int RECEIVER_GUIDE_PDF_MISMATCH_INDEX = 74;
-    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 75;
+    static final int GUIDE_REMAP_ELIGIBLE_INDEX = 75;
+    static final int GUIDE_REMAP_READY_INDEX = 76;
+    static final int GUIDE_REMAP_GEOMETRY_REJECT_INDEX = 77;
+    static final int GUIDE_REMAP_PDF_REJECT_INDEX = 78;
+    static final int GUIDE_REMAP_THROUGHPUT_REJECT_INDEX = 79;
+    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 80;
     static final int SHIFTED_RECEIVER_GUIDE_STRIDE = 8 * Float.BYTES;
     static final int SPATIAL_DIAGNOSTIC_COUNTER_BYTES =
             SHIFTED_DIAGNOSTIC_COUNTER_COUNT * Integer.BYTES;
@@ -467,6 +472,16 @@ final class RtPathReservoirHistory {
                     counters.get(RECEIVER_GUIDE_THROUGHPUT_MISMATCH_INDEX));
             long receiverGuidePdfMismatch = Integer.toUnsignedLong(
                     counters.get(RECEIVER_GUIDE_PDF_MISMATCH_INDEX));
+            long guideRemapEligible = Integer.toUnsignedLong(
+                    counters.get(GUIDE_REMAP_ELIGIBLE_INDEX));
+            long guideRemapReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_REMAP_READY_INDEX));
+            long guideRemapGeometryReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_REMAP_GEOMETRY_REJECT_INDEX));
+            long guideRemapPdfReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_REMAP_PDF_REJECT_INDEX));
+            long guideRemapThroughputReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_REMAP_THROUGHPUT_REJECT_INDEX));
             long crossFrameReceiverReject = crossFrameReceiverSurfaceReject
                     + crossFrameReceiverSampleReject + crossFrameReceiverEdgeReject
                     + crossFrameReceiverTopologyReject + crossFrameReceiverDepthReject
@@ -571,7 +586,8 @@ final class RtPathReservoirHistory {
                              + "edgeBreakdown[eligible={},missingValid={},depth={},event={},"
                              + "mapping={},pdf={},finite={}], "
                              + "receiverGuide[attempted={},invalid={},noStoredEdge={},"
-                             + "storedEligible={},accepted={},mass={},throughput={},pdf={}]",
+                             + "storedEligible={},accepted={},mass={},throughput={},pdf={}], "
+                             + "guideRemap[eligible={},ready={},geometry={},pdf={},throughput={}]",
                     total,
                     values[0], percent(values[0], total),
                     values[1], percent(values[1], total),
@@ -669,7 +685,9 @@ final class RtPathReservoirHistory {
                      receiverGuideAttempted, receiverGuideInvalid,
                      receiverGuideNoStoredEdge, receiverGuideStoredEligible,
                      receiverGuideAccepted, receiverGuideMassMismatch,
-                     receiverGuideThroughputMismatch, receiverGuidePdfMismatch);
+                     receiverGuideThroughputMismatch, receiverGuidePdfMismatch,
+                     guideRemapEligible, guideRemapReady, guideRemapGeometryReject,
+                     guideRemapPdfReject, guideRemapThroughputReject);
             spatialDiagnosticViewPending = 0;
             return;
         }

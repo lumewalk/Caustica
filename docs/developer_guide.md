@@ -308,6 +308,24 @@ throughput mismatch stayed zero, and only 23 failed PDF reconstruction (0.053368
 stay fail-closed under the existing tolerance. The next step is a reference/counter-only guide-remap
 A/B for the no-edge population; it must not bypass strict history admission or write an estimator.
 
+That guide-only A/B now evaluates the exact pre-visibility diffuse remap chain for every
+`noStoredEdge` record: source/receiver reconnection geometry, receiver directional PDF and PSS
+Jacobian, then spectral throughput support. The four terminal counters are mutually exclusive and
+must satisfy `guideRemap.eligible = ready + geometry + pdf + throughput`; because the experiment is
+attached directly to the valid-guide no-edge branch, `guideRemap.eligible` must also equal
+`receiverGuide.noStoredEdge`. `ready` means only that finite mathematical terms can be formed. The
+shadow path traces no visibility ray, does not relax the existing current-sample/edge or
+topology/depth/transport/footprint gates, and cannot select a sample, write a reservoir, update
+history, alter weights, or contribute to the estimator.
+
+The first runtime audit passed this pre-visibility gate without a single reject. Across 23 stable
+readbacks, all 419559 eligible no-edge records were `ready`; geometry, PDF, and throughput rejects
+were zero. Both required identities held in every readback. Vulkan RT initialized on the RTX 5060
+Ti without device, GPU, or shader failures. This proves availability of the finite remap terms, but
+not shifted visibility. The next experiment may trace receiver-to-shared-vertex visibility for this
+population in view 20 only; it must retain the same shadow-only isolation and must not write mapped
+history or feed the estimator.
+
 ## Linux
 
 Set `DLSS_SDK` and `VULKAN_SDK` before configuring CMake:

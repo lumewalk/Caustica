@@ -207,6 +207,41 @@ final class RtPathSpatialReuseReferenceTest {
     }
 
     @Test
+    void guideOnlyDiffuseRemapDefinesExactPreVisibilityChainAndRejectOrder() {
+        var guide = new RtPathSpatialReuseReference.DiffuseReceiverGuide(
+                new RtPathSpatialReuseReference.Rgb(0.45, 0.30, 0.15), 0.75);
+        var edge = new RtPathSpatialReuseReference.DiffuseReceiverEdge(
+                0.0, 0.01, 0.0, 1.0, 1.01, 0.0, 0.0, 1.0, 0.0);
+        var remap = new RtPathSpatialReuseReference.GuideOnlyDiffuseRemap(
+                guide, edge, 2.0, 1.0, 0.5, 0.25, 0.2,
+                new RtPathSpatialReuseReference.Rgb(2.0, 1.0, 0.5),
+                new RtPathSpatialReuseReference.Rgb(0.5, 0.5, 0.5));
+
+        assertEquals(guide.directionalPdf(edge.cosine()),
+                remap.receiverDirectionalPdf(), 1.0e-12);
+        assertEquals(2.0 * remap.receiverDirectionalPdf() / 0.2,
+                remap.primarySampleJacobian(), 1.0e-12);
+        assertEquals(guide.eventThroughput(), remap.receiverThroughput());
+        var shifted = remap.unoccludedShiftedRadiance();
+        assertEquals(2.4, shifted.r(), 1.0e-12);
+        assertEquals(0.8, shifted.g(), 1.0e-12);
+        assertEquals(0.2, shifted.b(), 1.0e-12);
+
+        assertEquals(RtPathSpatialReuseReference.GuideOnlyRemapDecision.GEOMETRY_REJECT,
+                new RtPathSpatialReuseReference.GuideOnlyRemapPolicy(false, false, false)
+                        .firstReject());
+        assertEquals(RtPathSpatialReuseReference.GuideOnlyRemapDecision.PDF_REJECT,
+                new RtPathSpatialReuseReference.GuideOnlyRemapPolicy(true, false, false)
+                        .firstReject());
+        assertEquals(RtPathSpatialReuseReference.GuideOnlyRemapDecision.THROUGHPUT_REJECT,
+                new RtPathSpatialReuseReference.GuideOnlyRemapPolicy(true, true, false)
+                        .firstReject());
+        assertEquals(RtPathSpatialReuseReference.GuideOnlyRemapDecision.READY,
+                new RtPathSpatialReuseReference.GuideOnlyRemapPolicy(true, true, true)
+                        .firstReject());
+    }
+
+    @Test
     void diffuseShiftDensityRejectsUnsupportedTermsBeforeWeighting() {
         assertThrows(IllegalArgumentException.class,
                 () -> new RtPathSpatialReuseReference.DiffuseShiftDensity(
@@ -652,8 +687,13 @@ final class RtPathSpatialReuseReferenceTest {
         assertEquals(72, RtPathReservoirHistory.RECEIVER_GUIDE_MASS_MISMATCH_INDEX);
         assertEquals(73, RtPathReservoirHistory.RECEIVER_GUIDE_THROUGHPUT_MISMATCH_INDEX);
         assertEquals(74, RtPathReservoirHistory.RECEIVER_GUIDE_PDF_MISMATCH_INDEX);
-        assertEquals(75, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
-        assertEquals(75 * Integer.BYTES,
+        assertEquals(75, RtPathReservoirHistory.GUIDE_REMAP_ELIGIBLE_INDEX);
+        assertEquals(76, RtPathReservoirHistory.GUIDE_REMAP_READY_INDEX);
+        assertEquals(77, RtPathReservoirHistory.GUIDE_REMAP_GEOMETRY_REJECT_INDEX);
+        assertEquals(78, RtPathReservoirHistory.GUIDE_REMAP_PDF_REJECT_INDEX);
+        assertEquals(79, RtPathReservoirHistory.GUIDE_REMAP_THROUGHPUT_REJECT_INDEX);
+        assertEquals(80, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
+        assertEquals(80 * Integer.BYTES,
                 RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_COUNTER_BYTES);
         assertEquals(32, RtPathReservoirHistory.SHIFTED_RECEIVER_GUIDE_STRIDE);
         assertEquals(27_566_080L,

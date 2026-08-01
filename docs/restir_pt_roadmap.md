@@ -395,6 +395,21 @@ the finite residual tails fail closed. Before any persistent admission, define a
 guide-only remap policy and a counter-only A/B over the no-edge population; do not silently remove
 the existing topology/depth/transport/footprint gates.
 
+The guide-only remap policy is now defined as an ordered pre-visibility chain: reconnection geometry,
+receiver directional PDF/PSS Jacobian, then spectral throughput. View 20 evaluates that chain only
+for valid-guide `noStoredEdge` records and publishes mutually exclusive `ready`, `geometry`, `pdf`,
+and `throughput` counters. Runtime must prove both `guideRemap.eligible = receiverGuide.noStoredEdge`
+and `guideRemap.eligible = ready + geometry + pdf + throughput`. This remains a counter-only shadow
+experiment: it emits no visibility ray and cannot bypass strict admission, modify a reservoir or
+history, change weights, or feed the estimator. A `ready` result therefore establishes mathematical
+term availability, not permission for persistent reuse.
+
+Runtime proved the entire pre-visibility partition: 23 stable readbacks contained 419559 eligible
+no-edge records, all 419559 were `ready`, and geometry/PDF/throughput rejects were zero. Both counter
+identities were exact in every readback. The next bounded gate is a view-20-only visibility shadow
+audit for the ready population. It must remain observational and cannot turn ready records into
+persistent mapped history or estimator inputs.
+
 ## Delivery Phases
 
 ### Phase 0 — Wavefront Integration Baseline

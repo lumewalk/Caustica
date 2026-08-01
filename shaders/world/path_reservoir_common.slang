@@ -74,7 +74,12 @@ public static const uint PATH_RECEIVER_GUIDE_ACCEPTED = 71u;
 public static const uint PATH_RECEIVER_GUIDE_MASS_MISMATCH = 72u;
 public static const uint PATH_RECEIVER_GUIDE_THROUGHPUT_MISMATCH = 73u;
 public static const uint PATH_RECEIVER_GUIDE_PDF_MISMATCH = 74u;
-public static const uint PATH_SHIFT_DIAGNOSTIC_COUNTER_COUNT = 75u;
+public static const uint PATH_GUIDE_REMAP_ELIGIBLE = 75u;
+public static const uint PATH_GUIDE_REMAP_READY = 76u;
+public static const uint PATH_GUIDE_REMAP_GEOMETRY_REJECT = 77u;
+public static const uint PATH_GUIDE_REMAP_PDF_REJECT = 78u;
+public static const uint PATH_GUIDE_REMAP_THROUGHPUT_REJECT = 79u;
+public static const uint PATH_SHIFT_DIAGNOSTIC_COUNTER_COUNT = 80u;
 public static const uint PATH_SHIFT_DIAGNOSTIC_PAIR_MASK = 3u;
 public static const uint PATH_SHIFT_DIAGNOSTIC_MERGE_PAIR_OFFSET =
         PATH_SPATIAL_DIAGNOSTIC_PAIR_CAPACITY * 2u;
