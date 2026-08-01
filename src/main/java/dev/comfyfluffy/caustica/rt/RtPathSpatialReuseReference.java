@@ -465,6 +465,14 @@ final class RtPathSpatialReuseReference {
             return probability;
         }
 
+        boolean stableSelectsSource(double currentWeightSum, double randomUnit) {
+            if (!Double.isFinite(randomUnit) || randomUnit < 0.0 || randomUnit >= 1.0) {
+                throw new IllegalArgumentException(
+                        "invalid stable spatial selection random value");
+            }
+            return randomUnit < stableSelectionProbability(currentWeightSum);
+        }
+
         boolean selectsSource(double currentWeightSum, double randomUnit) {
             if (!Double.isFinite(randomUnit) || randomUnit < 0.0 || randomUnit >= 1.0) {
                 throw new IllegalArgumentException("invalid spatial GRIS selection random value");
@@ -710,6 +718,14 @@ final class RtPathSpatialReuseReference {
             return new SpatialGrisWeight(shiftedTarget(transmittance), sourceFinalWeight,
                     sourceEffectiveCount, maxSourceCount, primarySampleJacobian())
                     .stableSelectionProbability(currentWeightSum);
+        }
+
+        boolean stableSelectsSource(Rgb transmittance, double sourceFinalWeight,
+                                    double sourceEffectiveCount, double maxSourceCount,
+                                    double currentWeightSum, double randomUnit) {
+            return new SpatialGrisWeight(shiftedTarget(transmittance), sourceFinalWeight,
+                    sourceEffectiveCount, maxSourceCount, primarySampleJacobian())
+                    .stableSelectsSource(currentWeightSum, randomUnit);
         }
     }
 

@@ -1072,6 +1072,28 @@ public void pathMappingReplayValidate() {
                                                         : PATH_GUIDE_STABLE_SELECTION_ZERO;
                                         InterlockedAdd(
                                                 counters[guideStableSelectionResult], 1u);
+
+                                        // A local hash-derived draw keeps this counter-only gate
+                                        // independent of both stored replay RNG streams.
+                                        InterlockedAdd(
+                                                counters[PATH_GUIDE_STABLE_BERNOULLI_ELIGIBLE], 1u);
+                                        uint guideBernoulliSeed = pathHash(pixelIndex
+                                                ^ worldPush.frameIndex * 747796405u
+                                                ^ 0xA511E9B3u);
+                                        float guideBernoulliRandom =
+                                                float(guideBernoulliSeed >> 8u)
+                                                * (1.0 / 16777216.0);
+                                        bool guideBernoulliValid = guideStableSelectionValid
+                                                && isfinite(guideBernoulliRandom)
+                                                && guideBernoulliRandom >= 0.0
+                                                && guideBernoulliRandom < 1.0;
+                                        uint guideBernoulliResult = !guideBernoulliValid
+                                                ? PATH_GUIDE_STABLE_BERNOULLI_INVALID
+                                                : guideBernoulliRandom
+                                                        < guideStableSelectionProbability
+                                                        ? PATH_GUIDE_STABLE_BERNOULLI_SELECTED
+                                                        : PATH_GUIDE_STABLE_BERNOULLI_RETAINED;
+                                        InterlockedAdd(counters[guideBernoulliResult], 1u);
                                     }
                                 }
                             }

@@ -497,6 +497,22 @@ relative ratio is therefore accepted as the probability contract; RNG, sample se
 weight-sum policy, scratch/persistent history, and the estimator are still unchanged. Any Bernoulli
 selection experiment must be introduced as its own counter-only gate.
 
+The next counter-only gate performs that Bernoulli comparison without touching either canonical
+replay RNG stream. A local PCG hash of pixel and frame identity produces an exact `[0,1)` float,
+which is compared with the proven stable probability. The required identities are
+`guideStableBernoulli.eligible = guideStableSelection.eligible` and
+`eligible = selected + retained + invalid`. These counters do not copy the source sample or update
+weight sum, M, final W, scratch/persistent history, strict admission, or the estimator.
+
+Runtime passed this Bernoulli boundary across 73 readbacks and 513545 eligible records: 495376 were
+selected, 18169 retained, and none invalid. The identical stable-probability population contained
+507819 positive and 5726 zero records, with zero invalid. Every frame preserved identical
+eligibility, exact `selected + retained + invalid` accounting, `selected <= positive`, and
+`retained >= zero`; 97.5497% of positive-probability records selected the source. The local draw is
+therefore accepted for diagnostic selection. The next bounded gate may audit post-selection stored
+weight/M/final-W arithmetic and selected/retained sample readiness, but still must not write a
+reservoir/history record or affect the estimator.
+
 ## Delivery Phases
 
 ### Phase 0 — Wavefront Integration Baseline
