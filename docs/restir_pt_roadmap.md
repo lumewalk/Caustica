@@ -443,6 +443,22 @@ equalities `positive = clear + tinted` and `zero = occluded`. The next bounded e
 the GRIS candidate/merge-weight terms from the proven target, source count/final weight, and PSS
 Jacobian, but must remain counter-only and non-persistent.
 
+The counter-only GRIS readiness audit now forms exactly
+`shiftedTarget * sourceFinalWeight * min(sourceEffectiveCount, 8) * pssJacobian` for every valid
+guide target. It partitions the result into positive, zero, or invalid and requires
+`guideWeight.eligible = guideTarget.positive + guideTarget.zero` plus
+`guideWeight.eligible = positive + zero + invalid`. The PSS Jacobian is applied exactly once; the
+audit does not form a selection probability or current weight sum and cannot mutate scratch,
+reservoir history, persistent mapping, or the estimator. Runtime must prove this arithmetic boundary
+before any stochastic merge experiment is considered.
+
+Runtime passed the merge-weight boundary across 52 readbacks and 367160 eligible records: 362983
+positive, 4177 zero, and zero invalid. Both required identities were exact in every frame. The
+stronger observed equalities `weight positive = target positive` and
+`weight zero = target zero` were also exact, proving that the source final weight, capped source
+count, and single PSS Jacobian introduced no new zero or invalid arithmetic in this population.
+Selection and all reservoir/history mutation remain disabled.
+
 ## Delivery Phases
 
 ### Phase 0 — Wavefront Integration Baseline

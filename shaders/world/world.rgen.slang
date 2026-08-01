@@ -995,6 +995,32 @@ public void pathMappingReplayValidate() {
                                                 ? PATH_GUIDE_TARGET_POSITIVE
                                                 : PATH_GUIDE_TARGET_ZERO;
                                 InterlockedAdd(counters[guideTargetResult], 1u);
+                                if (guideTargetValid) {
+                                    // Counter-only GRIS readiness audit. This deliberately forms no
+                                    // selection probability and writes no reservoir or history.
+                                    InterlockedAdd(counters[PATH_GUIDE_WEIGHT_ELIGIBLE], 1u);
+                                    float guideSourceFinalWeight = mapped.weights.z;
+                                    float guideSourceEffectiveCount = mapped.weights.y;
+                                    float guideSourceCount = min(guideSourceEffectiveCount,
+                                            PATH_TEMPORAL_MAX_SOURCE_COUNT);
+                                    bool guideWeightTermsValid =
+                                            isfinite(guideSourceFinalWeight)
+                                            && guideSourceFinalWeight >= 0.0
+                                            && isfinite(guideSourceEffectiveCount)
+                                            && guideSourceEffectiveCount >= 0.0;
+                                    float guideMergeWeight = guideShiftedTarget
+                                            * guideSourceFinalWeight * guideSourceCount
+                                            * guidePssJacobian;
+                                    bool guideWeightValid = guideWeightTermsValid
+                                            && isfinite(guideMergeWeight)
+                                            && guideMergeWeight >= 0.0;
+                                    uint guideWeightResult = !guideWeightValid
+                                            ? PATH_GUIDE_WEIGHT_INVALID
+                                            : guideMergeWeight > 0.0
+                                                    ? PATH_GUIDE_WEIGHT_POSITIVE
+                                                    : PATH_GUIDE_WEIGHT_ZERO;
+                                    InterlockedAdd(counters[guideWeightResult], 1u);
+                                }
                             }
                         }
                     }

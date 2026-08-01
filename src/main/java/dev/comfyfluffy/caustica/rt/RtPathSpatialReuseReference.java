@@ -664,6 +664,12 @@ final class RtPathSpatialReuseReference {
         double shiftedTarget(Rgb transmittance) {
             return shiftedRadiance(transmittance).luminance();
         }
+
+        double mergeWeight(Rgb transmittance, double sourceFinalWeight,
+                           double sourceEffectiveCount, double maxSourceCount) {
+            return new SpatialGrisWeight(shiftedTarget(transmittance), sourceFinalWeight,
+                    sourceEffectiveCount, maxSourceCount, primarySampleJacobian()).mergeWeight();
+        }
     }
 
     enum GuideOnlyRemapDecision {
@@ -715,6 +721,22 @@ final class RtPathSpatialReuseReference {
             return positiveTarget
                     ? GuideOnlyShiftedTargetDecision.POSITIVE
                     : GuideOnlyShiftedTargetDecision.ZERO;
+        }
+    }
+
+    enum GuideOnlyMergeWeightDecision {
+        POSITIVE,
+        ZERO,
+        ARITHMETIC_REJECT
+    }
+
+    /** Ordered counter-only result; it does not authorize selection or reservoir mutation. */
+    record GuideOnlyMergeWeightPolicy(boolean arithmeticValid, boolean positiveWeight) {
+        GuideOnlyMergeWeightDecision result() {
+            if (!arithmeticValid) return GuideOnlyMergeWeightDecision.ARITHMETIC_REJECT;
+            return positiveWeight
+                    ? GuideOnlyMergeWeightDecision.POSITIVE
+                    : GuideOnlyMergeWeightDecision.ZERO;
         }
     }
 

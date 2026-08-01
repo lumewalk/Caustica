@@ -114,7 +114,11 @@ final class RtPathReservoirHistory {
     static final int GUIDE_TARGET_POSITIVE_INDEX = 86;
     static final int GUIDE_TARGET_ZERO_INDEX = 87;
     static final int GUIDE_TARGET_INVALID_INDEX = 88;
-    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 89;
+    static final int GUIDE_WEIGHT_ELIGIBLE_INDEX = 89;
+    static final int GUIDE_WEIGHT_POSITIVE_INDEX = 90;
+    static final int GUIDE_WEIGHT_ZERO_INDEX = 91;
+    static final int GUIDE_WEIGHT_INVALID_INDEX = 92;
+    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 93;
     static final int SHIFTED_RECEIVER_GUIDE_STRIDE = 8 * Float.BYTES;
     static final int SPATIAL_DIAGNOSTIC_COUNTER_BYTES =
             SHIFTED_DIAGNOSTIC_COUNTER_COUNT * Integer.BYTES;
@@ -509,6 +513,14 @@ final class RtPathReservoirHistory {
                     counters.get(GUIDE_TARGET_ZERO_INDEX));
             long guideTargetInvalid = Integer.toUnsignedLong(
                     counters.get(GUIDE_TARGET_INVALID_INDEX));
+            long guideWeightEligible = Integer.toUnsignedLong(
+                    counters.get(GUIDE_WEIGHT_ELIGIBLE_INDEX));
+            long guideWeightPositive = Integer.toUnsignedLong(
+                    counters.get(GUIDE_WEIGHT_POSITIVE_INDEX));
+            long guideWeightZero = Integer.toUnsignedLong(
+                    counters.get(GUIDE_WEIGHT_ZERO_INDEX));
+            long guideWeightInvalid = Integer.toUnsignedLong(
+                    counters.get(GUIDE_WEIGHT_INVALID_INDEX));
             long crossFrameReceiverReject = crossFrameReceiverSurfaceReject
                     + crossFrameReceiverSampleReject + crossFrameReceiverEdgeReject
                     + crossFrameReceiverTopologyReject + crossFrameReceiverDepthReject
@@ -616,7 +628,8 @@ final class RtPathReservoirHistory {
                              + "storedEligible={},accepted={},mass={},throughput={},pdf={}], "
                              + "guideRemap[eligible={},ready={},geometry={},pdf={},throughput={}], "
                              + "guideVisibility[eligible={},clear={},tinted={},occluded={},invalid={}], "
-                             + "guideTarget[eligible={},positive={},zero={},invalid={}]",
+                             + "guideTarget[eligible={},positive={},zero={},invalid={}], "
+                             + "guideWeight[eligible={},positive={},zero={},invalid={}]",
                     total,
                     values[0], percent(values[0], total),
                     values[1], percent(values[1], total),
@@ -719,7 +732,8 @@ final class RtPathReservoirHistory {
                      guideRemapPdfReject, guideRemapThroughputReject,
                      guideVisibilityEligible, guideVisibilityClear, guideVisibilityTinted,
                      guideVisibilityOccluded, guideVisibilityInvalid,
-                     guideTargetEligible, guideTargetPositive, guideTargetZero, guideTargetInvalid);
+                     guideTargetEligible, guideTargetPositive, guideTargetZero, guideTargetInvalid,
+                     guideWeightEligible, guideWeightPositive, guideWeightZero, guideWeightInvalid);
             spatialDiagnosticViewPending = 0;
             return;
         }
