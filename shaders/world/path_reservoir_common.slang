@@ -92,7 +92,13 @@ public static const uint PATH_GUIDE_WEIGHT_ELIGIBLE = 89u;
 public static const uint PATH_GUIDE_WEIGHT_POSITIVE = 90u;
 public static const uint PATH_GUIDE_WEIGHT_ZERO = 91u;
 public static const uint PATH_GUIDE_WEIGHT_INVALID = 92u;
-public static const uint PATH_SHIFT_DIAGNOSTIC_COUNTER_COUNT = 93u;
+public static const uint PATH_GUIDE_SELECTION_ELIGIBLE = 93u;
+public static const uint PATH_GUIDE_SELECTION_POSITIVE = 94u;
+public static const uint PATH_GUIDE_SELECTION_ZERO = 95u;
+public static const uint PATH_GUIDE_SELECTION_CURRENT_REJECT = 96u;
+public static const uint PATH_GUIDE_SELECTION_PROBABILITY_HIGH_REJECT = 97u;
+public static const uint PATH_GUIDE_SELECTION_ARITHMETIC_REJECT = 98u;
+public static const uint PATH_SHIFT_DIAGNOSTIC_COUNTER_COUNT = 99u;
 public static const uint PATH_SHIFT_DIAGNOSTIC_PAIR_MASK = 3u;
 public static const uint PATH_SHIFT_DIAGNOSTIC_MERGE_PAIR_OFFSET =
         PATH_SPATIAL_DIAGNOSTIC_PAIR_CAPACITY * 2u;

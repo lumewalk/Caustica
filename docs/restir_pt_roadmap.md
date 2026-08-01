@@ -459,6 +459,25 @@ stronger observed equalities `weight positive = target positive` and
 count, and single PSS Jacobian introduced no new zero or invalid arithmetic in this population.
 Selection and all reservoir/history mutation remain disabled.
 
+The next shadow gate evaluates selection readiness without performing selection. For every valid
+guide merge weight it validates the current reservoir weight sum, computes
+`mergeWeight / min(currentWeightSum + mergeWeight, 1e30)`, and partitions the result into positive,
+zero, invalid-current-weight, probability-above-one, or arithmetic reject. Required identities are
+`guideSelection.eligible = guideWeight.positive + guideWeight.zero` and
+`guideSelection.eligible = positive + zero + current + high + arithmetic`. It consumes no random number,
+does not copy a source sample, and does not update weight sum, M, final W, scratch, persistent
+history, or the estimator.
+
+Runtime proved exact accounting but rejected the capped-denominator formula as a complete selection
+contract. Across 68 readbacks and 393809 eligible records, 379657 probabilities were positive, 5677
+were valid zero, 8475 exceeded one, and both invalid-current-weight and general arithmetic rejects
+were zero. Both required identities were exact in every frame, and every zero probability matched a
+zero merge weight. Because all non-general rejects are mathematically equivalent here to
+`mergeWeight > 1e30`, silently clamping the probability or admitting those samples would hide an
+estimator-changing bias. The next bounded gate must define and audit an overflow-stable selection
+ratio from the uncapped relative weights while keeping stored weight-sum capping and all reservoir
+mutation disabled.
+
 ## Delivery Phases
 
 ### Phase 0 — Wavefront Integration Baseline

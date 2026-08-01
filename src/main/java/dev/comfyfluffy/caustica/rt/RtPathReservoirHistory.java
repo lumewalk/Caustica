@@ -118,7 +118,13 @@ final class RtPathReservoirHistory {
     static final int GUIDE_WEIGHT_POSITIVE_INDEX = 90;
     static final int GUIDE_WEIGHT_ZERO_INDEX = 91;
     static final int GUIDE_WEIGHT_INVALID_INDEX = 92;
-    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 93;
+    static final int GUIDE_SELECTION_ELIGIBLE_INDEX = 93;
+    static final int GUIDE_SELECTION_POSITIVE_INDEX = 94;
+    static final int GUIDE_SELECTION_ZERO_INDEX = 95;
+    static final int GUIDE_SELECTION_CURRENT_REJECT_INDEX = 96;
+    static final int GUIDE_SELECTION_PROBABILITY_HIGH_REJECT_INDEX = 97;
+    static final int GUIDE_SELECTION_ARITHMETIC_REJECT_INDEX = 98;
+    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 99;
     static final int SHIFTED_RECEIVER_GUIDE_STRIDE = 8 * Float.BYTES;
     static final int SPATIAL_DIAGNOSTIC_COUNTER_BYTES =
             SHIFTED_DIAGNOSTIC_COUNTER_COUNT * Integer.BYTES;
@@ -521,6 +527,18 @@ final class RtPathReservoirHistory {
                     counters.get(GUIDE_WEIGHT_ZERO_INDEX));
             long guideWeightInvalid = Integer.toUnsignedLong(
                     counters.get(GUIDE_WEIGHT_INVALID_INDEX));
+            long guideSelectionEligible = Integer.toUnsignedLong(
+                    counters.get(GUIDE_SELECTION_ELIGIBLE_INDEX));
+            long guideSelectionPositive = Integer.toUnsignedLong(
+                    counters.get(GUIDE_SELECTION_POSITIVE_INDEX));
+            long guideSelectionZero = Integer.toUnsignedLong(
+                    counters.get(GUIDE_SELECTION_ZERO_INDEX));
+            long guideSelectionCurrentReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_SELECTION_CURRENT_REJECT_INDEX));
+            long guideSelectionProbabilityHighReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_SELECTION_PROBABILITY_HIGH_REJECT_INDEX));
+            long guideSelectionArithmeticReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_SELECTION_ARITHMETIC_REJECT_INDEX));
             long crossFrameReceiverReject = crossFrameReceiverSurfaceReject
                     + crossFrameReceiverSampleReject + crossFrameReceiverEdgeReject
                     + crossFrameReceiverTopologyReject + crossFrameReceiverDepthReject
@@ -629,7 +647,9 @@ final class RtPathReservoirHistory {
                              + "guideRemap[eligible={},ready={},geometry={},pdf={},throughput={}], "
                              + "guideVisibility[eligible={},clear={},tinted={},occluded={},invalid={}], "
                              + "guideTarget[eligible={},positive={},zero={},invalid={}], "
-                             + "guideWeight[eligible={},positive={},zero={},invalid={}]",
+                             + "guideWeight[eligible={},positive={},zero={},invalid={}], "
+                             + "guideSelection[eligible={},positive={},zero={},current={},high={},"
+                             + "arithmetic={}]",
                     total,
                     values[0], percent(values[0], total),
                     values[1], percent(values[1], total),
@@ -733,7 +753,10 @@ final class RtPathReservoirHistory {
                      guideVisibilityEligible, guideVisibilityClear, guideVisibilityTinted,
                      guideVisibilityOccluded, guideVisibilityInvalid,
                      guideTargetEligible, guideTargetPositive, guideTargetZero, guideTargetInvalid,
-                     guideWeightEligible, guideWeightPositive, guideWeightZero, guideWeightInvalid);
+                     guideWeightEligible, guideWeightPositive, guideWeightZero, guideWeightInvalid,
+                     guideSelectionEligible, guideSelectionPositive, guideSelectionZero,
+                     guideSelectionCurrentReject, guideSelectionProbabilityHighReject,
+                     guideSelectionArithmeticReject);
             spatialDiagnosticViewPending = 0;
             return;
         }

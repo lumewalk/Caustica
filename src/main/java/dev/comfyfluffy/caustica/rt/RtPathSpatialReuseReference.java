@@ -670,6 +670,14 @@ final class RtPathSpatialReuseReference {
             return new SpatialGrisWeight(shiftedTarget(transmittance), sourceFinalWeight,
                     sourceEffectiveCount, maxSourceCount, primarySampleJacobian()).mergeWeight();
         }
+
+        double selectionProbability(Rgb transmittance, double sourceFinalWeight,
+                                    double sourceEffectiveCount, double maxSourceCount,
+                                    double currentWeightSum) {
+            return new SpatialGrisWeight(shiftedTarget(transmittance), sourceFinalWeight,
+                    sourceEffectiveCount, maxSourceCount, primarySampleJacobian())
+                    .selectionProbability(currentWeightSum);
+        }
     }
 
     enum GuideOnlyRemapDecision {
@@ -737,6 +745,27 @@ final class RtPathSpatialReuseReference {
             return positiveWeight
                     ? GuideOnlyMergeWeightDecision.POSITIVE
                     : GuideOnlyMergeWeightDecision.ZERO;
+        }
+    }
+
+    enum GuideOnlySelectionDecision {
+        POSITIVE,
+        ZERO,
+        CURRENT_WEIGHT_REJECT,
+        PROBABILITY_HIGH_REJECT,
+        ARITHMETIC_REJECT
+    }
+
+    /** Ordered probability-only result; it does not draw RNG or authorize reservoir mutation. */
+    record GuideOnlySelectionPolicy(boolean currentWeightValid, boolean arithmeticValid,
+                                    boolean probabilityAboveOne, boolean positiveProbability) {
+        GuideOnlySelectionDecision firstReject() {
+            if (!currentWeightValid) return GuideOnlySelectionDecision.CURRENT_WEIGHT_REJECT;
+            if (!arithmeticValid) return GuideOnlySelectionDecision.ARITHMETIC_REJECT;
+            if (probabilityAboveOne) return GuideOnlySelectionDecision.PROBABILITY_HIGH_REJECT;
+            return positiveProbability
+                    ? GuideOnlySelectionDecision.POSITIVE
+                    : GuideOnlySelectionDecision.ZERO;
         }
     }
 

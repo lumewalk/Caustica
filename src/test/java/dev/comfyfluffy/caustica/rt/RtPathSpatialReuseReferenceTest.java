@@ -136,6 +136,10 @@ final class RtPathSpatialReuseReferenceTest {
                 1.0, 1.0, 1.0, 1.0, 1.0);
         assertThrows(IllegalArgumentException.class, () -> valid.selectionProbability(-1.0));
         assertThrows(IllegalArgumentException.class, () -> valid.selectsSource(1.0, 1.0));
+        var aboveStoredWeightCap = new RtPathSpatialReuseReference.SpatialGrisWeight(
+                1.0e20, 1.0e20, 1.0, 8.0, 1.0);
+        assertThrows(IllegalArgumentException.class,
+                () -> aboveStoredWeightCap.selectionProbability(0.0));
     }
 
     @Test
@@ -238,9 +242,19 @@ final class RtPathSpatialReuseReferenceTest {
         var tintedTransmission = new RtPathSpatialReuseReference.Rgb(0.5, 0.25, 0.0);
         assertEquals(0.39816 * 2.0 * 8.0 * remap.primarySampleJacobian(),
                 remap.mergeWeight(tintedTransmission, 2.0, 12.0, 8.0), 1.0e-12);
+        double tintedMergeWeight = remap.mergeWeight(
+                tintedTransmission, 2.0, 12.0, 8.0);
+        assertEquals(tintedMergeWeight / (4.0 + tintedMergeWeight),
+                remap.selectionProbability(
+                        tintedTransmission, 2.0, 12.0, 8.0, 4.0), 1.0e-12);
         assertEquals(0.0, remap.mergeWeight(
                 new RtPathSpatialReuseReference.Rgb(0.0, 0.0, 0.0),
                 2.0, 12.0, 8.0), 1.0e-12);
+        assertEquals(0.0, remap.selectionProbability(
+                new RtPathSpatialReuseReference.Rgb(0.0, 0.0, 0.0),
+                2.0, 12.0, 8.0, 4.0), 1.0e-12);
+        assertThrows(IllegalArgumentException.class, () -> remap.selectionProbability(
+                tintedTransmission, 2.0, 12.0, 8.0, -1.0));
         assertThrows(IllegalArgumentException.class, () -> remap.shiftedRadiance(
                 new RtPathSpatialReuseReference.Rgb(1.01, 1.0, 1.0)));
 
@@ -289,6 +303,27 @@ final class RtPathSpatialReuseReferenceTest {
         assertEquals(RtPathSpatialReuseReference.GuideOnlyMergeWeightDecision.ZERO,
                 new RtPathSpatialReuseReference.GuideOnlyMergeWeightPolicy(true, false)
                         .result());
+
+        assertEquals(RtPathSpatialReuseReference.GuideOnlySelectionDecision.CURRENT_WEIGHT_REJECT,
+                new RtPathSpatialReuseReference.GuideOnlySelectionPolicy(
+                        false, false, false, false)
+                        .firstReject());
+        assertEquals(RtPathSpatialReuseReference.GuideOnlySelectionDecision.ARITHMETIC_REJECT,
+                new RtPathSpatialReuseReference.GuideOnlySelectionPolicy(
+                        true, false, false, false)
+                        .firstReject());
+        assertEquals(RtPathSpatialReuseReference.GuideOnlySelectionDecision.PROBABILITY_HIGH_REJECT,
+                new RtPathSpatialReuseReference.GuideOnlySelectionPolicy(
+                        true, true, true, true)
+                        .firstReject());
+        assertEquals(RtPathSpatialReuseReference.GuideOnlySelectionDecision.POSITIVE,
+                new RtPathSpatialReuseReference.GuideOnlySelectionPolicy(
+                        true, true, false, true)
+                        .firstReject());
+        assertEquals(RtPathSpatialReuseReference.GuideOnlySelectionDecision.ZERO,
+                new RtPathSpatialReuseReference.GuideOnlySelectionPolicy(
+                        true, true, false, false)
+                        .firstReject());
     }
 
     @Test
@@ -755,8 +790,14 @@ final class RtPathSpatialReuseReferenceTest {
         assertEquals(90, RtPathReservoirHistory.GUIDE_WEIGHT_POSITIVE_INDEX);
         assertEquals(91, RtPathReservoirHistory.GUIDE_WEIGHT_ZERO_INDEX);
         assertEquals(92, RtPathReservoirHistory.GUIDE_WEIGHT_INVALID_INDEX);
-        assertEquals(93, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
-        assertEquals(93 * Integer.BYTES,
+        assertEquals(93, RtPathReservoirHistory.GUIDE_SELECTION_ELIGIBLE_INDEX);
+        assertEquals(94, RtPathReservoirHistory.GUIDE_SELECTION_POSITIVE_INDEX);
+        assertEquals(95, RtPathReservoirHistory.GUIDE_SELECTION_ZERO_INDEX);
+        assertEquals(96, RtPathReservoirHistory.GUIDE_SELECTION_CURRENT_REJECT_INDEX);
+        assertEquals(97, RtPathReservoirHistory.GUIDE_SELECTION_PROBABILITY_HIGH_REJECT_INDEX);
+        assertEquals(98, RtPathReservoirHistory.GUIDE_SELECTION_ARITHMETIC_REJECT_INDEX);
+        assertEquals(99, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
+        assertEquals(99 * Integer.BYTES,
                 RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_COUNTER_BYTES);
         assertEquals(32, RtPathReservoirHistory.SHIFTED_RECEIVER_GUIDE_STRIDE);
         assertEquals(27_566_080L,

@@ -1020,6 +1020,36 @@ public void pathMappingReplayValidate() {
                                                     ? PATH_GUIDE_WEIGHT_POSITIVE
                                                     : PATH_GUIDE_WEIGHT_ZERO;
                                     InterlockedAdd(counters[guideWeightResult], 1u);
+                                    if (guideWeightValid) {
+                                        // Selection-readiness audit only: evaluate the probability
+                                        // without consuming RNG or mutating any reservoir state.
+                                        InterlockedAdd(
+                                                counters[PATH_GUIDE_SELECTION_ELIGIBLE], 1u);
+                                        float guideCurrentWeightSum = current.weights.x;
+                                        bool guideCurrentWeightValid =
+                                                isfinite(guideCurrentWeightSum)
+                                                && guideCurrentWeightSum >= 0.0;
+                                        float guideNextWeightSum = min(guideCurrentWeightSum
+                                                + guideMergeWeight, 1.0e30);
+                                        float guideSelectionProbability = guideMergeWeight > 0.0
+                                                && guideNextWeightSum > 0.0
+                                                ? guideMergeWeight / guideNextWeightSum : 0.0;
+                                        bool guideSelectionArithmeticValid =
+                                                isfinite(guideNextWeightSum)
+                                                && guideNextWeightSum >= 0.0
+                                                && isfinite(guideSelectionProbability)
+                                                && guideSelectionProbability >= 0.0;
+                                        uint guideSelectionResult = !guideCurrentWeightValid
+                                                ? PATH_GUIDE_SELECTION_CURRENT_REJECT
+                                                : !guideSelectionArithmeticValid
+                                                        ? PATH_GUIDE_SELECTION_ARITHMETIC_REJECT
+                                                        : guideSelectionProbability > 1.0
+                                                                ? PATH_GUIDE_SELECTION_PROBABILITY_HIGH_REJECT
+                                                                : guideSelectionProbability > 0.0
+                                                                        ? PATH_GUIDE_SELECTION_POSITIVE
+                                                                        : PATH_GUIDE_SELECTION_ZERO;
+                                        InterlockedAdd(counters[guideSelectionResult], 1u);
+                                    }
                                 }
                             }
                         }
