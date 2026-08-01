@@ -342,6 +342,12 @@ capture rather than removing RGB transmittance from the contract. The next bound
 counter-only post-visibility shifted-radiance/target audit for visible records; persistent history,
 weights, and the estimator remain out of scope.
 
+A targeted glass/water follow-up exercised the rare tinted branch. Across 48 readbacks and 952802
+eligible records, 952446 were clear, 7 were tinted across five separate frames, 349 were occluded,
+and invalid remained zero. Both identities stayed exact in every readback. RGB transmittance is
+therefore runtime-covered as well as reference-tested; its low frequency is a property of the
+receiver-to-shared-vertex geometry in the tested scene.
+
 ## Linux
 
 Set `DLSS_SDK` and `VULKAN_SDK` before configuring CMake:

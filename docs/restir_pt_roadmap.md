@@ -423,6 +423,11 @@ identities were exact in every frame. The next bounded gate may apply the return
 to the already proven throughput ratio and audit the resulting shifted radiance/target with counters
 only; it still cannot authorize persistent history or estimator use.
 
+A targeted glass/water follow-up completed RGB-transmittance coverage: 48 readbacks contained
+952802 eligible records, with 952446 clear, 7 tinted across five frames, 349 occluded, and zero
+invalid. Both counter identities remained exact in every frame. The visibility gate is therefore
+runtime-proven for clear, tinted, and occluded terminal paths.
+
 ## Delivery Phases
 
 ### Phase 0 — Wavefront Integration Baseline
