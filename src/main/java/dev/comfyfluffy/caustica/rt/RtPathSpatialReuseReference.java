@@ -494,6 +494,41 @@ final class RtPathSpatialReuseReference {
             return new SpatialScratchMerge(
                     nextWeightSum, nextEffectiveCount, finalWeight, sourceSelected);
         }
+
+        /** Counter-only authority for the post-selection arithmetic gate. */
+        SpatialShadowMerge stableShadowMerge(double currentWeightSum,
+                                             double currentEffectiveCount,
+                                             double currentTarget,
+                                             double randomUnit) {
+            if (!nonNegativeFinite(currentEffectiveCount)
+                    || !nonNegativeFinite(currentTarget)) {
+                throw new IllegalArgumentException("invalid current shadow reservoir");
+            }
+            boolean sourceSelected = stableSelectsSource(currentWeightSum, randomUnit);
+            double nextWeightSum = Math.min(currentWeightSum + mergeWeight(), 1.0e30);
+            double nextEffectiveCount = Math.min(
+                    currentEffectiveCount + clampedSourceCount(), 16777216.0);
+            double selectedTarget = sourceSelected ? shiftedTargetDensity : currentTarget;
+            if (!nonNegativeFinite(nextWeightSum)
+                    || !nonNegativeFinite(nextEffectiveCount)
+                    || !nonNegativeFinite(selectedTarget)) {
+                throw new IllegalArgumentException("invalid spatial shadow merge arithmetic");
+            }
+            if (nextWeightSum == 0.0) {
+                return new SpatialShadowMerge(nextWeightSum, nextEffectiveCount,
+                        selectedTarget, 0.0, sourceSelected, true);
+            }
+            if (nextEffectiveCount == 0.0 || selectedTarget == 0.0) {
+                throw new IllegalArgumentException("invalid selected shadow sample");
+            }
+            double denominator = nextEffectiveCount * selectedTarget;
+            double finalWeight = nextWeightSum / denominator;
+            if (!positiveFinite(denominator) || !positiveFinite(finalWeight)) {
+                throw new IllegalArgumentException("invalid spatial shadow final weight");
+            }
+            return new SpatialShadowMerge(nextWeightSum, nextEffectiveCount,
+                    selectedTarget, finalWeight, sourceSelected, false);
+        }
     }
 
     record SpatialScratchMerge(double weightSum, double effectiveCount,
@@ -502,6 +537,25 @@ final class RtPathSpatialReuseReference {
             if (!positiveFinite(weightSum) || !positiveFinite(effectiveCount)
                     || !positiveFinite(finalWeight)) {
                 throw new IllegalArgumentException("invalid spatial scratch merge result");
+            }
+        }
+    }
+
+    record SpatialShadowMerge(double weightSum, double effectiveCount,
+                              double selectedTarget, double finalWeight,
+                              boolean sourceSelected, boolean empty) {
+        SpatialShadowMerge {
+            if (!nonNegativeFinite(weightSum) || !nonNegativeFinite(effectiveCount)
+                    || !nonNegativeFinite(selectedTarget) || !nonNegativeFinite(finalWeight)) {
+                throw new IllegalArgumentException("invalid spatial shadow merge result");
+            }
+            if (empty) {
+                if (weightSum != 0.0 || finalWeight != 0.0) {
+                    throw new IllegalArgumentException("invalid empty spatial shadow merge");
+                }
+            } else if (weightSum == 0.0 || effectiveCount == 0.0
+                    || selectedTarget == 0.0 || finalWeight == 0.0) {
+                throw new IllegalArgumentException("invalid ready spatial shadow merge");
             }
         }
     }
@@ -726,6 +780,17 @@ final class RtPathSpatialReuseReference {
             return new SpatialGrisWeight(shiftedTarget(transmittance), sourceFinalWeight,
                     sourceEffectiveCount, maxSourceCount, primarySampleJacobian())
                     .stableSelectsSource(currentWeightSum, randomUnit);
+        }
+
+        SpatialShadowMerge stableShadowMerge(Rgb transmittance, double sourceFinalWeight,
+                                             double sourceEffectiveCount, double maxSourceCount,
+                                             double currentWeightSum,
+                                             double currentEffectiveCount,
+                                             double currentTarget, double randomUnit) {
+            return new SpatialGrisWeight(shiftedTarget(transmittance), sourceFinalWeight,
+                    sourceEffectiveCount, maxSourceCount, primarySampleJacobian())
+                    .stableShadowMerge(currentWeightSum, currentEffectiveCount,
+                            currentTarget, randomUnit);
         }
     }
 

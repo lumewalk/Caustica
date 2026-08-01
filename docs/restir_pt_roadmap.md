@@ -513,6 +513,24 @@ therefore accepted for diagnostic selection. The next bounded gate may audit pos
 weight/M/final-W arithmetic and selected/retained sample readiness, but still must not write a
 reservoir/history record or affect the estimator.
 
+That post-selection gate now shadows the future stored arithmetic in registers only. It keeps the
+existing caps of `1e30` for weight sum and `16777216` for effective M, chooses either the shifted
+source target or retained current target using the proven stable Bernoulli result, and forms final
+`W = cappedWeightSum / (cappedM * selectedTarget)`. Its mutually exclusive counter partition is
+`eligible = selectedReady + retainedReady + empty + sampleReject + arithmeticReject`; a zero final
+weight sum is an intentional empty no-op, while every non-empty ready result requires finite positive
+M, selected target, denominator, and final W. The shadow gate copies no sample metadata, writes no
+scratch or persistent reservoir/history state, and does not change admission or the estimator.
+
+Runtime passed this boundary across 38 readbacks and 268384 eligible records. All three upstream
+eligibility totals matched exactly. The stable Bernoulli selected 257389 source samples and retained
+10995 current samples; post-selection classified exactly 257389 as selected-ready, 7292 as
+retained-ready, and 3703 as valid empty no-ops. Sample and arithmetic rejects were both zero, as were
+stable-probability and Bernoulli invalids. Every frame preserved the full terminal partition,
+selected-ready equalled Bernoulli-selected, and the remaining post-selection outcomes equalled
+Bernoulli-retained. This proves the counter-only arithmetic/readiness contract, but still does not
+authorize copying sample metadata or writing scratch/persistent history.
+
 ## Delivery Phases
 
 ### Phase 0 — Wavefront Integration Baseline

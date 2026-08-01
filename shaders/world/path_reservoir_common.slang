@@ -106,7 +106,13 @@ public static const uint PATH_GUIDE_STABLE_BERNOULLI_ELIGIBLE = 103u;
 public static const uint PATH_GUIDE_STABLE_BERNOULLI_SELECTED = 104u;
 public static const uint PATH_GUIDE_STABLE_BERNOULLI_RETAINED = 105u;
 public static const uint PATH_GUIDE_STABLE_BERNOULLI_INVALID = 106u;
-public static const uint PATH_SHIFT_DIAGNOSTIC_COUNTER_COUNT = 107u;
+public static const uint PATH_GUIDE_POST_SELECTION_ELIGIBLE = 107u;
+public static const uint PATH_GUIDE_POST_SELECTION_SELECTED_READY = 108u;
+public static const uint PATH_GUIDE_POST_SELECTION_RETAINED_READY = 109u;
+public static const uint PATH_GUIDE_POST_SELECTION_EMPTY = 110u;
+public static const uint PATH_GUIDE_POST_SELECTION_SAMPLE_REJECT = 111u;
+public static const uint PATH_GUIDE_POST_SELECTION_ARITHMETIC_REJECT = 112u;
+public static const uint PATH_SHIFT_DIAGNOSTIC_COUNTER_COUNT = 113u;
 public static const uint PATH_SHIFT_DIAGNOSTIC_PAIR_MASK = 3u;
 public static const uint PATH_SHIFT_DIAGNOSTIC_MERGE_PAIR_OFFSET =
         PATH_SPATIAL_DIAGNOSTIC_PAIR_CAPACITY * 2u;

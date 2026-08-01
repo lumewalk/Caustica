@@ -1087,13 +1087,70 @@ public void pathMappingReplayValidate() {
                                                 && isfinite(guideBernoulliRandom)
                                                 && guideBernoulliRandom >= 0.0
                                                 && guideBernoulliRandom < 1.0;
+                                        bool guideSourceSelected = guideBernoulliValid
+                                                && guideBernoulliRandom
+                                                        < guideStableSelectionProbability;
                                         uint guideBernoulliResult = !guideBernoulliValid
                                                 ? PATH_GUIDE_STABLE_BERNOULLI_INVALID
-                                                : guideBernoulliRandom
-                                                        < guideStableSelectionProbability
+                                                : guideSourceSelected
                                                         ? PATH_GUIDE_STABLE_BERNOULLI_SELECTED
                                                         : PATH_GUIDE_STABLE_BERNOULLI_RETAINED;
                                         InterlockedAdd(counters[guideBernoulliResult], 1u);
+
+                                        // Shadow only the arithmetic needed after selection. No
+                                        // sample metadata or reservoir state is copied or written.
+                                        InterlockedAdd(
+                                                counters[PATH_GUIDE_POST_SELECTION_ELIGIBLE], 1u);
+                                        float guidePostWeightSum = min(guideCurrentWeightSum
+                                                + guideMergeWeight, 1.0e30);
+                                        float guidePostEffectiveCount = min(current.weights.y
+                                                + guideSourceCount, 16777216.0);
+                                        float guidePostSelectedTarget = guideSourceSelected
+                                                ? guideShiftedTarget
+                                                : current.sampleRadianceTarget.w;
+                                        bool guidePostBaseValid = guideBernoulliValid
+                                                && isfinite(current.weights.y)
+                                                && current.weights.y >= 0.0
+                                                && isfinite(guidePostWeightSum)
+                                                && guidePostWeightSum >= 0.0
+                                                && isfinite(guidePostEffectiveCount)
+                                                && guidePostEffectiveCount >= 0.0;
+                                        bool guidePostSampleValid =
+                                                isfinite(guidePostSelectedTarget)
+                                                && guidePostSelectedTarget >= 0.0;
+                                        uint guidePostSelectionResult;
+                                        if (!guidePostBaseValid) {
+                                            guidePostSelectionResult =
+                                                    PATH_GUIDE_POST_SELECTION_ARITHMETIC_REJECT;
+                                        } else if (!guidePostSampleValid) {
+                                            guidePostSelectionResult =
+                                                    PATH_GUIDE_POST_SELECTION_SAMPLE_REJECT;
+                                        } else if (guidePostWeightSum == 0.0) {
+                                            guidePostSelectionResult =
+                                                    PATH_GUIDE_POST_SELECTION_EMPTY;
+                                        } else if (guidePostSelectedTarget == 0.0) {
+                                            guidePostSelectionResult =
+                                                    PATH_GUIDE_POST_SELECTION_SAMPLE_REJECT;
+                                        } else {
+                                            float guidePostDenominator = guidePostEffectiveCount
+                                                    * guidePostSelectedTarget;
+                                            float guidePostFinalWeight = guidePostWeightSum
+                                                    / guidePostDenominator;
+                                            bool guidePostArithmeticValid =
+                                                    guidePostEffectiveCount > 0.0
+                                                    && isfinite(guidePostDenominator)
+                                                    && guidePostDenominator > 0.0
+                                                    && isfinite(guidePostFinalWeight)
+                                                    && guidePostFinalWeight > 0.0;
+                                            guidePostSelectionResult =
+                                                    !guidePostArithmeticValid
+                                                    ? PATH_GUIDE_POST_SELECTION_ARITHMETIC_REJECT
+                                                    : guideSourceSelected
+                                                            ? PATH_GUIDE_POST_SELECTION_SELECTED_READY
+                                                            : PATH_GUIDE_POST_SELECTION_RETAINED_READY;
+                                        }
+                                        InterlockedAdd(
+                                                counters[guidePostSelectionResult], 1u);
                                     }
                                 }
                             }

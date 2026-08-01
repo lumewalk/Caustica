@@ -132,7 +132,13 @@ final class RtPathReservoirHistory {
     static final int GUIDE_STABLE_BERNOULLI_SELECTED_INDEX = 104;
     static final int GUIDE_STABLE_BERNOULLI_RETAINED_INDEX = 105;
     static final int GUIDE_STABLE_BERNOULLI_INVALID_INDEX = 106;
-    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 107;
+    static final int GUIDE_POST_SELECTION_ELIGIBLE_INDEX = 107;
+    static final int GUIDE_POST_SELECTION_SELECTED_READY_INDEX = 108;
+    static final int GUIDE_POST_SELECTION_RETAINED_READY_INDEX = 109;
+    static final int GUIDE_POST_SELECTION_EMPTY_INDEX = 110;
+    static final int GUIDE_POST_SELECTION_SAMPLE_REJECT_INDEX = 111;
+    static final int GUIDE_POST_SELECTION_ARITHMETIC_REJECT_INDEX = 112;
+    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 113;
     static final int SHIFTED_RECEIVER_GUIDE_STRIDE = 8 * Float.BYTES;
     static final int SPATIAL_DIAGNOSTIC_COUNTER_BYTES =
             SHIFTED_DIAGNOSTIC_COUNTER_COUNT * Integer.BYTES;
@@ -563,6 +569,18 @@ final class RtPathReservoirHistory {
                     counters.get(GUIDE_STABLE_BERNOULLI_RETAINED_INDEX));
             long guideStableBernoulliInvalid = Integer.toUnsignedLong(
                     counters.get(GUIDE_STABLE_BERNOULLI_INVALID_INDEX));
+            long guidePostSelectionEligible = Integer.toUnsignedLong(
+                    counters.get(GUIDE_POST_SELECTION_ELIGIBLE_INDEX));
+            long guidePostSelectionSelectedReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_POST_SELECTION_SELECTED_READY_INDEX));
+            long guidePostSelectionRetainedReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_POST_SELECTION_RETAINED_READY_INDEX));
+            long guidePostSelectionEmpty = Integer.toUnsignedLong(
+                    counters.get(GUIDE_POST_SELECTION_EMPTY_INDEX));
+            long guidePostSelectionSampleReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_POST_SELECTION_SAMPLE_REJECT_INDEX));
+            long guidePostSelectionArithmeticReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_POST_SELECTION_ARITHMETIC_REJECT_INDEX));
             long crossFrameReceiverReject = crossFrameReceiverSurfaceReject
                     + crossFrameReceiverSampleReject + crossFrameReceiverEdgeReject
                     + crossFrameReceiverTopologyReject + crossFrameReceiverDepthReject
@@ -675,7 +693,9 @@ final class RtPathReservoirHistory {
                              + "guideSelection[eligible={},positive={},zero={},current={},high={},"
                              + "arithmetic={}], "
                              + "guideStableSelection[eligible={},positive={},zero={},invalid={}], "
-                             + "guideStableBernoulli[eligible={},selected={},retained={},invalid={}]",
+                             + "guideStableBernoulli[eligible={},selected={},retained={},invalid={}], "
+                             + "guidePostSelection[eligible={},selectedReady={},retainedReady={},"
+                             + "empty={},sample={},arithmetic={}]",
                     total,
                     values[0], percent(values[0], total),
                     values[1], percent(values[1], total),
@@ -786,7 +806,10 @@ final class RtPathReservoirHistory {
                      guideStableSelectionEligible, guideStableSelectionPositive,
                      guideStableSelectionZero, guideStableSelectionInvalid,
                      guideStableBernoulliEligible, guideStableBernoulliSelected,
-                     guideStableBernoulliRetained, guideStableBernoulliInvalid);
+                     guideStableBernoulliRetained, guideStableBernoulliInvalid,
+                     guidePostSelectionEligible, guidePostSelectionSelectedReady,
+                     guidePostSelectionRetainedReady, guidePostSelectionEmpty,
+                     guidePostSelectionSampleReject, guidePostSelectionArithmeticReject);
             spatialDiagnosticViewPending = 0;
             return;
         }

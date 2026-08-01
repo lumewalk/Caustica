@@ -173,6 +173,43 @@ final class RtPathSpatialReuseReferenceTest {
     }
 
     @Test
+    void stableShadowMergeAuditsPostSelectionArithmeticWithoutMutation() {
+        var weight = new RtPathSpatialReuseReference.SpatialGrisWeight(
+                3.0, 2.0, 12.0, 8.0, 0.25);
+        var selected = weight.stableShadowMerge(4.0, 2.0, 5.0, 0.74);
+        assertEquals(16.0, selected.weightSum(), 1.0e-12);
+        assertEquals(10.0, selected.effectiveCount(), 1.0e-12);
+        assertEquals(3.0, selected.selectedTarget(), 1.0e-12);
+        assertEquals(16.0 / 30.0, selected.finalWeight(), 1.0e-12);
+        assertTrue(selected.sourceSelected());
+        assertFalse(selected.empty());
+
+        var retained = weight.stableShadowMerge(4.0, 2.0, 5.0, 0.75);
+        assertEquals(5.0, retained.selectedTarget(), 1.0e-12);
+        assertEquals(16.0 / 50.0, retained.finalWeight(), 1.0e-12);
+        assertFalse(retained.sourceSelected());
+        assertFalse(retained.empty());
+
+        var zero = new RtPathSpatialReuseReference.SpatialGrisWeight(
+                0.0, 2.0, 1.0, 8.0, 1.0);
+        var empty = zero.stableShadowMerge(0.0, 0.0, 0.0, 0.0);
+        assertEquals(0.0, empty.weightSum(), 0.0);
+        assertEquals(0.0, empty.finalWeight(), 0.0);
+        assertTrue(empty.empty());
+
+        assertThrows(IllegalArgumentException.class,
+                () -> weight.stableShadowMerge(4.0, 2.0, 0.0, 0.75));
+
+        var extreme = new RtPathSpatialReuseReference.SpatialGrisWeight(
+                1.0e40, 1.0, 1.0, 8.0, 1.0);
+        var capped = extreme.stableShadowMerge(0.0, 0.0, 0.0, 0.99);
+        assertEquals(1.0e30, capped.weightSum(), 0.0);
+        assertEquals(1.0, capped.effectiveCount(), 0.0);
+        assertEquals(1.0e40, capped.selectedTarget(), 0.0);
+        assertEquals(1.0e-10, capped.finalWeight(), 1.0e-22);
+    }
+
+    @Test
     void diffuseShiftDensityReconstructsReceiverPdfAndPssJacobian() {
         var density = new RtPathSpatialReuseReference.DiffuseShiftDensity(
                 0.25, 0.50, 0.40, 0.60, 0.80);
@@ -844,8 +881,14 @@ final class RtPathSpatialReuseReferenceTest {
         assertEquals(104, RtPathReservoirHistory.GUIDE_STABLE_BERNOULLI_SELECTED_INDEX);
         assertEquals(105, RtPathReservoirHistory.GUIDE_STABLE_BERNOULLI_RETAINED_INDEX);
         assertEquals(106, RtPathReservoirHistory.GUIDE_STABLE_BERNOULLI_INVALID_INDEX);
-        assertEquals(107, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
-        assertEquals(107 * Integer.BYTES,
+        assertEquals(107, RtPathReservoirHistory.GUIDE_POST_SELECTION_ELIGIBLE_INDEX);
+        assertEquals(108, RtPathReservoirHistory.GUIDE_POST_SELECTION_SELECTED_READY_INDEX);
+        assertEquals(109, RtPathReservoirHistory.GUIDE_POST_SELECTION_RETAINED_READY_INDEX);
+        assertEquals(110, RtPathReservoirHistory.GUIDE_POST_SELECTION_EMPTY_INDEX);
+        assertEquals(111, RtPathReservoirHistory.GUIDE_POST_SELECTION_SAMPLE_REJECT_INDEX);
+        assertEquals(112, RtPathReservoirHistory.GUIDE_POST_SELECTION_ARITHMETIC_REJECT_INDEX);
+        assertEquals(113, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
+        assertEquals(113 * Integer.BYTES,
                 RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_COUNTER_BYTES);
         assertEquals(32, RtPathReservoirHistory.SHIFTED_RECEIVER_GUIDE_STRIDE);
         assertEquals(27_566_080L,
