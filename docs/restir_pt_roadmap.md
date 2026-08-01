@@ -478,6 +478,25 @@ estimator-changing bias. The next bounded gate must define and audit an overflow
 ratio from the uncapped relative weights while keeping stored weight-sum capping and all reservoir
 mutation disabled.
 
+That bounded A/B now evaluates the mathematically equivalent uncapped ratio without first adding
+the two weights: when the candidate is larger it uses
+`1 / (1 + currentWeightSum / mergeWeight)`, otherwise it uses
+`ratio / (1 + ratio)` with `ratio = mergeWeight / currentWeightSum`. This avoids both overflow and
+the rejected `1e30` denominator cap without clamping the probability. The new counter-only partition
+requires `guideStableSelection.eligible = positive + zero + invalid`; runtime should additionally
+show `stable positive = old positive + old high`, `stable zero = old zero`, and zero invalid values.
+Stored weight-sum capping, RNG, selection, reservoir/history writes, and the estimator remain
+unchanged until this comparison passes.
+
+Runtime passed the stable-ratio boundary across 45 readbacks and 261882 eligible records. The stable
+partition contained 258020 positive, 3862 zero, and zero invalid probabilities. On the identical
+population the rejected capped formula produced 252546 positive, 3862 zero, 5474 probability-high,
+and zero current/arithmetic rejects. Every frame preserved exact terminal accounting, identical
+eligibility and zero populations, and `stable positive = old positive + old high`. The uncapped
+relative ratio is therefore accepted as the probability contract; RNG, sample selection, stored
+weight-sum policy, scratch/persistent history, and the estimator are still unchanged. Any Bernoulli
+selection experiment must be introduced as its own counter-only gate.
+
 ## Delivery Phases
 
 ### Phase 0 — Wavefront Integration Baseline

@@ -440,6 +440,31 @@ final class RtPathSpatialReuseReference {
             return probability;
         }
 
+        /**
+         * Uncapped relative-weight selection ratio for the counter-only overflow A/B. This method
+         * intentionally does not change the stored weight-sum cap or the existing scratch merge.
+         */
+        double stableSelectionProbability(double currentWeightSum) {
+            if (!nonNegativeFinite(currentWeightSum)) {
+                throw new IllegalArgumentException("invalid current reservoir weight sum");
+            }
+            double weight = mergeWeight();
+            if (weight == 0.0) {
+                return 0.0;
+            }
+            double probability;
+            if (currentWeightSum <= weight) {
+                probability = 1.0 / (1.0 + currentWeightSum / weight);
+            } else {
+                double ratio = weight / currentWeightSum;
+                probability = ratio / (1.0 + ratio);
+            }
+            if (!Double.isFinite(probability) || probability < 0.0 || probability > 1.0) {
+                throw new IllegalArgumentException("invalid stable spatial selection probability");
+            }
+            return probability;
+        }
+
         boolean selectsSource(double currentWeightSum, double randomUnit) {
             if (!Double.isFinite(randomUnit) || randomUnit < 0.0 || randomUnit >= 1.0) {
                 throw new IllegalArgumentException("invalid spatial GRIS selection random value");
@@ -677,6 +702,14 @@ final class RtPathSpatialReuseReference {
             return new SpatialGrisWeight(shiftedTarget(transmittance), sourceFinalWeight,
                     sourceEffectiveCount, maxSourceCount, primarySampleJacobian())
                     .selectionProbability(currentWeightSum);
+        }
+
+        double stableSelectionProbability(Rgb transmittance, double sourceFinalWeight,
+                                          double sourceEffectiveCount, double maxSourceCount,
+                                          double currentWeightSum) {
+            return new SpatialGrisWeight(shiftedTarget(transmittance), sourceFinalWeight,
+                    sourceEffectiveCount, maxSourceCount, primarySampleJacobian())
+                    .stableSelectionProbability(currentWeightSum);
         }
     }
 

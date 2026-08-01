@@ -1049,6 +1049,29 @@ public void pathMappingReplayValidate() {
                                                                         ? PATH_GUIDE_SELECTION_POSITIVE
                                                                         : PATH_GUIDE_SELECTION_ZERO;
                                         InterlockedAdd(counters[guideSelectionResult], 1u);
+
+                                        // Counter-only A/B against the rejected capped-denominator
+                                        // formula above. The stable ratio uses uncapped relative
+                                        // weights and performs no RNG draw or reservoir mutation.
+                                        InterlockedAdd(
+                                                counters[PATH_GUIDE_STABLE_SELECTION_ELIGIBLE], 1u);
+                                        float guideStableSelectionProbability =
+                                                guideCurrentWeightValid
+                                                ? pathStableSelectionProbability(
+                                                        guideCurrentWeightSum, guideMergeWeight)
+                                                : 0.0;
+                                        bool guideStableSelectionValid = guideCurrentWeightValid
+                                                && isfinite(guideStableSelectionProbability)
+                                                && guideStableSelectionProbability >= 0.0
+                                                && guideStableSelectionProbability <= 1.0;
+                                        uint guideStableSelectionResult =
+                                                !guideStableSelectionValid
+                                                ? PATH_GUIDE_STABLE_SELECTION_INVALID
+                                                : guideStableSelectionProbability > 0.0
+                                                        ? PATH_GUIDE_STABLE_SELECTION_POSITIVE
+                                                        : PATH_GUIDE_STABLE_SELECTION_ZERO;
+                                        InterlockedAdd(
+                                                counters[guideStableSelectionResult], 1u);
                                     }
                                 }
                             }

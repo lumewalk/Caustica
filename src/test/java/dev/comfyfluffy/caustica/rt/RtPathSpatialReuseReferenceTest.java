@@ -101,6 +101,7 @@ final class RtPathSpatialReuseReferenceTest {
         assertEquals(8.0, weight.clampedSourceCount(), 1.0e-12);
         assertEquals(12.0, weight.mergeWeight(), 1.0e-12);
         assertEquals(0.75, weight.selectionProbability(4.0), 1.0e-12);
+        assertEquals(0.75, weight.stableSelectionProbability(4.0), 1.0e-12);
         assertTrue(weight.selectsSource(4.0, 0.74));
         assertFalse(weight.selectsSource(4.0, 0.75));
         var selected = weight.scratchMerge(4.0, 2.0, 5.0, 0.74);
@@ -140,6 +141,26 @@ final class RtPathSpatialReuseReferenceTest {
                 1.0e20, 1.0e20, 1.0, 8.0, 1.0);
         assertThrows(IllegalArgumentException.class,
                 () -> aboveStoredWeightCap.selectionProbability(0.0));
+        assertEquals(1.0, aboveStoredWeightCap.stableSelectionProbability(0.0), 0.0);
+    }
+
+    @Test
+    void stableSpatialSelectionRatioHandlesExtremeFiniteWeightsWithoutClamping() {
+        var large = new RtPathSpatialReuseReference.SpatialGrisWeight(
+                1.0e40, 1.0, 1.0, 8.0, 1.0);
+        assertEquals(1.0, large.stableSelectionProbability(0.0), 0.0);
+        assertEquals(0.5, large.stableSelectionProbability(1.0e40), 0.0);
+        assertEquals(1.0, large.stableSelectionProbability(1.0e20), 0.0);
+
+        var small = new RtPathSpatialReuseReference.SpatialGrisWeight(
+                1.0e20, 1.0, 1.0, 8.0, 1.0);
+        assertEquals(1.0e-20, small.stableSelectionProbability(1.0e40), 1.0e-32);
+
+        var maximum = new RtPathSpatialReuseReference.SpatialGrisWeight(
+                Double.MAX_VALUE, 1.0, 1.0, 8.0, 1.0);
+        assertEquals(0.5, maximum.stableSelectionProbability(Double.MAX_VALUE), 0.0);
+        assertThrows(IllegalArgumentException.class,
+                () -> maximum.stableSelectionProbability(-1.0));
     }
 
     @Test
@@ -246,6 +267,9 @@ final class RtPathSpatialReuseReferenceTest {
                 tintedTransmission, 2.0, 12.0, 8.0);
         assertEquals(tintedMergeWeight / (4.0 + tintedMergeWeight),
                 remap.selectionProbability(
+                        tintedTransmission, 2.0, 12.0, 8.0, 4.0), 1.0e-12);
+        assertEquals(tintedMergeWeight / (4.0 + tintedMergeWeight),
+                remap.stableSelectionProbability(
                         tintedTransmission, 2.0, 12.0, 8.0, 4.0), 1.0e-12);
         assertEquals(0.0, remap.mergeWeight(
                 new RtPathSpatialReuseReference.Rgb(0.0, 0.0, 0.0),
@@ -796,8 +820,12 @@ final class RtPathSpatialReuseReferenceTest {
         assertEquals(96, RtPathReservoirHistory.GUIDE_SELECTION_CURRENT_REJECT_INDEX);
         assertEquals(97, RtPathReservoirHistory.GUIDE_SELECTION_PROBABILITY_HIGH_REJECT_INDEX);
         assertEquals(98, RtPathReservoirHistory.GUIDE_SELECTION_ARITHMETIC_REJECT_INDEX);
-        assertEquals(99, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
-        assertEquals(99 * Integer.BYTES,
+        assertEquals(99, RtPathReservoirHistory.GUIDE_STABLE_SELECTION_ELIGIBLE_INDEX);
+        assertEquals(100, RtPathReservoirHistory.GUIDE_STABLE_SELECTION_POSITIVE_INDEX);
+        assertEquals(101, RtPathReservoirHistory.GUIDE_STABLE_SELECTION_ZERO_INDEX);
+        assertEquals(102, RtPathReservoirHistory.GUIDE_STABLE_SELECTION_INVALID_INDEX);
+        assertEquals(103, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
+        assertEquals(103 * Integer.BYTES,
                 RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_COUNTER_BYTES);
         assertEquals(32, RtPathReservoirHistory.SHIFTED_RECEIVER_GUIDE_STRIDE);
         assertEquals(27_566_080L,

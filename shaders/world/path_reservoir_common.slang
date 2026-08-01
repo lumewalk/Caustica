@@ -98,7 +98,11 @@ public static const uint PATH_GUIDE_SELECTION_ZERO = 95u;
 public static const uint PATH_GUIDE_SELECTION_CURRENT_REJECT = 96u;
 public static const uint PATH_GUIDE_SELECTION_PROBABILITY_HIGH_REJECT = 97u;
 public static const uint PATH_GUIDE_SELECTION_ARITHMETIC_REJECT = 98u;
-public static const uint PATH_SHIFT_DIAGNOSTIC_COUNTER_COUNT = 99u;
+public static const uint PATH_GUIDE_STABLE_SELECTION_ELIGIBLE = 99u;
+public static const uint PATH_GUIDE_STABLE_SELECTION_POSITIVE = 100u;
+public static const uint PATH_GUIDE_STABLE_SELECTION_ZERO = 101u;
+public static const uint PATH_GUIDE_STABLE_SELECTION_INVALID = 102u;
+public static const uint PATH_SHIFT_DIAGNOSTIC_COUNTER_COUNT = 103u;
 public static const uint PATH_SHIFT_DIAGNOSTIC_PAIR_MASK = 3u;
 public static const uint PATH_SHIFT_DIAGNOSTIC_MERGE_PAIR_OFFSET =
         PATH_SPATIAL_DIAGNOSTIC_PAIR_CAPACITY * 2u;
@@ -112,6 +116,18 @@ public static const float PATH_SPATIAL_NORMAL_COS = 0.85;
 public static const float PATH_SPATIAL_RELATIVE_DEPTH = 0.10;
 public static const float PATH_TEMPORAL_MAX_SOURCE_COUNT = 8.0;
 public static const float PATH_IDENTITY_SHIFT_JACOBIAN = 1.0;
+
+// Overflow-stable form of mergeWeight / (currentWeightSum + mergeWeight). Inputs are expected to
+// be finite and non-negative. This ratio is deliberately independent of the stored weight-sum cap.
+public float pathStableSelectionProbability(float currentWeightSum, float mergeWeight)
+{
+    if (mergeWeight == 0.0) return 0.0;
+    if (currentWeightSum <= mergeWeight) {
+        return 1.0 / (1.0 + currentWeightSum / mergeWeight);
+    }
+    float ratio = mergeWeight / currentWeightSum;
+    return ratio / (1.0 + ratio);
+}
 
 public static const uint PATH_TRANSPORT_DIFFUSE = 1u;
 public static const uint PATH_TRANSPORT_GLOSSY = 2u;

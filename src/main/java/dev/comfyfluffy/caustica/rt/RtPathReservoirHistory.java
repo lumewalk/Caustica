@@ -124,7 +124,11 @@ final class RtPathReservoirHistory {
     static final int GUIDE_SELECTION_CURRENT_REJECT_INDEX = 96;
     static final int GUIDE_SELECTION_PROBABILITY_HIGH_REJECT_INDEX = 97;
     static final int GUIDE_SELECTION_ARITHMETIC_REJECT_INDEX = 98;
-    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 99;
+    static final int GUIDE_STABLE_SELECTION_ELIGIBLE_INDEX = 99;
+    static final int GUIDE_STABLE_SELECTION_POSITIVE_INDEX = 100;
+    static final int GUIDE_STABLE_SELECTION_ZERO_INDEX = 101;
+    static final int GUIDE_STABLE_SELECTION_INVALID_INDEX = 102;
+    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 103;
     static final int SHIFTED_RECEIVER_GUIDE_STRIDE = 8 * Float.BYTES;
     static final int SPATIAL_DIAGNOSTIC_COUNTER_BYTES =
             SHIFTED_DIAGNOSTIC_COUNTER_COUNT * Integer.BYTES;
@@ -539,6 +543,14 @@ final class RtPathReservoirHistory {
                     counters.get(GUIDE_SELECTION_PROBABILITY_HIGH_REJECT_INDEX));
             long guideSelectionArithmeticReject = Integer.toUnsignedLong(
                     counters.get(GUIDE_SELECTION_ARITHMETIC_REJECT_INDEX));
+            long guideStableSelectionEligible = Integer.toUnsignedLong(
+                    counters.get(GUIDE_STABLE_SELECTION_ELIGIBLE_INDEX));
+            long guideStableSelectionPositive = Integer.toUnsignedLong(
+                    counters.get(GUIDE_STABLE_SELECTION_POSITIVE_INDEX));
+            long guideStableSelectionZero = Integer.toUnsignedLong(
+                    counters.get(GUIDE_STABLE_SELECTION_ZERO_INDEX));
+            long guideStableSelectionInvalid = Integer.toUnsignedLong(
+                    counters.get(GUIDE_STABLE_SELECTION_INVALID_INDEX));
             long crossFrameReceiverReject = crossFrameReceiverSurfaceReject
                     + crossFrameReceiverSampleReject + crossFrameReceiverEdgeReject
                     + crossFrameReceiverTopologyReject + crossFrameReceiverDepthReject
@@ -649,7 +661,8 @@ final class RtPathReservoirHistory {
                              + "guideTarget[eligible={},positive={},zero={},invalid={}], "
                              + "guideWeight[eligible={},positive={},zero={},invalid={}], "
                              + "guideSelection[eligible={},positive={},zero={},current={},high={},"
-                             + "arithmetic={}]",
+                             + "arithmetic={}], "
+                             + "guideStableSelection[eligible={},positive={},zero={},invalid={}]",
                     total,
                     values[0], percent(values[0], total),
                     values[1], percent(values[1], total),
@@ -756,7 +769,9 @@ final class RtPathReservoirHistory {
                      guideWeightEligible, guideWeightPositive, guideWeightZero, guideWeightInvalid,
                      guideSelectionEligible, guideSelectionPositive, guideSelectionZero,
                      guideSelectionCurrentReject, guideSelectionProbabilityHighReject,
-                     guideSelectionArithmeticReject);
+                     guideSelectionArithmeticReject,
+                     guideStableSelectionEligible, guideStableSelectionPositive,
+                     guideStableSelectionZero, guideStableSelectionInvalid);
             spatialDiagnosticViewPending = 0;
             return;
         }
