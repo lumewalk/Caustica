@@ -428,6 +428,21 @@ A targeted glass/water follow-up completed RGB-transmittance coverage: 48 readba
 invalid. Both counter identities remained exact in every frame. The visibility gate is therefore
 runtime-proven for clear, tinted, and occluded terminal paths.
 
+The post-visibility target audit now multiplies the proven guide-only shifted radiance by every
+valid production transmittance and evaluates the canonical luminance target. It partitions results
+into positive, zero, or invalid and requires
+`guideTarget.eligible = guideVisibility.clear + tinted + occluded` plus
+`guideTarget.eligible = positive + zero + invalid`. This is still a counter-only view-20 experiment;
+it cannot write a reservoir/history record, select or weight a sample, relax admission, or feed the
+estimator.
+
+Runtime passed this gate across 77 readbacks and 411047 eligible records: 406266 positive, 4781 zero,
+and zero invalid. The corresponding visibility totals were 406131 clear, 135 tinted, and 4781
+occluded. Both required partitions were exact in every frame, as were the stronger observed
+equalities `positive = clear + tinted` and `zero = occluded`. The next bounded experiment may form
+the GRIS candidate/merge-weight terms from the proven target, source count/final weight, and PSS
+Jacobian, but must remain counter-only and non-persistent.
+
 ## Delivery Phases
 
 ### Phase 0 — Wavefront Integration Baseline

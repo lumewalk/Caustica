@@ -660,6 +660,10 @@ final class RtPathSpatialReuseReference {
         Rgb unoccludedShiftedRadiance() {
             return shiftedRadiance(new Rgb(1.0, 1.0, 1.0));
         }
+
+        double shiftedTarget(Rgb transmittance) {
+            return shiftedRadiance(transmittance).luminance();
+        }
     }
 
     enum GuideOnlyRemapDecision {
@@ -695,6 +699,22 @@ final class RtPathSpatialReuseReference {
             if (!anyTransmission) return GuideOnlyVisibilityDecision.OCCLUDED;
             if (fullyClear) return GuideOnlyVisibilityDecision.CLEAR;
             return GuideOnlyVisibilityDecision.TINTED;
+        }
+    }
+
+    enum GuideOnlyShiftedTargetDecision {
+        POSITIVE,
+        ZERO,
+        ARITHMETIC_REJECT
+    }
+
+    /** Ordered post-visibility target result; it does not authorize sampling or weighting. */
+    record GuideOnlyShiftedTargetPolicy(boolean arithmeticValid, boolean positiveTarget) {
+        GuideOnlyShiftedTargetDecision result() {
+            if (!arithmeticValid) return GuideOnlyShiftedTargetDecision.ARITHMETIC_REJECT;
+            return positiveTarget
+                    ? GuideOnlyShiftedTargetDecision.POSITIVE
+                    : GuideOnlyShiftedTargetDecision.ZERO;
         }
     }
 

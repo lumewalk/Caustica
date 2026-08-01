@@ -348,6 +348,21 @@ and invalid remained zero. Both identities stayed exact in every readback. RGB t
 therefore runtime-covered as well as reference-tested; its low frequency is a property of the
 receiver-to-shared-vertex geometry in the tested scene.
 
+The next counter-only stage now applies every valid visibility result, including zero occlusion, to
+the proven unoccluded shifted radiance and computes the canonical luminance target. Its mutually
+exclusive terminals are `positive`, `zero`, and `invalid`. Runtime must prove
+`guideTarget.eligible = guideVisibility.clear + tinted + occluded` and
+`guideTarget.eligible = positive + zero + invalid`. Visibility-invalid records do not enter this
+stage. The target is observed only through counters: it is not written to the debug image or a
+reservoir and cannot affect selection, weights, history, strict admission, or the estimator.
+
+Runtime passed the shifted-target gate across 77 readbacks and 411047 eligible records: 406266 were
+positive (98.8369%), 4781 were zero (1.1631%), and invalid was zero. The visibility population was
+406131 clear, 135 tinted, and 4781 occluded. Both required identities held in every readback; the
+stronger scene-specific equalities `positive = clear + tinted` and `zero = occluded` also held in
+all 77. This proves RGB-transmitted canonical target arithmetic without authorizing its use. The
+next bounded stage may audit the finite GRIS candidate/merge-weight terms with counters only.
+
 ## Linux
 
 Set `DLSS_SDK` and `VULKAN_SDK` before configuring CMake:

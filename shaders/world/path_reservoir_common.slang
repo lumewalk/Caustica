@@ -84,7 +84,11 @@ public static const uint PATH_GUIDE_VISIBILITY_CLEAR = 81u;
 public static const uint PATH_GUIDE_VISIBILITY_TINTED = 82u;
 public static const uint PATH_GUIDE_VISIBILITY_OCCLUDED = 83u;
 public static const uint PATH_GUIDE_VISIBILITY_INVALID = 84u;
-public static const uint PATH_SHIFT_DIAGNOSTIC_COUNTER_COUNT = 85u;
+public static const uint PATH_GUIDE_TARGET_ELIGIBLE = 85u;
+public static const uint PATH_GUIDE_TARGET_POSITIVE = 86u;
+public static const uint PATH_GUIDE_TARGET_ZERO = 87u;
+public static const uint PATH_GUIDE_TARGET_INVALID = 88u;
+public static const uint PATH_SHIFT_DIAGNOSTIC_COUNTER_COUNT = 89u;
 public static const uint PATH_SHIFT_DIAGNOSTIC_PAIR_MASK = 3u;
 public static const uint PATH_SHIFT_DIAGNOSTIC_MERGE_PAIR_OFFSET =
         PATH_SPATIAL_DIAGNOSTIC_PAIR_CAPACITY * 2u;

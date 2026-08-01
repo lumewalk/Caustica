@@ -980,6 +980,22 @@ public void pathMappingReplayValidate() {
                                                     ? PATH_GUIDE_VISIBILITY_CLEAR
                                                     : PATH_GUIDE_VISIBILITY_TINTED;
                             InterlockedAdd(counters[guideVisibilityResult], 1u);
+                            if (guideVisibilityValid) {
+                                InterlockedAdd(counters[PATH_GUIDE_TARGET_ELIGIBLE], 1u);
+                                float3 guideVisibleRadiance =
+                                        guideShiftedRadiance * guideTransmittance;
+                                float guideShiftedTarget = pathLuminance(guideVisibleRadiance);
+                                bool guideTargetValid = all(isfinite(guideVisibleRadiance))
+                                        && all(guideVisibleRadiance >= float3(0.0))
+                                        && isfinite(guideShiftedTarget)
+                                        && guideShiftedTarget >= 0.0;
+                                uint guideTargetResult = !guideTargetValid
+                                        ? PATH_GUIDE_TARGET_INVALID
+                                        : guideShiftedTarget > 0.0
+                                                ? PATH_GUIDE_TARGET_POSITIVE
+                                                : PATH_GUIDE_TARGET_ZERO;
+                                InterlockedAdd(counters[guideTargetResult], 1u);
+                            }
                         }
                     }
                 }

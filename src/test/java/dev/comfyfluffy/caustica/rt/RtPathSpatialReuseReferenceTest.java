@@ -231,6 +231,10 @@ final class RtPathSpatialReuseReferenceTest {
         assertEquals(1.2, tinted.r(), 1.0e-12);
         assertEquals(0.2, tinted.g(), 1.0e-12);
         assertEquals(0.0, tinted.b(), 1.0e-12);
+        assertEquals(0.39816, remap.shiftedTarget(
+                new RtPathSpatialReuseReference.Rgb(0.5, 0.25, 0.0)), 1.0e-12);
+        assertEquals(0.0, remap.shiftedTarget(
+                new RtPathSpatialReuseReference.Rgb(0.0, 0.0, 0.0)), 1.0e-12);
         assertThrows(IllegalArgumentException.class, () -> remap.shiftedRadiance(
                 new RtPathSpatialReuseReference.Rgb(1.01, 1.0, 1.0)));
 
@@ -258,6 +262,16 @@ final class RtPathSpatialReuseReferenceTest {
                         .result());
         assertEquals(RtPathSpatialReuseReference.GuideOnlyVisibilityDecision.TINTED,
                 new RtPathSpatialReuseReference.GuideOnlyVisibilityPolicy(true, true, false)
+                        .result());
+
+        assertEquals(RtPathSpatialReuseReference.GuideOnlyShiftedTargetDecision.ARITHMETIC_REJECT,
+                new RtPathSpatialReuseReference.GuideOnlyShiftedTargetPolicy(false, true)
+                        .result());
+        assertEquals(RtPathSpatialReuseReference.GuideOnlyShiftedTargetDecision.POSITIVE,
+                new RtPathSpatialReuseReference.GuideOnlyShiftedTargetPolicy(true, true)
+                        .result());
+        assertEquals(RtPathSpatialReuseReference.GuideOnlyShiftedTargetDecision.ZERO,
+                new RtPathSpatialReuseReference.GuideOnlyShiftedTargetPolicy(true, false)
                         .result());
     }
 
@@ -717,8 +731,12 @@ final class RtPathSpatialReuseReferenceTest {
         assertEquals(82, RtPathReservoirHistory.GUIDE_VISIBILITY_TINTED_INDEX);
         assertEquals(83, RtPathReservoirHistory.GUIDE_VISIBILITY_OCCLUDED_INDEX);
         assertEquals(84, RtPathReservoirHistory.GUIDE_VISIBILITY_INVALID_INDEX);
-        assertEquals(85, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
-        assertEquals(85 * Integer.BYTES,
+        assertEquals(85, RtPathReservoirHistory.GUIDE_TARGET_ELIGIBLE_INDEX);
+        assertEquals(86, RtPathReservoirHistory.GUIDE_TARGET_POSITIVE_INDEX);
+        assertEquals(87, RtPathReservoirHistory.GUIDE_TARGET_ZERO_INDEX);
+        assertEquals(88, RtPathReservoirHistory.GUIDE_TARGET_INVALID_INDEX);
+        assertEquals(89, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
+        assertEquals(89 * Integer.BYTES,
                 RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_COUNTER_BYTES);
         assertEquals(32, RtPathReservoirHistory.SHIFTED_RECEIVER_GUIDE_STRIDE);
         assertEquals(27_566_080L,
