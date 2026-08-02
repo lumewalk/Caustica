@@ -334,7 +334,19 @@ final class RtPathReservoirHistory {
     static final int GUIDE_BRANCH_RECEIVER_IDENTITY_ADMITTED_INDEX = 299;
     static final int GUIDE_BRANCH_RECEIVER_MAPPED_ADMITTED_INDEX = 300;
     static final int GUIDE_BRANCH_RECEIVER_DELTA_INDEX = 301;
-    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 302;
+    static final int GUIDE_BRANCH_DIRECT_REMAP_ELIGIBLE_INDEX = 302;
+    static final int GUIDE_BRANCH_DIRECT_REMAP_GUIDE_REJECT_INDEX = 303;
+    static final int GUIDE_BRANCH_DIRECT_REMAP_EDGE_REJECT_INDEX = 304;
+    static final int GUIDE_BRANCH_DIRECT_REMAP_GEOMETRY_REJECT_INDEX = 305;
+    static final int GUIDE_BRANCH_DIRECT_REMAP_PDF_REJECT_INDEX = 306;
+    static final int GUIDE_BRANCH_DIRECT_REMAP_THROUGHPUT_REJECT_INDEX = 307;
+    static final int GUIDE_BRANCH_DIRECT_REMAP_AGE_ONE_READY_INDEX = 308;
+    static final int GUIDE_BRANCH_DIRECT_REMAP_AGE_TWO_READY_INDEX = 309;
+    static final int GUIDE_BRANCH_DIRECT_REMAP_AGE_THREE_READY_INDEX = 310;
+    static final int GUIDE_BRANCH_DIRECT_REMAP_IDENTITY_READY_INDEX = 311;
+    static final int GUIDE_BRANCH_DIRECT_REMAP_MAPPED_READY_INDEX = 312;
+    static final int GUIDE_BRANCH_DIRECT_REMAP_DELTA_INDEX = 313;
+    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 314;
     static final int SHIFTED_RECEIVER_GUIDE_STRIDE = 8 * Float.BYTES;
     static final int BRANCH_CANDIDATE_TAG_STRIDE = 2 * Integer.BYTES;
     static final int SPATIAL_DIAGNOSTIC_COUNTER_BYTES =
@@ -1303,6 +1315,28 @@ final class RtPathReservoirHistory {
                     counters.get(GUIDE_BRANCH_RECEIVER_IDENTITY_ADMITTED_INDEX));
             long guideBranchReceiverMappedAdmitted = Integer.toUnsignedLong(
                     counters.get(GUIDE_BRANCH_RECEIVER_MAPPED_ADMITTED_INDEX));
+            long guideBranchDirectRemapEligible = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_REMAP_ELIGIBLE_INDEX));
+            long guideBranchDirectRemapGuideReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_REMAP_GUIDE_REJECT_INDEX));
+            long guideBranchDirectRemapEdgeReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_REMAP_EDGE_REJECT_INDEX));
+            long guideBranchDirectRemapGeometryReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_REMAP_GEOMETRY_REJECT_INDEX));
+            long guideBranchDirectRemapPdfReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_REMAP_PDF_REJECT_INDEX));
+            long guideBranchDirectRemapThroughputReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_REMAP_THROUGHPUT_REJECT_INDEX));
+            long guideBranchDirectRemapAgeOneReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_REMAP_AGE_ONE_READY_INDEX));
+            long guideBranchDirectRemapAgeTwoReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_REMAP_AGE_TWO_READY_INDEX));
+            long guideBranchDirectRemapAgeThreeReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_REMAP_AGE_THREE_READY_INDEX));
+            long guideBranchDirectRemapIdentityReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_REMAP_IDENTITY_READY_INDEX));
+            long guideBranchDirectRemapMappedReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_REMAP_MAPPED_READY_INDEX));
             long crossFrameReceiverReject = crossFrameReceiverSurfaceReject
                     + crossFrameReceiverSampleReject + crossFrameReceiverEdgeReject
                     + crossFrameReceiverTopologyReject + crossFrameReceiverDepthReject
@@ -2037,6 +2071,37 @@ final class RtPathReservoirHistory {
                     guideBranchReceiverTerminal,
                     guideBranchReceiverEligible - guideBranchReceiverTerminal,
                     guideBranchReceiverAdmitted - guideBranchReceiverMappingAdmitted);
+            long guideBranchDirectRemapReady = guideBranchDirectRemapAgeOneReady
+                    + guideBranchDirectRemapAgeTwoReady
+                    + guideBranchDirectRemapAgeThreeReady;
+            long guideBranchDirectRemapTerminal = guideBranchDirectRemapGuideReject
+                    + guideBranchDirectRemapEdgeReject
+                    + guideBranchDirectRemapGeometryReject
+                    + guideBranchDirectRemapPdfReject
+                    + guideBranchDirectRemapThroughputReject
+                    + guideBranchDirectRemapReady;
+            long guideBranchDirectRemapMappingReady = guideBranchDirectRemapIdentityReady
+                    + guideBranchDirectRemapMappedReady;
+            CausticaMod.LOGGER.info(
+                    "RT path guide branch direct remap: eligible={}, guide={}, edge={}, "
+                            + "geometry={}, pdf={}, throughput={}, age[one={},two={},three={}], "
+                            + "ready={}, mapping[identity={},mapped={}], terminal={}, delta={}, "
+                            + "mappingDelta={}",
+                    guideBranchDirectRemapEligible,
+                    guideBranchDirectRemapGuideReject,
+                    guideBranchDirectRemapEdgeReject,
+                    guideBranchDirectRemapGeometryReject,
+                    guideBranchDirectRemapPdfReject,
+                    guideBranchDirectRemapThroughputReject,
+                    guideBranchDirectRemapAgeOneReady,
+                    guideBranchDirectRemapAgeTwoReady,
+                    guideBranchDirectRemapAgeThreeReady,
+                    guideBranchDirectRemapReady,
+                    guideBranchDirectRemapIdentityReady,
+                    guideBranchDirectRemapMappedReady,
+                    guideBranchDirectRemapTerminal,
+                    guideBranchDirectRemapEligible - guideBranchDirectRemapTerminal,
+                    guideBranchDirectRemapReady - guideBranchDirectRemapMappingReady);
             spatialDiagnosticViewPending = 0;
             return;
         }

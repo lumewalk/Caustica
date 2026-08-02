@@ -1907,7 +1907,8 @@ static void pathBranchAgeReplayValidate() {
     if (pc.debugView != PATH_SHIFTED_RADIANCE_DEBUG_VIEW
             || (pc.historyFlags & PATH_GUIDE_BRANCH_AGE_REPLAY_PASS_FLAG) == 0u
             || worldPush.pathShiftDiagnosticCounterAddr == 0u
-            || worldPush.pathShiftDiagnosticPairAddr == 0u) {
+            || worldPush.pathShiftDiagnosticPairAddr == 0u
+            || worldPush.pathShiftReceiverGuideAddr == 0u) {
         return;
     }
     uint linearIndex = DispatchRaysIndex().y * DispatchRaysDimensions().x
@@ -2046,6 +2047,9 @@ static void pathBranchAgeReplayValidate() {
     retainedReceiverPositionMaterial.xyz += replayRebase;
     bool receiverCandidateInBounds = false;
     bool receiverMatched = false;
+    int2 receiverTexel = projectedReceiverTexel;
+    float4 currentReceiverPositionMaterial = float4(0.0);
+    float4 currentReceiverNormalRoughness = float4(0.0);
     for (int oy = -1; oy <= 1 && !receiverMatched; ++oy) {
         for (int ox = -1; ox <= 1 && !receiverMatched; ++ox) {
             int2 candidateTexel = projectedReceiverTexel + int2(ox, oy);
@@ -2054,7 +2058,7 @@ static void pathBranchAgeReplayValidate() {
             receiverCandidateInBounds = true;
             float4 candidatePositionMaterial = gRestirPositionMaterial[candidateTexel];
             float4 candidateNormalRoughness = gRestirNormalRoughness[candidateTexel];
-            receiverMatched = pathReplayPositionMatches(
+            bool candidateMatches = pathReplayPositionMatches(
                             retainedReceiverPositionMaterial.xyz,
                             candidatePositionMaterial.xyz)
                     && pathReplayColorMatches(root.receiverNormalRoughness.xyz,
@@ -2063,6 +2067,12 @@ static void pathBranchAgeReplayValidate() {
                             candidateNormalRoughness.w)
                     && uint(max(retainedReceiverPositionMaterial.w, 0.0))
                             == uint(max(candidatePositionMaterial.w, 0.0));
+            if (candidateMatches) {
+                receiverTexel = candidateTexel;
+                currentReceiverPositionMaterial = candidatePositionMaterial;
+                currentReceiverNormalRoughness = candidateNormalRoughness;
+                receiverMatched = true;
+            }
         }
     }
     if (!receiverCandidateInBounds) {
@@ -2081,6 +2091,114 @@ static void pathBranchAgeReplayValidate() {
     InterlockedAdd(counters[mappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION
             ? PATH_GUIDE_BRANCH_RECEIVER_MAPPED_ADMITTED
             : PATH_GUIDE_BRANCH_RECEIVER_IDENTITY_ADMITTED], 1u);
+
+    // Rebuild only the direct original-source -> current-receiver pre-visibility terms. The
+    // previously stored mapping/Jacobian is deliberately not read: both identity and already
+    // diffuse-mapped records start again from the immutable replay root and current receiver guide.
+    InterlockedAdd(counters[PATH_GUIDE_BRANCH_DIRECT_REMAP_ELIGIBLE], 1u);
+    uint receiverPixelIndex = uint(receiverTexel.y) * guideDimensions.x
+            + uint(receiverTexel.x);
+    ConstPtr<float4> receiverGuides =
+            ConstPtr<float4>(worldPush.pathShiftReceiverGuideAddr);
+    float4 receiverGuide = receiverGuides[receiverPixelIndex * 2u];
+    float4 receiverRayOrigin = receiverGuides[receiverPixelIndex * 2u + 1u];
+    float receiverNormalLength = length(currentReceiverNormalRoughness.xyz);
+    uint receiverMaterialIdentity = uint(max(currentReceiverPositionMaterial.w, 0.0));
+    uint sourceMaterialIdentity = uint(max(root.sourcePositionMaterial.w, 0.0));
+    uint receiverMaterial = receiverMaterialModel(receiverMaterialIdentity);
+    bool receiverGuideValid = all(isfinite(receiverGuide))
+            && all(isfinite(receiverRayOrigin))
+            && all(receiverGuide.xyz >= float3(0.0))
+            && receiverGuide.w > 0.0 && receiverGuide.w <= 1.0
+            && receiverRayOrigin.w == 1.0
+            && receiverNormalLength >= 0.5
+            && (receiverMaterial == MATERIAL_OPAQUE
+                    || receiverMaterial == MATERIAL_PARTICLE)
+            && receiverMaterialIdentity == sourceMaterialIdentity;
+    if (!receiverGuideValid) {
+        InterlockedAdd(counters[PATH_GUIDE_BRANCH_DIRECT_REMAP_GUIDE_REJECT], 1u);
+        return;
+    }
+
+    float sharedNormalLength = length(replay.reconnectionNormal);
+    bool edgeValid = replay.reconnectionValid != 0u
+            && replay.reconnectionDepth == 1u
+            && replay.reconnectionEventKind == PATH_RECONNECTION_EVENT_DIFFUSE
+            && replay.reconnectionSourcePdf > 0.0
+            && all(isfinite(replay.reconnectionVertex))
+            && all(isfinite(replay.reconnectionNormal))
+            && all(isfinite(replay.reconnectionThroughput))
+            && sharedNormalLength >= 0.5;
+    if (!edgeValid) {
+        InterlockedAdd(counters[PATH_GUIDE_BRANCH_DIRECT_REMAP_EDGE_REJECT], 1u);
+        return;
+    }
+
+    float4 currentSourcePositionMaterial = root.sourcePositionMaterial;
+    currentSourcePositionMaterial.xyz += replayRebase;
+    float3 sharedVertex = replay.reconnectionVertex;
+    float3 sourceEdge = sharedVertex - currentSourcePositionMaterial.xyz;
+    float3 receiverEdge = sharedVertex - currentReceiverPositionMaterial.xyz;
+    float sourceDistance = length(sourceEdge);
+    float receiverDistance = length(receiverEdge);
+    bool geometryValid = sourceDistance > 1.0e-4 && receiverDistance > 1.0e-4;
+    float geometryJacobian = 0.0;
+    if (geometryValid) {
+        float3 sharedNormal = replay.reconnectionNormal / sharedNormalLength;
+        float sourceCosine = abs(dot(sharedNormal, -sourceEdge / sourceDistance));
+        float receiverCosine = abs(dot(sharedNormal, receiverEdge / receiverDistance));
+        geometryJacobian = receiverCosine * sourceDistance * sourceDistance
+                / max(sourceCosine * receiverDistance * receiverDistance, 1.0e-8);
+        geometryValid = sourceCosine > 0.0 && receiverCosine > 0.0
+                && isfinite(geometryJacobian) && geometryJacobian > 0.0;
+    }
+    if (!geometryValid) {
+        InterlockedAdd(counters[PATH_GUIDE_BRANCH_DIRECT_REMAP_GEOMETRY_REJECT], 1u);
+        return;
+    }
+
+    float3 receiverNormal = currentReceiverNormalRoughness.xyz / receiverNormalLength;
+    float3 receiverSampledEdge = sharedVertex - receiverRayOrigin.xyz;
+    float receiverPdf = receiverGuide.w
+            * pathMappingDiffuseDensity(receiverNormal, receiverSampledEdge);
+    float sourcePdf = replay.reconnectionSourcePdf;
+    float directPssJacobian = geometryJacobian * receiverPdf / sourcePdf;
+    bool pdfValid = isfinite(receiverPdf) && receiverPdf > 0.0
+            && isfinite(sourcePdf) && sourcePdf > 0.0
+            && isfinite(directPssJacobian) && directPssJacobian > 0.0;
+    if (!pdfValid) {
+        InterlockedAdd(counters[PATH_GUIDE_BRANCH_DIRECT_REMAP_PDF_REJECT], 1u);
+        return;
+    }
+
+    float3 sourceRadiance = replay.canonicalRadiance;
+    float3 sourceThroughput = replay.reconnectionThroughput;
+    float3 receiverThroughput = receiverGuide.xyz / receiverGuide.w;
+    bool invalidSourceChannel = any(sourceRadiance > float3(0.0)
+            && sourceThroughput <= float3(0.0));
+    float3 throughputRatio = float3(
+            pathMappingThroughputRatio(sourceThroughput.x, receiverThroughput.x),
+            pathMappingThroughputRatio(sourceThroughput.y, receiverThroughput.y),
+            pathMappingThroughputRatio(sourceThroughput.z, receiverThroughput.z));
+    float3 shiftedRadiance = sourceRadiance * throughputRatio;
+    bool throughputValid = !invalidSourceChannel
+            && all(isfinite(sourceRadiance)) && all(sourceRadiance >= float3(0.0))
+            && all(isfinite(sourceThroughput)) && all(sourceThroughput >= float3(0.0))
+            && all(isfinite(receiverThroughput)) && all(receiverThroughput >= float3(0.0))
+            && all(isfinite(throughputRatio)) && all(throughputRatio >= float3(0.0))
+            && all(isfinite(shiftedRadiance)) && all(shiftedRadiance >= float3(0.0));
+    if (!throughputValid) {
+        InterlockedAdd(counters[PATH_GUIDE_BRANCH_DIRECT_REMAP_THROUGHPUT_REJECT], 1u);
+        return;
+    }
+    InterlockedAdd(counters[age == 1u
+            ? PATH_GUIDE_BRANCH_DIRECT_REMAP_AGE_ONE_READY
+            : age == 2u
+                    ? PATH_GUIDE_BRANCH_DIRECT_REMAP_AGE_TWO_READY
+                    : PATH_GUIDE_BRANCH_DIRECT_REMAP_AGE_THREE_READY], 1u);
+    InterlockedAdd(counters[mappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION
+            ? PATH_GUIDE_BRANCH_DIRECT_REMAP_MAPPED_READY
+            : PATH_GUIDE_BRANCH_DIRECT_REMAP_IDENTITY_READY], 1u);
 }
 
 static void pathBranchScratchReplayValidate() {

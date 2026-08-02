@@ -1250,6 +1250,54 @@ final class RtPathSpatialReuseReference {
         };
     }
 
+    enum BranchDirectRemapOutcome {
+        RECEIVER_ADMISSION_REJECT,
+        GUIDE_REJECT,
+        EDGE_REJECT,
+        GEOMETRY_REJECT,
+        PDF_REJECT,
+        THROUGHPUT_REJECT,
+        AGE_ONE_READY,
+        AGE_TWO_READY,
+        AGE_THREE_READY
+    }
+
+    /** Ordered CPU mirror for the pre-visibility direct aged remap gate. */
+    static BranchDirectRemapOutcome branchDirectRemapOutcome(
+            BranchCandidateRetentionOutcome retention, boolean receiverAdmitted,
+            boolean receiverGuideValid, boolean sourceEdgeValid, boolean geometryValid,
+            boolean pdfValid, boolean throughputValid) {
+        if (!receiverAdmitted) {
+            return BranchDirectRemapOutcome.RECEIVER_ADMISSION_REJECT;
+        }
+        if (retention != BranchCandidateRetentionOutcome.AGE_ONE
+                && retention != BranchCandidateRetentionOutcome.AGE_TWO
+                && retention != BranchCandidateRetentionOutcome.AGE_THREE) {
+            throw new IllegalArgumentException("direct remap requires a live aged branch candidate");
+        }
+        if (!receiverGuideValid) {
+            return BranchDirectRemapOutcome.GUIDE_REJECT;
+        }
+        if (!sourceEdgeValid) {
+            return BranchDirectRemapOutcome.EDGE_REJECT;
+        }
+        if (!geometryValid) {
+            return BranchDirectRemapOutcome.GEOMETRY_REJECT;
+        }
+        if (!pdfValid) {
+            return BranchDirectRemapOutcome.PDF_REJECT;
+        }
+        if (!throughputValid) {
+            return BranchDirectRemapOutcome.THROUGHPUT_REJECT;
+        }
+        return switch (retention) {
+            case AGE_ONE -> BranchDirectRemapOutcome.AGE_ONE_READY;
+            case AGE_TWO -> BranchDirectRemapOutcome.AGE_TWO_READY;
+            case AGE_THREE -> BranchDirectRemapOutcome.AGE_THREE_READY;
+            default -> throw new IllegalStateException("unreachable branch direct-remap age");
+        };
+    }
+
     /**
      * Ordered CPU mirror for the post-barrier exact-lane validation sample. Reservoir and root
      * equality are bitwise requirements; acceptance remains diagnostic-only.

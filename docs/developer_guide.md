@@ -473,6 +473,20 @@ rejects, and zero clip/bounds rejects. Mapping ownership also balanced exactly a
 99627 mapped. This gate only classifies current receiver roots; it does not construct a new mapping,
 change weights, write history, or affect the estimator.
 
+Replay-approved and receiver-admitted aged records then run a pre-visibility direct-remap audit.
+The immutable replay aggregate supplies the original second-hit vertex, geometric normal, source
+directional PDF, source first-edge throughput and canonical radiance. The current receiver sidecar
+supplies an independently captured diffuse technique mass, throughput and exact biased ray origin.
+The pass recomputes solid-angle geometry, receiver directional PDF and
+`geometry * receiverPdf / originalSourcePdf` directly from those terms. It never reads the stored
+previous mapping Jacobian and does not trace visibility. `RT path guide branch direct remap` must
+show exact terminal and mapping accounting, nonzero ready counts for ages 1–3, and zero
+guide/geometry/PDF/throughput rejects in a stable static scene. The proven run covered 24 readbacks:
+174142 eligible, 170695 ready (57450/56189/57056 by age), 3447 explicit unsupported/missing-edge
+rejects, 12602 identity-ready plus 158093 mapped-ready, and zero other rejects or deltas. Counter
+storage is 314 uints / 1256 B; replay ABI, record stride and WorldPush remain unchanged. No reservoir,
+history, weight, selection or estimator write occurs.
+
 For a fresh runtime check, use debug view 20 and inspect `run/logs/latest.log`. Normal operation
 requires `RT bring-up OK`, Vulkan, the intended NVIDIA device, exact zero-delta counter partitions,
 and no `DEVICE_LOST`, `VK_ERROR`, GPU fault or shader compilation error. Debug colors and sparse

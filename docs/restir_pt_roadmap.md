@@ -773,6 +773,16 @@ must recompute geometry, directional PDFs and Jacobian from the immutable origin
 must not multiply or compose the previously stored mapping Jacobian. History and estimator writes
 remain forbidden.
 
+That pre-visibility remap gate is now proven. It combines the immutable replayed second-hit/source
+state with the independently captured current receiver guide and recomputes
+`J = J_geometry * p_receiver / p_original_source`; the previous mapping Jacobian is never read.
+Across 24 Vulkan readbacks, 170695 of 174142 eligible records were ready across ages 1/2/3 as
+57450/56189/57056. The remaining 3447 were explicit missing/unsupported diffuse-edge rejects;
+guide, geometry, PDF and throughput rejects plus terminal/mapping deltas were zero. The next gate is
+a counter-only visibility and shifted-target reconstruction for these aged direct remaps using the
+exact current receiver ray origin and production shadow SBT. Selection, reservoir/history writes
+and estimator contribution remain forbidden.
+
 ## Delivery Phases
 
 ### Phase 0 — Wavefront Integration Baseline
