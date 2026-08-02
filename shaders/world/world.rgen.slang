@@ -2105,19 +2105,23 @@ public void pathGuidePreviousReplayValidate() {
                                         : PATH_GUIDE_PREVIOUS_POST_WEIGHT_NEXT_INVALID], 1u);
 
                                 bool currentFinalValid = false;
+                                bool currentDenominatorValid = false;
+                                float currentDenominator = 0.0;
                                 if (nextValid) {
                                     if (nextWeightSum == 0.0) {
                                         currentFinalValid = true;
+                                        currentDenominatorValid = true;
                                     } else if (nextEffectiveCount > 0.0
                                             && current.sampleRadianceTarget.w > 0.0) {
-                                        float currentDenominator = nextEffectiveCount
+                                        currentDenominator = nextEffectiveCount
                                                 * current.sampleRadianceTarget.w;
                                         float currentFinalWeight = nextWeightSum
                                                 / currentDenominator;
-                                        currentFinalValid = isfinite(currentDenominator)
+                                        currentDenominatorValid = isfinite(currentDenominator)
                                                 && currentDenominator > 0.0
                                                 && isfinite(currentFinalWeight)
                                                 && currentFinalWeight > 0.0;
+                                        currentFinalValid = currentDenominatorValid;
                                     }
                                 }
                                 InterlockedAdd(counters[currentFinalValid
@@ -2125,24 +2129,58 @@ public void pathGuidePreviousReplayValidate() {
                                         : PATH_GUIDE_PREVIOUS_POST_WEIGHT_CURRENT_INVALID], 1u);
 
                                 bool sourceFinalValid = false;
+                                bool sourceDenominatorValid = false;
+                                float sourceDenominator = 0.0;
                                 if (nextValid) {
                                     if (nextWeightSum == 0.0) {
                                         sourceFinalValid = true;
+                                        sourceDenominatorValid = true;
                                     } else if (nextEffectiveCount > 0.0
                                             && shiftedTarget > 0.0) {
-                                        float sourceDenominator = nextEffectiveCount
+                                        sourceDenominator = nextEffectiveCount
                                                 * shiftedTarget;
                                         float sourceFinalWeightResult = nextWeightSum
                                                 / sourceDenominator;
-                                        sourceFinalValid = isfinite(sourceDenominator)
+                                        sourceDenominatorValid = isfinite(sourceDenominator)
                                                 && sourceDenominator > 0.0
                                                 && isfinite(sourceFinalWeightResult)
                                                 && sourceFinalWeightResult > 0.0;
+                                        sourceFinalValid = sourceDenominatorValid;
                                     }
                                 }
                                 InterlockedAdd(counters[sourceFinalValid
                                         ? PATH_GUIDE_PREVIOUS_POST_WEIGHT_SOURCE_VALID
                                         : PATH_GUIDE_PREVIOUS_POST_WEIGHT_SOURCE_INVALID], 1u);
+
+                                // Counter-only selection-probability denominator audit for both
+                                // hypothetical payload branches. The probability itself is shared
+                                // by reservoir update, while each branch still has an independent
+                                // final-weight denominator. No RNG draw or lane mutation occurs.
+                                InterlockedAdd(counters[
+                                        PATH_GUIDE_PREVIOUS_SELECTION_PROBABILITY_ELIGIBLE], 1u);
+                                bool selectionDenominatorValid = nextValid
+                                        && isfinite(nextWeightSum)
+                                        && nextWeightSum >= 0.0;
+                                InterlockedAdd(counters[selectionDenominatorValid
+                                        ? PATH_GUIDE_PREVIOUS_SELECTION_DENOMINATOR_VALID
+                                        : PATH_GUIDE_PREVIOUS_SELECTION_DENOMINATOR_INVALID], 1u);
+                                float selectionProbability = selectionDenominatorValid
+                                        && mergeWeight > 0.0 && nextWeightSum > 0.0
+                                        ? mergeWeight / nextWeightSum
+                                        : 0.0;
+                                bool selectionProbabilityValid = selectionDenominatorValid
+                                        && isfinite(selectionProbability)
+                                        && selectionProbability >= 0.0
+                                        && selectionProbability <= 1.0;
+                                InterlockedAdd(counters[selectionProbabilityValid
+                                        ? PATH_GUIDE_PREVIOUS_SELECTION_PROBABILITY_VALID
+                                        : PATH_GUIDE_PREVIOUS_SELECTION_PROBABILITY_INVALID], 1u);
+                                InterlockedAdd(counters[currentDenominatorValid
+                                        ? PATH_GUIDE_PREVIOUS_SELECTION_CURRENT_DENOMINATOR_VALID
+                                        : PATH_GUIDE_PREVIOUS_SELECTION_CURRENT_DENOMINATOR_INVALID], 1u);
+                                InterlockedAdd(counters[sourceDenominatorValid
+                                        ? PATH_GUIDE_PREVIOUS_SELECTION_SOURCE_DENOMINATOR_VALID
+                                        : PATH_GUIDE_PREVIOUS_SELECTION_SOURCE_DENOMINATOR_INVALID], 1u);
                             }
                         }
                     }

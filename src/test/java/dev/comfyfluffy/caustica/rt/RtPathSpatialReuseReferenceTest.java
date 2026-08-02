@@ -1060,8 +1060,26 @@ final class RtPathSpatialReuseReferenceTest {
                 RtPathReservoirHistory.GUIDE_PREVIOUS_POST_WEIGHT_SOURCE_VALID_INDEX);
         assertEquals(174,
                 RtPathReservoirHistory.GUIDE_PREVIOUS_POST_WEIGHT_SOURCE_INVALID_INDEX);
-        assertEquals(175, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
-        assertEquals(175 * Integer.BYTES,
+        assertEquals(175,
+                RtPathReservoirHistory.GUIDE_PREVIOUS_SELECTION_PROBABILITY_ELIGIBLE_INDEX);
+        assertEquals(176,
+                RtPathReservoirHistory.GUIDE_PREVIOUS_SELECTION_DENOMINATOR_VALID_INDEX);
+        assertEquals(177,
+                RtPathReservoirHistory.GUIDE_PREVIOUS_SELECTION_DENOMINATOR_INVALID_INDEX);
+        assertEquals(178,
+                RtPathReservoirHistory.GUIDE_PREVIOUS_SELECTION_PROBABILITY_VALID_INDEX);
+        assertEquals(179,
+                RtPathReservoirHistory.GUIDE_PREVIOUS_SELECTION_PROBABILITY_INVALID_INDEX);
+        assertEquals(180,
+                RtPathReservoirHistory.GUIDE_PREVIOUS_SELECTION_CURRENT_DENOMINATOR_VALID_INDEX);
+        assertEquals(181,
+                RtPathReservoirHistory.GUIDE_PREVIOUS_SELECTION_CURRENT_DENOMINATOR_INVALID_INDEX);
+        assertEquals(182,
+                RtPathReservoirHistory.GUIDE_PREVIOUS_SELECTION_SOURCE_DENOMINATOR_VALID_INDEX);
+        assertEquals(183,
+                RtPathReservoirHistory.GUIDE_PREVIOUS_SELECTION_SOURCE_DENOMINATOR_INVALID_INDEX);
+        assertEquals(184, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
+        assertEquals(184 * Integer.BYTES,
                 RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_COUNTER_BYTES);
         assertEquals(32, RtPathReservoirHistory.SHIFTED_RECEIVER_GUIDE_STRIDE);
         assertEquals(27_566_080L,

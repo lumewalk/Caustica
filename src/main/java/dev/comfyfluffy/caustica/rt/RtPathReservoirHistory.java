@@ -203,7 +203,16 @@ final class RtPathReservoirHistory {
     static final int GUIDE_PREVIOUS_POST_WEIGHT_CURRENT_INVALID_INDEX = 172;
     static final int GUIDE_PREVIOUS_POST_WEIGHT_SOURCE_VALID_INDEX = 173;
     static final int GUIDE_PREVIOUS_POST_WEIGHT_SOURCE_INVALID_INDEX = 174;
-    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 175;
+    static final int GUIDE_PREVIOUS_SELECTION_PROBABILITY_ELIGIBLE_INDEX = 175;
+    static final int GUIDE_PREVIOUS_SELECTION_DENOMINATOR_VALID_INDEX = 176;
+    static final int GUIDE_PREVIOUS_SELECTION_DENOMINATOR_INVALID_INDEX = 177;
+    static final int GUIDE_PREVIOUS_SELECTION_PROBABILITY_VALID_INDEX = 178;
+    static final int GUIDE_PREVIOUS_SELECTION_PROBABILITY_INVALID_INDEX = 179;
+    static final int GUIDE_PREVIOUS_SELECTION_CURRENT_DENOMINATOR_VALID_INDEX = 180;
+    static final int GUIDE_PREVIOUS_SELECTION_CURRENT_DENOMINATOR_INVALID_INDEX = 181;
+    static final int GUIDE_PREVIOUS_SELECTION_SOURCE_DENOMINATOR_VALID_INDEX = 182;
+    static final int GUIDE_PREVIOUS_SELECTION_SOURCE_DENOMINATOR_INVALID_INDEX = 183;
+    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 184;
     static final int SHIFTED_RECEIVER_GUIDE_STRIDE = 8 * Float.BYTES;
     static final int SPATIAL_DIAGNOSTIC_COUNTER_BYTES =
             SHIFTED_DIAGNOSTIC_COUNTER_COUNT * Integer.BYTES;
@@ -820,6 +829,24 @@ final class RtPathReservoirHistory {
                     counters.get(GUIDE_PREVIOUS_POST_WEIGHT_SOURCE_VALID_INDEX));
             long guidePreviousPostWeightSourceInvalid = Integer.toUnsignedLong(
                     counters.get(GUIDE_PREVIOUS_POST_WEIGHT_SOURCE_INVALID_INDEX));
+            long guidePreviousSelectionProbabilityEligible = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_SELECTION_PROBABILITY_ELIGIBLE_INDEX));
+            long guidePreviousSelectionDenominatorValid = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_SELECTION_DENOMINATOR_VALID_INDEX));
+            long guidePreviousSelectionDenominatorInvalid = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_SELECTION_DENOMINATOR_INVALID_INDEX));
+            long guidePreviousSelectionProbabilityValid = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_SELECTION_PROBABILITY_VALID_INDEX));
+            long guidePreviousSelectionProbabilityInvalid = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_SELECTION_PROBABILITY_INVALID_INDEX));
+            long guidePreviousSelectionCurrentDenominatorValid = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_SELECTION_CURRENT_DENOMINATOR_VALID_INDEX));
+            long guidePreviousSelectionCurrentDenominatorInvalid = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_SELECTION_CURRENT_DENOMINATOR_INVALID_INDEX));
+            long guidePreviousSelectionSourceDenominatorValid = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_SELECTION_SOURCE_DENOMINATOR_VALID_INDEX));
+            long guidePreviousSelectionSourceDenominatorInvalid = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_SELECTION_SOURCE_DENOMINATOR_INVALID_INDEX));
             long crossFrameReceiverReject = crossFrameReceiverSurfaceReject
                     + crossFrameReceiverSampleReject + crossFrameReceiverEdgeReject
                     + crossFrameReceiverTopologyReject + crossFrameReceiverDepthReject
@@ -1182,6 +1209,33 @@ final class RtPathReservoirHistory {
                     guidePreviousPostWeightEligible
                             - guidePreviousPostWeightSourceValid
                             - guidePreviousPostWeightSourceInvalid);
+            CausticaMod.LOGGER.info(
+                    "RT path guide previous selection denominator: eligible={}, "
+                            + "next[valid={},invalid={},delta={}] "
+                            + "probability[valid={},invalid={},delta={}] "
+                            + "current[valid={},invalid={},delta={}] "
+                            + "source[valid={},invalid={},delta={}]",
+                    guidePreviousSelectionProbabilityEligible,
+                    guidePreviousSelectionDenominatorValid,
+                    guidePreviousSelectionDenominatorInvalid,
+                    guidePreviousSelectionProbabilityEligible
+                            - guidePreviousSelectionDenominatorValid
+                            - guidePreviousSelectionDenominatorInvalid,
+                    guidePreviousSelectionProbabilityValid,
+                    guidePreviousSelectionProbabilityInvalid,
+                    guidePreviousSelectionProbabilityEligible
+                            - guidePreviousSelectionProbabilityValid
+                            - guidePreviousSelectionProbabilityInvalid,
+                    guidePreviousSelectionCurrentDenominatorValid,
+                    guidePreviousSelectionCurrentDenominatorInvalid,
+                    guidePreviousSelectionProbabilityEligible
+                            - guidePreviousSelectionCurrentDenominatorValid
+                            - guidePreviousSelectionCurrentDenominatorInvalid,
+                    guidePreviousSelectionSourceDenominatorValid,
+                    guidePreviousSelectionSourceDenominatorInvalid,
+                    guidePreviousSelectionProbabilityEligible
+                            - guidePreviousSelectionSourceDenominatorValid
+                            - guidePreviousSelectionSourceDenominatorInvalid);
             spatialDiagnosticViewPending = 0;
             return;
         }
