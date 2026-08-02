@@ -808,6 +808,30 @@ final class RtPathSpatialReuseReferenceTest {
     }
 
     @Test
+    void branchScratchStorageRequiresExactReservoirAndRootBits() {
+        var selected = RtPathSpatialReuseReference.MappingKind.DIFFUSE_RECONNECTION;
+        var retained = RtPathSpatialReuseReference.MappingKind.IDENTITY;
+        assertEquals(RtPathSpatialReuseReference.BranchScratchStorageOutcome.METADATA_REJECT,
+                RtPathSpatialReuseReference.branchScratchStorageOutcome(
+                        false, true, true, selected));
+        assertEquals(RtPathSpatialReuseReference.BranchScratchStorageOutcome.PAIR_REJECT,
+                RtPathSpatialReuseReference.branchScratchStorageOutcome(
+                        true, false, true, selected));
+        assertEquals(RtPathSpatialReuseReference.BranchScratchStorageOutcome.PAIR_REJECT,
+                RtPathSpatialReuseReference.branchScratchStorageOutcome(
+                        true, true, false, selected));
+        assertEquals(RtPathSpatialReuseReference.BranchScratchStorageOutcome.SELECTED_ACCEPTED,
+                RtPathSpatialReuseReference.branchScratchStorageOutcome(
+                        true, true, true, selected));
+        assertEquals(RtPathSpatialReuseReference.BranchScratchStorageOutcome.RETAINED_ACCEPTED,
+                RtPathSpatialReuseReference.branchScratchStorageOutcome(
+                        true, true, true, retained));
+        assertThrows(IllegalArgumentException.class,
+                () -> RtPathSpatialReuseReference.branchScratchStorageOutcome(
+                        true, true, true, null));
+    }
+
+    @Test
     void pairedMomentsExposeCovarianceAndCorrelationWithoutBatchStorage() {
         var moments = new RtPathSpatialReuseReference.PairMoments();
         moments.add(1.0, 2.0);
@@ -1185,8 +1209,29 @@ final class RtPathSpatialReuseReferenceTest {
         assertEquals(238,
                 RtPathReservoirHistory.GUIDE_BRANCH_SCRATCH_REPLAY_RETAINED_ACCEPTED_INDEX);
         assertEquals(239, RtPathReservoirHistory.GUIDE_BRANCH_SCRATCH_REPLAY_DELTA_INDEX);
-        assertEquals(240, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
-        assertEquals(240 * Integer.BYTES,
+        assertEquals(240, RtPathReservoirHistory.GUIDE_BRANCH_SCRATCH_WRITE_ELIGIBLE_INDEX);
+        assertEquals(241, RtPathReservoirHistory.GUIDE_BRANCH_SCRATCH_WRITE_COMPLETED_INDEX);
+        assertEquals(242, RtPathReservoirHistory.GUIDE_BRANCH_SCRATCH_CAPTURE_CURSOR_INDEX);
+        assertEquals(243, RtPathReservoirHistory.GUIDE_BRANCH_SCRATCH_VALIDATE_ATTEMPTED_INDEX);
+        assertEquals(244,
+                RtPathReservoirHistory.GUIDE_BRANCH_SCRATCH_VALIDATE_METADATA_REJECT_INDEX);
+        assertEquals(245,
+                RtPathReservoirHistory.GUIDE_BRANCH_SCRATCH_VALIDATE_RESERVOIR_MATCH_INDEX);
+        assertEquals(246,
+                RtPathReservoirHistory.GUIDE_BRANCH_SCRATCH_VALIDATE_RESERVOIR_MISMATCH_INDEX);
+        assertEquals(247,
+                RtPathReservoirHistory.GUIDE_BRANCH_SCRATCH_VALIDATE_ROOT_MATCH_INDEX);
+        assertEquals(248,
+                RtPathReservoirHistory.GUIDE_BRANCH_SCRATCH_VALIDATE_ROOT_MISMATCH_INDEX);
+        assertEquals(249,
+                RtPathReservoirHistory.GUIDE_BRANCH_SCRATCH_VALIDATE_SELECTED_ACCEPTED_INDEX);
+        assertEquals(250,
+                RtPathReservoirHistory.GUIDE_BRANCH_SCRATCH_VALIDATE_RETAINED_ACCEPTED_INDEX);
+        assertEquals(251,
+                RtPathReservoirHistory.GUIDE_BRANCH_SCRATCH_VALIDATE_PAIR_REJECT_INDEX);
+        assertEquals(252, RtPathReservoirHistory.GUIDE_BRANCH_SCRATCH_VALIDATE_DELTA_INDEX);
+        assertEquals(253, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
+        assertEquals(253 * Integer.BYTES,
                 RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_COUNTER_BYTES);
         assertEquals(32, RtPathReservoirHistory.SHIFTED_RECEIVER_GUIDE_STRIDE);
         assertEquals(27_566_080L,
@@ -1197,7 +1242,11 @@ final class RtPathSpatialReuseReferenceTest {
         assertEquals(8192, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_MERGE_PAIR_OFFSET);
         assertEquals(12288, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_SELECTION_PAIR_OFFSET);
         assertEquals(4096 * 8, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_PAIR_FLOAT_COUNT);
-        assertEquals(4096 * 8 * Float.BYTES,
+        assertEquals(4096, RtPathReservoirHistory.PATH_BRANCH_SCRATCH_CAPTURE_CAPACITY);
+        assertEquals(352, RtPathReservoirHistory.PATH_BRANCH_SCRATCH_CAPTURE_STRIDE);
+        assertEquals(4096 * 352,
+                RtPathReservoirHistory.PATH_BRANCH_SCRATCH_CAPTURE_BYTES);
+        assertEquals(4096 * 8 * Float.BYTES + 4096 * 352,
                 RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_PAIR_BYTES);
     }
 }

@@ -1181,6 +1181,7 @@ public final class RtComposite {
             ByteBuffer crossFrameMappingReplayPushConstants = null;
             ByteBuffer guideScratchValidatePushConstants = null;
             ByteBuffer guidePreviousReplayPushConstants = null;
+            ByteBuffer branchScratchValidatePushConstants = null;
             if (restirPt
                      && debugView == RtPathReservoirHistory.SHIFTED_RADIANCE_DEBUG_VIEW) {
                 guidePreviousReplayPushConstants =
@@ -1208,6 +1209,29 @@ public final class RtComposite {
                                         : 0),
                         worldConstants.historyGeneration())
                         .write(guidePreviousReplayPushConstants);
+                branchScratchValidatePushConstants =
+                        stack.malloc(WorldPushConstantsData.BYTE_SIZE);
+                new WorldPushConstantsData(
+                        worldConstants.worldPushAddr(),
+                        worldConstants.tableAddr(),
+                        worldConstants.entityTableAddr(),
+                        worldConstants.materialTableAddr(),
+                        worldConstants.lightBufAddr(),
+                        worldConstants.lightAliasAddr(),
+                        worldConstants.lightLocalAliasAddr(),
+                        worldConstants.lightGridCellAddr(),
+                        worldConstants.lightGridSpanAddr(),
+                        worldConstants.pathQueueAddr(),
+                        worldConstants.directReservoirAddr(),
+                        worldConstants.pathReservoirAddr(),
+                        worldConstants.pathReservoirPreviousAddr(),
+                        worldConstants.frameIndex(),
+                        worldConstants.debugView(),
+                        worldConstants.historyFlags()
+                                | RtPathReservoirHistory
+                                        .GUIDE_BRANCH_SCRATCH_VALIDATE_PASS_FLAG,
+                        worldConstants.historyGeneration())
+                        .write(branchScratchValidatePushConstants);
                 mappingReplayPushConstants =
                         stack.malloc(WorldPushConstantsData.BYTE_SIZE);
                 new WorldPushConstantsData(
@@ -1318,6 +1342,14 @@ public final class RtComposite {
                                  "frame.pathGuidePreviousReplay")) {
                         active.trace(cmd, renderW, renderH,
                                 guidePreviousReplayPushConstants, 1);
+                    }
+                    VulkanCommandEncoder.memoryBarrier(cmd, stack);
+                    try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd,
+                                 "path branch scratch storage validate");
+                         RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage(
+                                 "frame.pathBranchScratchStorageValidate")) {
+                        active.trace(cmd, renderW, renderH,
+                                branchScratchValidatePushConstants, 1);
                     }
                     VulkanCommandEncoder.memoryBarrier(cmd, stack);
                     pathReservoirs.commitBranchScratch(

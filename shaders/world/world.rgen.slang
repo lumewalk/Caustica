@@ -1687,6 +1687,108 @@ public void pathMappingReplayValidate() {
 // previous pair is read before the host clears the same buffers for the current frame. It validates
 // receiver and source reprojection plus exact original-source replay, but never reconstructs a new
 // mapping, changes a weight, writes history, or touches the output image.
+static const uint PATH_BRANCH_SCRATCH_CAPTURE_CAPACITY = 4096u;
+static const uint PATH_BRANCH_SCRATCH_CAPTURE_BYTE_OFFSET = 131072u;
+
+struct PathBranchScratchCapture {
+    uint4 metadata; // pixel index, mapping kind, frame index, history generation
+    PathReservoir reservoir;
+    PathSourceRoot root;
+};
+
+static bool pathReservoirBitsMatch(PathReservoir a, PathReservoir b) {
+    return all(asuint(a.sampleRadianceTarget) == asuint(b.sampleRadianceTarget))
+            && all(asuint(a.proposalShift) == asuint(b.proposalShift))
+            && all(asuint(a.proposalComponents) == asuint(b.proposalComponents))
+            && all(asuint(a.canonicalRadianceTarget) == asuint(b.canonicalRadianceTarget))
+            && all(asuint(a.weights) == asuint(b.weights))
+            && all(a.identity == b.identity)
+            && all(a.replay == b.replay)
+            && all(a.replayControl == b.replayControl)
+            && all(asuint(a.reconnectionVertex) == asuint(b.reconnectionVertex))
+            && all(asuint(a.reconnectionNormalPdf) == asuint(b.reconnectionNormalPdf))
+            && all(asuint(a.reconnectionThroughput) == asuint(b.reconnectionThroughput));
+}
+
+static bool packedPathSegmentBitsMatch(PackedPathSegment a, PackedPathSegment b) {
+    return all(asuint(a.ro) == asuint(b.ro))
+            && a.rd == b.rd
+            && a.throughput == b.throughput
+            && a.currentExtinction == b.currentExtinction
+            && a.outerExtinction == b.outerExtinction
+            && a.mediumIors == b.mediumIors
+            && a.rayCone == b.rayCone
+            && a.seed == b.seed
+            && a.pathFlags == b.pathFlags
+            && a.nextRecord == b.nextRecord;
+}
+
+static bool pathSourceRootBitsMatch(PathSourceRoot a, PathSourceRoot b) {
+    return all(asuint(a.sourcePositionMaterial) == asuint(b.sourcePositionMaterial))
+            && all(asuint(a.sourceNormalRoughness) == asuint(b.sourceNormalRoughness))
+            && all(asuint(a.receiverPositionMaterial) == asuint(b.receiverPositionMaterial))
+            && all(asuint(a.receiverNormalRoughness) == asuint(b.receiverNormalRoughness))
+            && packedPathSegmentBitsMatch(a.segment0, b.segment0)
+            && packedPathSegmentBitsMatch(a.segment1, b.segment1);
+}
+
+static void pathBranchScratchStorageValidate() {
+    if (pc.debugView != PATH_SHIFTED_RADIANCE_DEBUG_VIEW
+            || (pc.historyFlags & PATH_GUIDE_BRANCH_SCRATCH_VALIDATE_PASS_FLAG) == 0u
+            || worldPush.pathShiftDiagnosticCounterAddr == 0u
+            || worldPush.pathShiftDiagnosticPairAddr == 0u
+            || worldPush.pathShiftBranchReservoirCurrentAddr == 0u
+            || worldPush.pathShiftBranchRootCurrentAddr == 0u) {
+        return;
+    }
+    uint2 dimensions = DispatchRaysDimensions().xy;
+    uint2 dispatchPixel = DispatchRaysIndex().xy;
+    uint sampleIndex = dispatchPixel.y * dimensions.x + dispatchPixel.x;
+    DevicePtr<uint> counters = DevicePtr<uint>(
+            worldPush.pathShiftDiagnosticCounterAddr);
+    uint capturedCount = min(counters[PATH_GUIDE_BRANCH_SCRATCH_CAPTURE_CURSOR],
+            PATH_BRANCH_SCRATCH_CAPTURE_CAPACITY);
+    if (sampleIndex >= capturedCount) return;
+
+    InterlockedAdd(counters[PATH_GUIDE_BRANCH_SCRATCH_VALIDATE_ATTEMPTED], 1u);
+    ConstPtr<PathBranchScratchCapture> captures = ConstPtr<PathBranchScratchCapture>(
+            worldPush.pathShiftDiagnosticPairAddr
+                    + uint64_t(PATH_BRANCH_SCRATCH_CAPTURE_BYTE_OFFSET));
+    PathBranchScratchCapture expected = captures[sampleIndex];
+    uint pixelCount = dimensions.x * dimensions.y;
+    uint currentGeneration = pc.historyGeneration & PATH_GENERATION_MASK;
+    bool metadataValid = expected.metadata.x < pixelCount
+            && (expected.metadata.y == PATH_MAPPING_IDENTITY
+                    || expected.metadata.y == PATH_MAPPING_DIFFUSE_RECONNECTION)
+            && expected.metadata.z == worldPush.frameIndex
+            && expected.metadata.w == currentGeneration;
+    if (!metadataValid) {
+        InterlockedAdd(counters[
+                PATH_GUIDE_BRANCH_SCRATCH_VALIDATE_METADATA_REJECT], 1u);
+        return;
+    }
+
+    PathReservoir stored = ConstPtr<PathReservoir>(
+            worldPush.pathShiftBranchReservoirCurrentAddr)[expected.metadata.x];
+    PathSourceRoot root = ConstPtr<PathSourceRoot>(
+            worldPush.pathShiftBranchRootCurrentAddr)[expected.metadata.x];
+    bool reservoirMatches = pathReservoirBitsMatch(stored, expected.reservoir);
+    bool rootMatches = pathSourceRootBitsMatch(root, expected.root);
+    InterlockedAdd(counters[reservoirMatches
+            ? PATH_GUIDE_BRANCH_SCRATCH_VALIDATE_RESERVOIR_MATCH
+            : PATH_GUIDE_BRANCH_SCRATCH_VALIDATE_RESERVOIR_MISMATCH], 1u);
+    InterlockedAdd(counters[rootMatches
+            ? PATH_GUIDE_BRANCH_SCRATCH_VALIDATE_ROOT_MATCH
+            : PATH_GUIDE_BRANCH_SCRATCH_VALIDATE_ROOT_MISMATCH], 1u);
+    if (!reservoirMatches || !rootMatches) {
+        InterlockedAdd(counters[PATH_GUIDE_BRANCH_SCRATCH_VALIDATE_PAIR_REJECT], 1u);
+        return;
+    }
+    InterlockedAdd(counters[expected.metadata.y == PATH_MAPPING_DIFFUSE_RECONNECTION
+            ? PATH_GUIDE_BRANCH_SCRATCH_VALIDATE_SELECTED_ACCEPTED
+            : PATH_GUIDE_BRANCH_SCRATCH_VALIDATE_RETAINED_ACCEPTED], 1u);
+}
+
 static void pathBranchScratchReplayValidate() {
     if (pc.debugView != PATH_SHIFTED_RADIANCE_DEBUG_VIEW
             || (pc.historyFlags & PATH_GUIDE_PREVIOUS_REPLAY_PASS_FLAG) == 0u
@@ -2765,13 +2867,38 @@ public void pathGuidePreviousReplayValidate() {
                                             1u);
                                     if (branchReplayMatches
                                             && worldPush.pathShiftBranchReservoirCurrentAddr != 0u
-                                            && worldPush.pathShiftBranchRootCurrentAddr != 0u) {
+                                            && worldPush.pathShiftBranchRootCurrentAddr != 0u
+                                            && worldPush.pathShiftDiagnosticPairAddr != 0u) {
+                                        InterlockedAdd(counters[
+                                                PATH_GUIDE_BRANCH_SCRATCH_WRITE_ELIGIBLE], 1u);
+                                        uint captureIndex = 0u;
+                                        InterlockedAdd(counters[
+                                                PATH_GUIDE_BRANCH_SCRATCH_CAPTURE_CURSOR],
+                                                1u, captureIndex);
+                                        if (captureIndex
+                                                < PATH_BRANCH_SCRATCH_CAPTURE_CAPACITY) {
+                                            PathBranchScratchCapture capture;
+                                            capture.metadata = uint4(pixelIndex,
+                                                    pathMappingKind(branchRecord),
+                                                    worldPush.frameIndex,
+                                                    currentGeneration);
+                                            capture.reservoir = branchRecord;
+                                            capture.root = branchRoot;
+                                            DevicePtr<PathBranchScratchCapture> captures =
+                                                    DevicePtr<PathBranchScratchCapture>(worldPush
+                                                            .pathShiftDiagnosticPairAddr
+                                                            + uint64_t(
+                                                                    PATH_BRANCH_SCRATCH_CAPTURE_BYTE_OFFSET));
+                                            captures[captureIndex] = capture;
+                                        }
                                         DevicePtr<PathReservoir>(worldPush
                                                 .pathShiftBranchReservoirCurrentAddr)[pixelIndex]
                                                 = branchRecord;
                                         DevicePtr<PathSourceRoot>(worldPush
                                                 .pathShiftBranchRootCurrentAddr)[pixelIndex]
                                                 = branchRoot;
+                                        InterlockedAdd(counters[
+                                                PATH_GUIDE_BRANCH_SCRATCH_WRITE_COMPLETED], 1u);
                                     }
                                 }
                             }
@@ -2920,6 +3047,10 @@ public void pathGuideScratchValidate() {
 [shader("raygeneration")]
 void main() {
     worldPush = ConstPtr<WorldPush>(pc.worldPushAddr)[0];
+    if ((pc.historyFlags & PATH_GUIDE_BRANCH_SCRATCH_VALIDATE_PASS_FLAG) != 0u) {
+        pathBranchScratchStorageValidate();
+        return;
+    }
     if ((pc.historyFlags & PATH_GUIDE_PREVIOUS_REPLAY_PASS_FLAG) != 0u) {
         pathGuidePreviousReplayValidate();
         return;

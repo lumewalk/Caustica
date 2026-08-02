@@ -710,8 +710,20 @@ Thirty-six fresh Vulkan readbacks covered 6554880 attempts: 24288 selected and 2
 were accepted, metadata rejects stayed zero, and every terminal partition had `delta = 0`. Strict
 receiver/source reprojection and source-replay tails remain explicit fail-closed categories. This
 diagnostic adds 32 B/pixel of ping-pong storage (1130.43 MiB total at 1280×673) and expands WorldPush
-to 672 bytes; ordinary rendering still receives zero addresses. Before history integration, the next
-bounded gate must compare the device-written payload/root against the register pair bit-for-bit.
+to 672 bytes; ordinary rendering still receives zero addresses. Before history integration, the
+device-written payload/root therefore had to match the register pair bit-for-bit.
+
+That exact storage gate is now proven without another full-resolution copy. Every replay-approved
+write increments eligible/completed counters and contributes to a bounded 4096-record capture of the
+expected register pair. Each capture stores 16 bytes of pixel/mapping/frame/generation metadata plus
+the complete 176-byte reservoir and 160-byte root. A separate ray-generation pass runs only after a
+Vulkan memory barrier and compares all reservoir and root fields as raw 32-bit lanes. Across 57 fresh
+readbacks, all 142835 writes completed and all 142835 captured pairs matched both structures exactly
+(128416 selected, 14419 retained); metadata rejects, reservoir/root mismatches, pair rejects, capture
+overflow and accounting deltas were zero. The 352-byte capture record adds 1.375 MiB to the existing
+diagnostic sample buffer, leaves WorldPush at 672 bytes and replay ABI at 10, and receives no address
+outside view 20. This authorizes design of an isolated candidate-history promotion gate, but does not
+yet authorize committed history, recursive spatial sourcing or ordinary-estimator use.
 
 ## Delivery Phases
 

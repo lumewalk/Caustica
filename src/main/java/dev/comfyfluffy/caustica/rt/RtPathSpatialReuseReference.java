@@ -1061,6 +1061,35 @@ final class RtPathSpatialReuseReference {
                 : GuidePreviousReplayOutcome.RETAINED_ACCEPTED;
     }
 
+    enum BranchScratchStorageOutcome {
+        METADATA_REJECT,
+        PAIR_REJECT,
+        SELECTED_ACCEPTED,
+        RETAINED_ACCEPTED
+    }
+
+    /**
+     * Ordered CPU mirror for the post-barrier exact-lane validation sample. Reservoir and root
+     * equality are bitwise requirements; acceptance remains diagnostic-only.
+     */
+    static BranchScratchStorageOutcome branchScratchStorageOutcome(
+            boolean metadataValid, boolean reservoirBitsMatch, boolean rootBitsMatch,
+            MappingKind mappingKind) {
+        if (!metadataValid) {
+            return BranchScratchStorageOutcome.METADATA_REJECT;
+        }
+        if (!reservoirBitsMatch || !rootBitsMatch) {
+            return BranchScratchStorageOutcome.PAIR_REJECT;
+        }
+        if (mappingKind == null) {
+            throw new IllegalArgumentException(
+                    "accepted branch scratch sample requires a mapping kind");
+        }
+        return mappingKind == MappingKind.DIFFUSE_RECONNECTION
+                ? BranchScratchStorageOutcome.SELECTED_ACCEPTED
+                : BranchScratchStorageOutcome.RETAINED_ACCEPTED;
+    }
+
     /**
      * Shader-independent receiver-aware replay boundary for an ABI-10 one-hop diffuse mapping.
      * The source path is replayed from its original seeds; this record then applies the stored

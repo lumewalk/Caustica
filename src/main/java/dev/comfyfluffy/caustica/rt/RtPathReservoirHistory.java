@@ -36,6 +36,7 @@ final class RtPathReservoirHistory {
     static final int GUIDE_PREVIOUS_REPLAY_PASS_FLAG = 1 << 8;
     static final int GUIDE_PREVIOUS_AVAILABLE_FLAG = 1 << 9;
     static final int GUIDE_BRANCH_PREVIOUS_AVAILABLE_FLAG = 1 << 10;
+    static final int GUIDE_BRANCH_SCRATCH_VALIDATE_PASS_FLAG = 1 << 11;
     static final int SPATIAL_DIAGNOSTIC_CATEGORY_COUNT = 9;
     static final int SPATIAL_DIAGNOSTIC_STRICT_PAIR_CURSOR_INDEX =
             SPATIAL_DIAGNOSTIC_CATEGORY_COUNT;
@@ -269,7 +270,20 @@ final class RtPathReservoirHistory {
     static final int GUIDE_BRANCH_SCRATCH_REPLAY_SELECTED_ACCEPTED_INDEX = 237;
     static final int GUIDE_BRANCH_SCRATCH_REPLAY_RETAINED_ACCEPTED_INDEX = 238;
     static final int GUIDE_BRANCH_SCRATCH_REPLAY_DELTA_INDEX = 239;
-    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 240;
+    static final int GUIDE_BRANCH_SCRATCH_WRITE_ELIGIBLE_INDEX = 240;
+    static final int GUIDE_BRANCH_SCRATCH_WRITE_COMPLETED_INDEX = 241;
+    static final int GUIDE_BRANCH_SCRATCH_CAPTURE_CURSOR_INDEX = 242;
+    static final int GUIDE_BRANCH_SCRATCH_VALIDATE_ATTEMPTED_INDEX = 243;
+    static final int GUIDE_BRANCH_SCRATCH_VALIDATE_METADATA_REJECT_INDEX = 244;
+    static final int GUIDE_BRANCH_SCRATCH_VALIDATE_RESERVOIR_MATCH_INDEX = 245;
+    static final int GUIDE_BRANCH_SCRATCH_VALIDATE_RESERVOIR_MISMATCH_INDEX = 246;
+    static final int GUIDE_BRANCH_SCRATCH_VALIDATE_ROOT_MATCH_INDEX = 247;
+    static final int GUIDE_BRANCH_SCRATCH_VALIDATE_ROOT_MISMATCH_INDEX = 248;
+    static final int GUIDE_BRANCH_SCRATCH_VALIDATE_SELECTED_ACCEPTED_INDEX = 249;
+    static final int GUIDE_BRANCH_SCRATCH_VALIDATE_RETAINED_ACCEPTED_INDEX = 250;
+    static final int GUIDE_BRANCH_SCRATCH_VALIDATE_PAIR_REJECT_INDEX = 251;
+    static final int GUIDE_BRANCH_SCRATCH_VALIDATE_DELTA_INDEX = 252;
+    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 253;
     static final int SHIFTED_RECEIVER_GUIDE_STRIDE = 8 * Float.BYTES;
     static final int SPATIAL_DIAGNOSTIC_COUNTER_BYTES =
             SHIFTED_DIAGNOSTIC_COUNTER_COUNT * Integer.BYTES;
@@ -282,8 +296,16 @@ final class RtPathReservoirHistory {
             SPATIAL_DIAGNOSTIC_PAIR_CAPACITY * 3;
     static final int SHIFTED_DIAGNOSTIC_PAIR_FLOAT_COUNT =
             SPATIAL_DIAGNOSTIC_PAIR_CAPACITY * 8;
+    static final int PATH_BRANCH_SCRATCH_CAPTURE_CAPACITY = 4096;
+    static final int PATH_BRANCH_SCRATCH_CAPTURE_HEADER_BYTES = 4 * Integer.BYTES;
+    static final int PATH_BRANCH_SCRATCH_CAPTURE_STRIDE =
+            PATH_BRANCH_SCRATCH_CAPTURE_HEADER_BYTES
+                    + PathReservoirData.BYTE_SIZE + PathSourceRootData.BYTE_SIZE;
+    static final int PATH_BRANCH_SCRATCH_CAPTURE_BYTES =
+            PATH_BRANCH_SCRATCH_CAPTURE_CAPACITY * PATH_BRANCH_SCRATCH_CAPTURE_STRIDE;
     static final int SPATIAL_DIAGNOSTIC_PAIR_BYTES =
-            SHIFTED_DIAGNOSTIC_PAIR_FLOAT_COUNT * Float.BYTES;
+            SHIFTED_DIAGNOSTIC_PAIR_FLOAT_COUNT * Float.BYTES
+                    + PATH_BRANCH_SCRATCH_CAPTURE_BYTES;
 
     record Frame(long generation, int writeSlot, int previousSlot, boolean previousAvailable) {
         int finalSlot() {
@@ -411,7 +433,7 @@ final class RtPathReservoirHistory {
                 true, "path spatial diagnostic counters");
         spatialDiagnosticPairs = ctx.createBuffer(SPATIAL_DIAGNOSTIC_PAIR_BYTES,
                 VK10.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-                true, "path spatial diagnostic target pairs");
+                true, "path spatial diagnostic samples");
         temporalPipeline = RtPathTemporalPipeline.create(ctx, receiverMotion.view,
                 validationMetadata.view, debugColor.view,
                 receiverPositionMaterial.view, receiverNormalRoughness.view,
@@ -1099,6 +1121,30 @@ final class RtPathReservoirHistory {
                     counters.get(GUIDE_BRANCH_SCRATCH_REPLAY_SELECTED_ACCEPTED_INDEX));
             long guideBranchReplayRetainedAccepted = Integer.toUnsignedLong(
                     counters.get(GUIDE_BRANCH_SCRATCH_REPLAY_RETAINED_ACCEPTED_INDEX));
+            long guideBranchWriteEligible = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_SCRATCH_WRITE_ELIGIBLE_INDEX));
+            long guideBranchWriteCompleted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_SCRATCH_WRITE_COMPLETED_INDEX));
+            long guideBranchCaptureCursor = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_SCRATCH_CAPTURE_CURSOR_INDEX));
+            long guideBranchValidateAttempted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_SCRATCH_VALIDATE_ATTEMPTED_INDEX));
+            long guideBranchValidateMetadataReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_SCRATCH_VALIDATE_METADATA_REJECT_INDEX));
+            long guideBranchValidateReservoirMatch = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_SCRATCH_VALIDATE_RESERVOIR_MATCH_INDEX));
+            long guideBranchValidateReservoirMismatch = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_SCRATCH_VALIDATE_RESERVOIR_MISMATCH_INDEX));
+            long guideBranchValidateRootMatch = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_SCRATCH_VALIDATE_ROOT_MATCH_INDEX));
+            long guideBranchValidateRootMismatch = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_SCRATCH_VALIDATE_ROOT_MISMATCH_INDEX));
+            long guideBranchValidateSelectedAccepted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_SCRATCH_VALIDATE_SELECTED_ACCEPTED_INDEX));
+            long guideBranchValidateRetainedAccepted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_SCRATCH_VALIDATE_RETAINED_ACCEPTED_INDEX));
+            long guideBranchValidatePairReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_SCRATCH_VALIDATE_PAIR_REJECT_INDEX));
             long crossFrameReceiverReject = crossFrameReceiverSurfaceReject
                     + crossFrameReceiverSampleReject + crossFrameReceiverEdgeReject
                     + crossFrameReceiverTopologyReject + crossFrameReceiverDepthReject
@@ -1661,6 +1707,36 @@ final class RtPathReservoirHistory {
                     guideBranchReplayRetainedAccepted,
                     guideBranchReplayTerminal,
                     guideBranchReplayAttempted - guideBranchReplayTerminal);
+            long guideBranchCaptured = Math.min(guideBranchCaptureCursor,
+                    PATH_BRANCH_SCRATCH_CAPTURE_CAPACITY);
+            long guideBranchValidateTerminal = guideBranchValidateMetadataReject
+                    + guideBranchValidateSelectedAccepted
+                    + guideBranchValidateRetainedAccepted
+                    + guideBranchValidatePairReject;
+            CausticaMod.LOGGER.info(
+                    "RT path guide branch scratch storage: write[eligible={},completed={},delta={}] "
+                            + "capture[cursor={},captured={},overflow={}] "
+                            + "validate[attempted={},metadata={},reservoirMatch={},"
+                            + "reservoirMismatch={},rootMatch={},rootMismatch={},"
+                            + "selectedAccepted={},retainedAccepted={},pairReject={},"
+                            + "terminal={},delta={}]",
+                    guideBranchWriteEligible,
+                    guideBranchWriteCompleted,
+                    guideBranchWriteEligible - guideBranchWriteCompleted,
+                    guideBranchCaptureCursor,
+                    guideBranchCaptured,
+                    guideBranchCaptureCursor - guideBranchCaptured,
+                    guideBranchValidateAttempted,
+                    guideBranchValidateMetadataReject,
+                    guideBranchValidateReservoirMatch,
+                    guideBranchValidateReservoirMismatch,
+                    guideBranchValidateRootMatch,
+                    guideBranchValidateRootMismatch,
+                    guideBranchValidateSelectedAccepted,
+                    guideBranchValidateRetainedAccepted,
+                    guideBranchValidatePairReject,
+                    guideBranchValidateTerminal,
+                    guideBranchValidateAttempted - guideBranchValidateTerminal);
             spatialDiagnosticViewPending = 0;
             return;
         }

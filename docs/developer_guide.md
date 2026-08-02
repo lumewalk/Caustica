@@ -409,8 +409,22 @@ latest 36 readbacks covered 6554880 attempts, with 24288 selected and 2587 retai
 metadata rejects and exact `attempted = terminal` accounting on every readback. Reprojection and
 source-replay rejects are expected strict categories, not repaired by tolerance loosening. The
 diagnostic allocation is 1130.43 MiB at 1280×673 and WorldPush is 672 bytes; all four branch BDA
-addresses are zero outside view 20. The next gate is explicit bit-for-bit equality between the
-register pair and its device-written payload/root.
+addresses are zero outside view 20. The next required boundary was explicit bit-for-bit equality
+between the register pair and its device-written payload/root.
+
+The post-barrier storage audit now follows that write pass. It captures at most 4096 complete
+expected register pairs into a 352-byte record (metadata + 176-byte `PathReservoir` + 160-byte
+`PathSourceRoot`), then a separate ray-generation dispatch compares every stored float/uint lane by
+its raw 32-bit representation. The diagnostic counter buffer is 253 uints / 1012 bytes. The capture
+tail adds 1.375 MiB to the existing diagnostic sample buffer; full-resolution branch scratch remains
+1130.43 MiB at 1280×673, WorldPush remains 672 bytes and replay ABI remains 10. The runtime log line
+`RT path guide branch scratch storage` must show `eligible == completed`, `attempted == captured`,
+zero metadata/reservoir/root/pair rejects, and zero write/validation deltas. The proven run covered
+57 readbacks and 142835 exact pairs (128416 selected, 14419 retained), with no capture overflow.
+
+This validation does not promote the pair. Before persistent reuse, define a separate isolated
+candidate-history owner with the same reset/generation rules as path history and retain the bans on
+mapped-as-source recursion, Jacobian composition and estimator contribution.
 
 For a fresh runtime check, use debug view 20 and inspect `run/logs/latest.log`. Normal operation
 requires `RT bring-up OK`, Vulkan, the intended NVIDIA device, exact zero-delta counter partitions,
