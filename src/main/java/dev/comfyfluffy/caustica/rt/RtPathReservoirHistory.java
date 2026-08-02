@@ -170,7 +170,22 @@ final class RtPathReservoirHistory {
     static final int GUIDE_PREVIOUS_REPLAY_SOURCE_REPLAY_REJECT_INDEX = 139;
     static final int GUIDE_PREVIOUS_REPLAY_SELECTED_ACCEPTED_INDEX = 140;
     static final int GUIDE_PREVIOUS_REPLAY_RETAINED_ACCEPTED_INDEX = 141;
-    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 142;
+    static final int GUIDE_PREVIOUS_REMAP_ELIGIBLE_INDEX = 142;
+    static final int GUIDE_PREVIOUS_REMAP_RECEIVER_GUIDE_REJECT_INDEX = 143;
+    static final int GUIDE_PREVIOUS_REMAP_READY_INDEX = 144;
+    static final int GUIDE_PREVIOUS_REMAP_GEOMETRY_REJECT_INDEX = 145;
+    static final int GUIDE_PREVIOUS_REMAP_PDF_REJECT_INDEX = 146;
+    static final int GUIDE_PREVIOUS_REMAP_THROUGHPUT_REJECT_INDEX = 147;
+    static final int GUIDE_PREVIOUS_VISIBILITY_ELIGIBLE_INDEX = 148;
+    static final int GUIDE_PREVIOUS_VISIBILITY_CLEAR_INDEX = 149;
+    static final int GUIDE_PREVIOUS_VISIBILITY_TINTED_INDEX = 150;
+    static final int GUIDE_PREVIOUS_VISIBILITY_OCCLUDED_INDEX = 151;
+    static final int GUIDE_PREVIOUS_VISIBILITY_INVALID_INDEX = 152;
+    static final int GUIDE_PREVIOUS_TARGET_ELIGIBLE_INDEX = 153;
+    static final int GUIDE_PREVIOUS_TARGET_POSITIVE_INDEX = 154;
+    static final int GUIDE_PREVIOUS_TARGET_ZERO_INDEX = 155;
+    static final int GUIDE_PREVIOUS_TARGET_INVALID_INDEX = 156;
+    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 157;
     static final int SHIFTED_RECEIVER_GUIDE_STRIDE = 8 * Float.BYTES;
     static final int SPATIAL_DIAGNOSTIC_COUNTER_BYTES =
             SHIFTED_DIAGNOSTIC_COUNTER_COUNT * Integer.BYTES;
@@ -721,6 +736,36 @@ final class RtPathReservoirHistory {
                     counters.get(GUIDE_PREVIOUS_REPLAY_SELECTED_ACCEPTED_INDEX));
             long guidePreviousReplayRetainedAccepted = Integer.toUnsignedLong(
                     counters.get(GUIDE_PREVIOUS_REPLAY_RETAINED_ACCEPTED_INDEX));
+            long guidePreviousRemapEligible = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_REMAP_ELIGIBLE_INDEX));
+            long guidePreviousRemapReceiverGuideReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_REMAP_RECEIVER_GUIDE_REJECT_INDEX));
+            long guidePreviousRemapReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_REMAP_READY_INDEX));
+            long guidePreviousRemapGeometryReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_REMAP_GEOMETRY_REJECT_INDEX));
+            long guidePreviousRemapPdfReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_REMAP_PDF_REJECT_INDEX));
+            long guidePreviousRemapThroughputReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_REMAP_THROUGHPUT_REJECT_INDEX));
+            long guidePreviousVisibilityEligible = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_VISIBILITY_ELIGIBLE_INDEX));
+            long guidePreviousVisibilityClear = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_VISIBILITY_CLEAR_INDEX));
+            long guidePreviousVisibilityTinted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_VISIBILITY_TINTED_INDEX));
+            long guidePreviousVisibilityOccluded = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_VISIBILITY_OCCLUDED_INDEX));
+            long guidePreviousVisibilityInvalid = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_VISIBILITY_INVALID_INDEX));
+            long guidePreviousTargetEligible = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_TARGET_ELIGIBLE_INDEX));
+            long guidePreviousTargetPositive = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_TARGET_POSITIVE_INDEX));
+            long guidePreviousTargetZero = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_TARGET_ZERO_INDEX));
+            long guidePreviousTargetInvalid = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_TARGET_INVALID_INDEX));
             long crossFrameReceiverReject = crossFrameReceiverSurfaceReject
                     + crossFrameReceiverSampleReject + crossFrameReceiverEdgeReject
                     + crossFrameReceiverTopologyReject + crossFrameReceiverDepthReject
@@ -1011,6 +1056,31 @@ final class RtPathReservoirHistory {
                     guidePreviousReplaySelectedAccepted,
                     guidePreviousReplayRetainedAccepted, guidePreviousReplayTerminal,
                     guidePreviousReplayAttempted - guidePreviousReplayTerminal);
+            long guidePreviousRemapTerminal = guidePreviousRemapReceiverGuideReject
+                    + guidePreviousRemapGeometryReject + guidePreviousRemapPdfReject
+                    + guidePreviousRemapThroughputReject + guidePreviousRemapReady;
+            long guidePreviousVisibilityTerminal = guidePreviousVisibilityClear
+                    + guidePreviousVisibilityTinted + guidePreviousVisibilityOccluded
+                    + guidePreviousVisibilityInvalid;
+            long guidePreviousTargetTerminal = guidePreviousTargetPositive
+                    + guidePreviousTargetZero + guidePreviousTargetInvalid;
+            CausticaMod.LOGGER.info(
+                    "RT path guide previous remap: eligible={}, receiverGuide={}, geometry={}, "
+                            + "pdf={}, throughput={}, ready={}, terminal={}, delta={}, "
+                            + "visibility[eligible={},clear={},tinted={},occluded={},invalid={},delta={}] "
+                            + "target[eligible={},positive={},zero={},invalid={},delta={}]",
+                    guidePreviousRemapEligible, guidePreviousRemapReceiverGuideReject,
+                    guidePreviousRemapGeometryReject, guidePreviousRemapPdfReject,
+                    guidePreviousRemapThroughputReject, guidePreviousRemapReady,
+                    guidePreviousRemapTerminal,
+                    guidePreviousRemapEligible - guidePreviousRemapTerminal,
+                    guidePreviousVisibilityEligible, guidePreviousVisibilityClear,
+                    guidePreviousVisibilityTinted, guidePreviousVisibilityOccluded,
+                    guidePreviousVisibilityInvalid,
+                    guidePreviousVisibilityEligible - guidePreviousVisibilityTerminal,
+                    guidePreviousTargetEligible, guidePreviousTargetPositive,
+                    guidePreviousTargetZero, guidePreviousTargetInvalid,
+                    guidePreviousTargetEligible - guidePreviousTargetTerminal);
             spatialDiagnosticViewPending = 0;
             return;
         }

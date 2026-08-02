@@ -600,6 +600,28 @@ bounded gate may reconstruct receiver-aware mapping, visibility, and target from
 previous pairs, but must remain diagnostic-only and must not update GRIS weights, sample selection,
 committed history, or the ordinary estimator.
 
+The accepted-pair reconstruction gate is now proven in the same read-before-clear pass. Only selected
+diffuse records that passed exact source replay enter the remap family; retained identity records are
+still reported by the replay gate but never treated as mapped samples. The shader reconstructs the
+already-proven receiver-aware geometry, directional-PDF ratio, PSS Jacobian, and endpoint-independent
+throughput ratio, then uses the exact receiver guide origin and production shadow SBT to classify
+clear/tinted/occluded visibility and the canonical shifted luminance target. Fifteen new counters
+(indices 142--156) keep remap readiness, visibility, and target identities separate. No value is
+written to either scratch buffer, history, reservoir weights, selection state, debug image, or the
+ordinary estimator.
+
+Fresh Vulkan/RTX 5060 Ti validation produced 27 readbacks and 23258880 replay attempts. Every replay
+and reconstruction identity was exact: all replay `delta` values were zero, remap `eligible = terminal`,
+visibility categories summed exactly to visibility eligible, and target categories summed exactly to
+target eligible. The run accepted 101968 selected and 2998 retained replay records; all 101968 selected
+records reached remap-ready, with 101967 clear and one occluded visibility result. The corresponding
+target population contained 101967 positive and one zero target, with no invalid arithmetic. A short
+camera movement remained fail-closed through receiver/source reprojection and replay rejects, and all
+accepted records recovered afterward. The lazy view-20 allocation remains 606453760 bytes (578.36
+MiB). The next bounded gate is a counter-only comparison of the reconstructed previous target against
+stored source target/throughput metadata; merge weights, selection, history, and estimator use remain
+prohibited.
+
 ## Delivery Phases
 
 ### Phase 0 — Wavefront Integration Baseline

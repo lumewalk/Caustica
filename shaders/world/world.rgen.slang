@@ -1858,6 +1858,155 @@ public void pathGuidePreviousReplayValidate() {
                 PATH_GUIDE_PREVIOUS_REPLAY_SOURCE_REPLAY_REJECT], 1u);
         return;
     }
+    if (mappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION) {
+        // This is the next bounded gate after exact replay: reconstruct only the already-proven
+        // receiver-aware diffuse mapping chain from the accepted previous pair. Every result below
+        // is a counter-only diagnostic. It does not select, weight, write scratch/history, or feed
+        // the estimator.
+        InterlockedAdd(counters[PATH_GUIDE_PREVIOUS_REMAP_ELIGIBLE], 1u);
+        bool receiverGuideValid = false;
+        float4 receiverGuide = float4(0.0);
+        float4 receiverRayOrigin = float4(0.0);
+        if (worldPush.pathShiftReceiverGuideAddr != 0u) {
+            ConstPtr<float4> receiverGuides =
+                    ConstPtr<float4>(worldPush.pathShiftReceiverGuideAddr);
+            receiverGuide = receiverGuides[pixelIndex * 2u];
+            receiverRayOrigin = receiverGuides[pixelIndex * 2u + 1u];
+            receiverGuideValid = all(isfinite(receiverGuide))
+                    && all(isfinite(receiverRayOrigin))
+                    && all(receiverGuide.xyz >= float3(0.0))
+                    && receiverGuide.w > 0.0 && receiverGuide.w <= 1.0
+                    && receiverRayOrigin.w == 1.0;
+        }
+        if (!receiverGuideValid) {
+            InterlockedAdd(counters[
+                    PATH_GUIDE_PREVIOUS_REMAP_RECEIVER_GUIDE_REJECT], 1u);
+        } else {
+            float receiverNormalLength = length(receiverNormalRoughness.xyz);
+            float sourceNormalLength = length(root.sourceNormalRoughness.xyz);
+            float3 sourceEdge = replay.reconnectionVertex
+                    - retainedSourcePositionMaterial.xyz;
+            float3 receiverEdge = replay.reconnectionVertex
+                    - receiverPositionMaterial.xyz;
+            float sourceDistance = length(sourceEdge);
+            float receiverDistance = length(receiverEdge);
+            bool geometryValid = replay.reconnectionValid != 0u
+                    && replay.reconnectionDepth == 1u
+                    && replay.reconnectionEventKind == PATH_RECONNECTION_EVENT_DIFFUSE
+                    && receiverNormalLength >= 0.5
+                    && sourceNormalLength >= 0.5
+                    && length(replay.reconnectionNormal) >= 0.5
+                    && sourceDistance > 1.0e-4
+                    && receiverDistance > 1.0e-4;
+            float geometryJacobian = 0.0;
+            if (geometryValid) {
+                float3 sharedNormal = replay.reconnectionNormal
+                        / length(replay.reconnectionNormal);
+                float sourceCosine = abs(dot(sharedNormal,
+                        -sourceEdge / sourceDistance));
+                float receiverCosine = abs(dot(sharedNormal,
+                        receiverEdge / receiverDistance));
+                geometryJacobian = receiverCosine * sourceDistance * sourceDistance
+                        / max(sourceCosine * receiverDistance * receiverDistance, 1.0e-8);
+                geometryValid = sourceCosine > 0.0
+                        && receiverCosine > 0.0
+                        && isfinite(geometryJacobian)
+                        && geometryJacobian > 0.0;
+            }
+            if (!geometryValid) {
+                InterlockedAdd(counters[
+                        PATH_GUIDE_PREVIOUS_REMAP_GEOMETRY_REJECT], 1u);
+            } else {
+                float3 receiverNormal = receiverNormalRoughness.xyz / receiverNormalLength;
+                float3 sampledEdge = replay.reconnectionVertex - receiverRayOrigin.xyz;
+                float receiverPdf = receiverGuide.w
+                        * pathMappingDiffuseDensity(receiverNormal, sampledEdge);
+                float sourcePdf = replay.reconnectionSourcePdf;
+                float pssJacobian = geometryJacobian * receiverPdf / sourcePdf;
+                bool pdfValid = isfinite(receiverPdf) && receiverPdf > 0.0
+                        && isfinite(sourcePdf) && sourcePdf > 0.0
+                        && isfinite(pssJacobian) && pssJacobian > 0.0;
+                if (!pdfValid) {
+                    InterlockedAdd(counters[
+                            PATH_GUIDE_PREVIOUS_REMAP_PDF_REJECT], 1u);
+                } else {
+                    float3 sourceRadiance = replay.canonicalRadiance;
+                    float3 sourceThroughput = replay.reconnectionThroughput;
+                    float3 receiverThroughput = receiverGuide.xyz / receiverGuide.w;
+                    bool invalidSourceChannel = any(sourceRadiance > float3(0.0)
+                            && sourceThroughput <= float3(0.0));
+                    float3 throughputRatio = float3(
+                            pathMappingThroughputRatio(sourceThroughput.x,
+                                    receiverThroughput.x),
+                            pathMappingThroughputRatio(sourceThroughput.y,
+                                    receiverThroughput.y),
+                            pathMappingThroughputRatio(sourceThroughput.z,
+                                    receiverThroughput.z));
+                    float3 shiftedRadiance = sourceRadiance * throughputRatio;
+                    bool throughputValid = !invalidSourceChannel
+                            && all(isfinite(sourceRadiance))
+                            && all(isfinite(sourceThroughput))
+                            && all(isfinite(receiverThroughput))
+                            && all(isfinite(throughputRatio))
+                            && all(isfinite(shiftedRadiance))
+                            && all(sourceRadiance >= float3(0.0))
+                            && all(sourceThroughput >= float3(0.0))
+                            && all(receiverThroughput >= float3(0.0))
+                            && all(throughputRatio >= float3(0.0))
+                            && all(shiftedRadiance >= float3(0.0));
+                    if (!throughputValid) {
+                        InterlockedAdd(counters[
+                                PATH_GUIDE_PREVIOUS_REMAP_THROUGHPUT_REJECT], 1u);
+                    } else {
+                        InterlockedAdd(counters[
+                                PATH_GUIDE_PREVIOUS_REMAP_READY], 1u);
+                        InterlockedAdd(counters[
+                                PATH_GUIDE_PREVIOUS_VISIBILITY_ELIGIBLE], 1u);
+                        float3 toShared = replay.reconnectionVertex - receiverRayOrigin.xyz;
+                        float visibilityDistance = length(toShared);
+                        if (!isfinite(visibilityDistance) || visibilityDistance <= 1.0e-4) {
+                            InterlockedAdd(counters[
+                                    PATH_GUIDE_PREVIOUS_VISIBILITY_INVALID], 1u);
+                        } else {
+                            VisibilityResult visibilityResult = visibility(
+                                    receiverRayOrigin.xyz,
+                                    toShared / visibilityDistance,
+                                    visibilityDistance * 0.999);
+                            float3 transmittance = visibilityResult.transmittance;
+                            bool visibilityValid = all(isfinite(transmittance))
+                                    && all(transmittance >= float3(0.0))
+                                    && all(transmittance <= float3(1.0));
+                            uint visibilityCategory = !visibilityValid
+                                    ? PATH_GUIDE_PREVIOUS_VISIBILITY_INVALID
+                                    : max(transmittance.x,
+                                            max(transmittance.y, transmittance.z)) <= 0.0
+                                            ? PATH_GUIDE_PREVIOUS_VISIBILITY_OCCLUDED
+                                            : all(transmittance == float3(1.0))
+                                                    ? PATH_GUIDE_PREVIOUS_VISIBILITY_CLEAR
+                                                    : PATH_GUIDE_PREVIOUS_VISIBILITY_TINTED;
+                            InterlockedAdd(counters[visibilityCategory], 1u);
+                            if (visibilityValid) {
+                                InterlockedAdd(counters[
+                                        PATH_GUIDE_PREVIOUS_TARGET_ELIGIBLE], 1u);
+                                float3 visibleRadiance = shiftedRadiance * transmittance;
+                                float shiftedTarget = pathLuminance(visibleRadiance);
+                                bool targetValid = all(isfinite(visibleRadiance))
+                                        && all(visibleRadiance >= float3(0.0))
+                                        && isfinite(shiftedTarget)
+                                        && shiftedTarget >= 0.0;
+                                uint targetCategory = !targetValid
+                                        ? PATH_GUIDE_PREVIOUS_TARGET_INVALID
+                                        : shiftedTarget > 0.0
+                                                ? PATH_GUIDE_PREVIOUS_TARGET_POSITIVE
+                                                : PATH_GUIDE_PREVIOUS_TARGET_ZERO;
+                                InterlockedAdd(counters[targetCategory], 1u);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
     InterlockedAdd(counters[mappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION
             ? PATH_GUIDE_PREVIOUS_REPLAY_SELECTED_ACCEPTED
             : PATH_GUIDE_PREVIOUS_REPLAY_RETAINED_ACCEPTED], 1u);

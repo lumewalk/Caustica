@@ -1015,8 +1015,23 @@ final class RtPathSpatialReuseReferenceTest {
                 RtPathReservoirHistory.GUIDE_PREVIOUS_REPLAY_SELECTED_ACCEPTED_INDEX);
         assertEquals(141,
                 RtPathReservoirHistory.GUIDE_PREVIOUS_REPLAY_RETAINED_ACCEPTED_INDEX);
-        assertEquals(142, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
-        assertEquals(142 * Integer.BYTES,
+        assertEquals(142, RtPathReservoirHistory.GUIDE_PREVIOUS_REMAP_ELIGIBLE_INDEX);
+        assertEquals(143, RtPathReservoirHistory.GUIDE_PREVIOUS_REMAP_RECEIVER_GUIDE_REJECT_INDEX);
+        assertEquals(144, RtPathReservoirHistory.GUIDE_PREVIOUS_REMAP_READY_INDEX);
+        assertEquals(145, RtPathReservoirHistory.GUIDE_PREVIOUS_REMAP_GEOMETRY_REJECT_INDEX);
+        assertEquals(146, RtPathReservoirHistory.GUIDE_PREVIOUS_REMAP_PDF_REJECT_INDEX);
+        assertEquals(147, RtPathReservoirHistory.GUIDE_PREVIOUS_REMAP_THROUGHPUT_REJECT_INDEX);
+        assertEquals(148, RtPathReservoirHistory.GUIDE_PREVIOUS_VISIBILITY_ELIGIBLE_INDEX);
+        assertEquals(149, RtPathReservoirHistory.GUIDE_PREVIOUS_VISIBILITY_CLEAR_INDEX);
+        assertEquals(150, RtPathReservoirHistory.GUIDE_PREVIOUS_VISIBILITY_TINTED_INDEX);
+        assertEquals(151, RtPathReservoirHistory.GUIDE_PREVIOUS_VISIBILITY_OCCLUDED_INDEX);
+        assertEquals(152, RtPathReservoirHistory.GUIDE_PREVIOUS_VISIBILITY_INVALID_INDEX);
+        assertEquals(153, RtPathReservoirHistory.GUIDE_PREVIOUS_TARGET_ELIGIBLE_INDEX);
+        assertEquals(154, RtPathReservoirHistory.GUIDE_PREVIOUS_TARGET_POSITIVE_INDEX);
+        assertEquals(155, RtPathReservoirHistory.GUIDE_PREVIOUS_TARGET_ZERO_INDEX);
+        assertEquals(156, RtPathReservoirHistory.GUIDE_PREVIOUS_TARGET_INVALID_INDEX);
+        assertEquals(157, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
+        assertEquals(157 * Integer.BYTES,
                 RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_COUNTER_BYTES);
         assertEquals(32, RtPathReservoirHistory.SHIFTED_RECEIVER_GUIDE_STRIDE);
         assertEquals(27_566_080L,
