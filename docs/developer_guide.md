@@ -397,6 +397,11 @@ zero after that record-level reject. The next gate is isolated one-frame ping-po
 paired record. It must still not be stored, advance either replay RNG stream, commit history, expose a
 mapped record as another spatial source, compose a prior Jacobian, or contribute to the estimator.
 
+Before that write, the pair is now replayed once directly from its assembled register root. The
+fresh runtime gate covered 50857 eligible pairs across 28 readbacks: 45618 selected and 5239 retained
+records were exact, with zero rejects and zero deltas. This is still a counter-only check; the next
+stage is the isolated device scratch write/read and one-frame replay of exactly the same pair.
+
 For a fresh runtime check, use debug view 20 and inspect `run/logs/latest.log`. Normal operation
 requires `RT bring-up OK`, Vulkan, the intended NVIDIA device, exact zero-delta counter partitions,
 and no `DEVICE_LOST`, `VK_ERROR`, GPU fault or shader compilation error. Debug colors and sparse

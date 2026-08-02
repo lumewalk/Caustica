@@ -694,6 +694,15 @@ spatial sources, previous mapping Jacobians are never composed, and ordinary est
 remains out of scope. Detailed chronological evidence and superseded experiments live in the local
 `tasks_archive.md`; this roadmap is the durable mathematical authority.
 
+The pair's own register-only seeded replay is also proven before any device write. Selected pairs
+retrace their branch root and compare through the receiver-aware mapped-source contract; retained
+identity pairs use the generic exact replay comparison. Twenty-eight fresh Vulkan readbacks covered
+50857 eligible pairs: all 45618 selected and 5239 retained records replayed exactly, with zero
+rejects and zero accounting deltas. This added only five host-visible counters (229 uints / 916 B
+total), no ABI lane and no full-resolution storage. The next bounded gate may write exactly this
+validated pair to isolated view-20 scratch and read/replay it one frame later. It still may not enter
+committed history, become a spatial source, compose a mapping/Jacobian, or affect the estimator.
+
 ## Delivery Phases
 
 ### Phase 0 — Wavefront Integration Baseline

@@ -2563,6 +2563,49 @@ public void pathGuidePreviousReplayValidate() {
                                                     : PATH_GUIDE_PREVIOUS_PAIR_ROOT_IDENTITY_REJECT],
                                             1u);
                                 }
+
+                                // Replay the just-assembled pair directly from its own root before
+                                // authorizing any device write. This is still register/counter only:
+                                // it neither advances the stored replay seeds nor changes scratch,
+                                // history, selection, or the estimator.
+                                InterlockedAdd(counters[
+                                        PATH_GUIDE_PREVIOUS_PAIR_REPLAY_ELIGIBLE],
+                                        branchPairReady ? 1u : 0u);
+                                if (branchPairReady) {
+                                    PathReplayAggregate branchReplay =
+                                            pathReplayAggregateEmpty();
+                                    for (uint leaf = 0u; leaf < MAX_PATH_SEGMENTS; ++leaf) {
+                                        if (leaf >= branchSegments) break;
+                                        PackedPathSegment packed = leaf == 0u
+                                                ? branchRoot.segment0
+                                                : branchRoot.segment1;
+                                        packed.ro += worldPush.camOffset;
+                                        PathSegment branchSegment =
+                                                unpackPathSegment(packed);
+                                        uint replaySeed = leaf == 0u
+                                                ? branchRecord.replay.x
+                                                : branchRecord.replay.z;
+                                        uint proposalReplaySeed = leaf == 0u
+                                                ? branchRecord.replay.y
+                                                : branchRecord.replay.w;
+                                        PathTraceResult branchTraced = tracePathSeeded(
+                                                branchSegment, branchSourcePixel, true,
+                                                replaySeed, proposalReplaySeed);
+                                        pathReplayAccumulate(branchReplay, branchTraced, leaf);
+                                    }
+                                    bool branchReplayMatches = stableBernoulliSelected
+                                            ? pathMappingSourceReplayMatches(
+                                                    branchRecord, branchReplay)
+                                            : pathReplayCompare(branchRecord, branchReplay) == 0u;
+                                    InterlockedAdd(counters[stableBernoulliSelected
+                                            ? branchReplayMatches
+                                                    ? PATH_GUIDE_PREVIOUS_PAIR_REPLAY_SELECTED_ACCEPTED
+                                                    : PATH_GUIDE_PREVIOUS_PAIR_REPLAY_SELECTED_REJECT
+                                            : branchReplayMatches
+                                                    ? PATH_GUIDE_PREVIOUS_PAIR_REPLAY_RETAINED_ACCEPTED
+                                                    : PATH_GUIDE_PREVIOUS_PAIR_REPLAY_RETAINED_REJECT],
+                                            1u);
+                                }
                             }
                         }
                     }

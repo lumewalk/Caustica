@@ -252,7 +252,12 @@ final class RtPathReservoirHistory {
     static final int GUIDE_PREVIOUS_PAIR_ROOT_CAPTURE_REJECT_INDEX = 221;
     static final int GUIDE_PREVIOUS_PAIR_ROOT_CHAIN_REJECT_INDEX = 222;
     static final int GUIDE_PREVIOUS_PAIR_ROOT_IDENTITY_REJECT_INDEX = 223;
-    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 224;
+    static final int GUIDE_PREVIOUS_PAIR_REPLAY_ELIGIBLE_INDEX = 224;
+    static final int GUIDE_PREVIOUS_PAIR_REPLAY_SELECTED_ACCEPTED_INDEX = 225;
+    static final int GUIDE_PREVIOUS_PAIR_REPLAY_SELECTED_REJECT_INDEX = 226;
+    static final int GUIDE_PREVIOUS_PAIR_REPLAY_RETAINED_ACCEPTED_INDEX = 227;
+    static final int GUIDE_PREVIOUS_PAIR_REPLAY_RETAINED_REJECT_INDEX = 228;
+    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 229;
     static final int SHIFTED_RECEIVER_GUIDE_STRIDE = 8 * Float.BYTES;
     static final int SPATIAL_DIAGNOSTIC_COUNTER_BYTES =
             SHIFTED_DIAGNOSTIC_COUNTER_COUNT * Integer.BYTES;
@@ -967,6 +972,16 @@ final class RtPathReservoirHistory {
                     counters.get(GUIDE_PREVIOUS_PAIR_ROOT_CHAIN_REJECT_INDEX));
             long guidePreviousPairRootIdentityReject = Integer.toUnsignedLong(
                     counters.get(GUIDE_PREVIOUS_PAIR_ROOT_IDENTITY_REJECT_INDEX));
+            long guidePreviousPairReplayEligible = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_PAIR_REPLAY_ELIGIBLE_INDEX));
+            long guidePreviousPairReplaySelectedAccepted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_PAIR_REPLAY_SELECTED_ACCEPTED_INDEX));
+            long guidePreviousPairReplaySelectedReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_PAIR_REPLAY_SELECTED_REJECT_INDEX));
+            long guidePreviousPairReplayRetainedAccepted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_PAIR_REPLAY_RETAINED_ACCEPTED_INDEX));
+            long guidePreviousPairReplayRetainedReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_PAIR_REPLAY_RETAINED_REJECT_INDEX));
             long crossFrameReceiverReject = crossFrameReceiverSurfaceReject
                     + crossFrameReceiverSampleReject + crossFrameReceiverEdgeReject
                     + crossFrameReceiverTopologyReject + crossFrameReceiverDepthReject
@@ -1483,6 +1498,26 @@ final class RtPathReservoirHistory {
                     guidePreviousPairRootCaptureReject
                             + guidePreviousPairRootChainReject
                             + guidePreviousPairRootIdentityReject);
+            CausticaMod.LOGGER.info(
+                    "RT path guide previous reservoir-root replay: eligible={}, "
+                            + "selected[accepted={},reject={},delta={}] "
+                            + "retained[accepted={},reject={},delta={}] totalDelta={}",
+                    guidePreviousPairReplayEligible,
+                    guidePreviousPairReplaySelectedAccepted,
+                    guidePreviousPairReplaySelectedReject,
+                    guidePreviousPairSelectedReady
+                            - guidePreviousPairReplaySelectedAccepted
+                            - guidePreviousPairReplaySelectedReject,
+                    guidePreviousPairReplayRetainedAccepted,
+                    guidePreviousPairReplayRetainedReject,
+                    guidePreviousPairRetainedReady
+                            - guidePreviousPairReplayRetainedAccepted
+                            - guidePreviousPairReplayRetainedReject,
+                    guidePreviousPairReplayEligible
+                            - guidePreviousPairReplaySelectedAccepted
+                            - guidePreviousPairReplaySelectedReject
+                            - guidePreviousPairReplayRetainedAccepted
+                            - guidePreviousPairReplayRetainedReject);
             spatialDiagnosticViewPending = 0;
             return;
         }
