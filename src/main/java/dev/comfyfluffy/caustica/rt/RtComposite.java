@@ -1182,6 +1182,7 @@ public final class RtComposite {
             ByteBuffer guideScratchValidatePushConstants = null;
             ByteBuffer guidePreviousReplayPushConstants = null;
             ByteBuffer branchScratchValidatePushConstants = null;
+            ByteBuffer branchCandidateRetentionPushConstants = null;
             if (restirPt
                      && debugView == RtPathReservoirHistory.SHIFTED_RADIANCE_DEBUG_VIEW) {
                 guidePreviousReplayPushConstants =
@@ -1232,6 +1233,29 @@ public final class RtComposite {
                                         .GUIDE_BRANCH_SCRATCH_VALIDATE_PASS_FLAG,
                         worldConstants.historyGeneration())
                         .write(branchScratchValidatePushConstants);
+                branchCandidateRetentionPushConstants =
+                        stack.malloc(WorldPushConstantsData.BYTE_SIZE);
+                new WorldPushConstantsData(
+                        worldConstants.worldPushAddr(),
+                        worldConstants.tableAddr(),
+                        worldConstants.entityTableAddr(),
+                        worldConstants.materialTableAddr(),
+                        worldConstants.lightBufAddr(),
+                        worldConstants.lightAliasAddr(),
+                        worldConstants.lightLocalAliasAddr(),
+                        worldConstants.lightGridCellAddr(),
+                        worldConstants.lightGridSpanAddr(),
+                        worldConstants.pathQueueAddr(),
+                        worldConstants.directReservoirAddr(),
+                        worldConstants.pathReservoirAddr(),
+                        worldConstants.pathReservoirPreviousAddr(),
+                        worldConstants.frameIndex(),
+                        worldConstants.debugView(),
+                        worldConstants.historyFlags()
+                                | RtPathReservoirHistory
+                                        .GUIDE_BRANCH_CANDIDATE_RETENTION_PASS_FLAG,
+                        worldConstants.historyGeneration())
+                        .write(branchCandidateRetentionPushConstants);
                 mappingReplayPushConstants =
                         stack.malloc(WorldPushConstantsData.BYTE_SIZE);
                 new WorldPushConstantsData(
@@ -1350,6 +1374,16 @@ public final class RtComposite {
                                  "frame.pathBranchScratchStorageValidate")) {
                         active.trace(cmd, renderW, renderH,
                                 branchScratchValidatePushConstants, 1);
+                    }
+                    VulkanCommandEncoder.memoryBarrier(cmd, stack);
+                    try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd,
+                                 "path branch candidate retention audit");
+                         RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage(
+                                 "frame.pathBranchCandidateRetentionAudit")) {
+                        active.trace(cmd,
+                                RtPathReservoirHistory.PATH_BRANCH_SCRATCH_CAPTURE_CAPACITY,
+                                RtPathReservoirHistory.PATH_BRANCH_CANDIDATE_HISTORY_SLOT_COUNT,
+                                branchCandidateRetentionPushConstants, 1);
                     }
                     VulkanCommandEncoder.memoryBarrier(cmd, stack);
                     pathReservoirs.commitBranchScratch(

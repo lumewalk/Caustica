@@ -413,10 +413,11 @@ addresses are zero outside view 20. The next required boundary was explicit bit-
 between the register pair and its device-written payload/root.
 
 The post-barrier storage audit now follows that write pass. It captures at most 4096 complete
-expected register pairs into a 352-byte record (metadata + 176-byte `PathReservoir` + 160-byte
-`PathSourceRoot`), then a separate ray-generation dispatch compares every stored float/uint lane by
-its raw 32-bit representation. The diagnostic counter buffer is now 261 uints / 1044 bytes. The
-capture tail adds 1.375 MiB to the existing diagnostic sample buffer. WorldPush remains 672 bytes
+expected register pairs per ring slot. The record is now 368 bytes: metadata, the 176-byte
+`PathReservoir`, the 160-byte `PathSourceRoot`, and a 16-byte promotion marker written only after
+the raw 32-bit lane comparison passes. The diagnostic counter buffer is now 274 uints / 1096 bytes.
+Four capture slots use 5.75 MiB; together with the pre-existing sample area the host-visible
+diagnostic sample buffer is 6160384 bytes (5.875 MiB). WorldPush remains 672 bytes
 and replay ABI remains 10. The runtime log line
 `RT path guide branch scratch storage` must show `eligible == completed`, `attempted == captured`,
 zero metadata/reservoir/root/pair rejects, and zero write/validation deltas. The proven run covered
@@ -434,6 +435,17 @@ partitions and zero metadata rejects. The proven run used 47 readbacks: 68454 wr
 selected-admitted and 7214 retained-admitted, with both deltas zero. Admission remains diagnostic:
 the tagged pair is not committed to ordinary history, cannot be reused as a spatial source, and does
 not contribute to the estimator.
+
+The compact promotion records now form a four-slot ring indexed by validation frame. A dedicated
+4096×4 ray-generation audit classifies every entry as empty, future, generation/mapping reject,
+current, age 1–3, or expired. It never traces an entry and never writes a reservoir/history lane.
+The line `RT path guide branch candidate retention` must satisfy `attempted == terminal` and
+`live == identity + mapped`; future/generation/mapping rejects and both deltas must remain zero in a
+stable run. Sixteen fresh readbacks covered 262144 entries: 136707 live records (34278 current,
+33855 age 1, 34263 age 2, 34311 age 3), 10211 expired, and 115226 empty. Mapping ownership split
+exactly into 13789 identity and 122918 mapped live records. The next gate may add age-aware replay
+admission, but it must use the original source-root provenance directly and must reject any attempt
+to use a mapped result as another spatial source.
 
 For a fresh runtime check, use debug view 20 and inspect `run/logs/latest.log`. Normal operation
 requires `RT bring-up OK`, Vulkan, the intended NVIDIA device, exact zero-delta counter partitions,

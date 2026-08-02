@@ -737,6 +737,19 @@ replay accounting. Two tag areas add 13.14 MiB at 1280×673 (1143.57 MiB full la
 while WorldPush stays 672 bytes and replay ABI stays 10. The pair remains diagnostic-only and still
 cannot become a spatial source, compose mappings/Jacobians or contribute to the estimator.
 
+The next boundary is a compact four-frame retention ring rather than another full-resolution
+history allocation. Each of four 4096-entry slots stores the exact validated reservoir/root pair,
+its capture metadata, and a separate 16-byte promotion marker written only by the post-barrier
+bitwise validator. A metadata-only dispatch audits all 16384 entries and assigns one exclusive
+state: empty, future frame, generation reject, mapping reject, current, age 1, age 2, age 3, or
+expired. Live entries also partition exactly by identity versus diffuse-reconnection mapping.
+Across 16 Vulkan readbacks, all 262144 attempts had exact terminal accounting: 115226 empty,
+136707 live, 10211 expired, and zero future/generation/mapping rejects or deltas. All 136707 live
+entries split into 13789 identity and 122918 mapped records with zero live delta. This proves bounded
+retention and expiry only. It does not authorize replay from the ring, mapping/Jacobian composition,
+committed history, or estimator contribution. The next replay gate must consume the original
+source-root provenance directly and fail closed if a mapped result would become another source.
+
 ## Delivery Phases
 
 ### Phase 0 — Wavefront Integration Baseline

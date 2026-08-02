@@ -260,7 +260,20 @@ public static const uint PATH_GUIDE_BRANCH_CANDIDATE_TAG_REPLAY_METADATA_REJECT 
 public static const uint PATH_GUIDE_BRANCH_CANDIDATE_TAG_REPLAY_SELECTED_ADMITTED = 258u;
 public static const uint PATH_GUIDE_BRANCH_CANDIDATE_TAG_REPLAY_RETAINED_ADMITTED = 259u;
 public static const uint PATH_GUIDE_BRANCH_CANDIDATE_TAG_REPLAY_DELTA = 260u;
-public static const uint PATH_SHIFT_DIAGNOSTIC_COUNTER_COUNT = 240u;
+public static const uint PATH_GUIDE_BRANCH_CANDIDATE_RETENTION_ATTEMPTED = 261u;
+public static const uint PATH_GUIDE_BRANCH_CANDIDATE_RETENTION_EMPTY = 262u;
+public static const uint PATH_GUIDE_BRANCH_CANDIDATE_RETENTION_FUTURE_REJECT = 263u;
+public static const uint PATH_GUIDE_BRANCH_CANDIDATE_RETENTION_GENERATION_REJECT = 264u;
+public static const uint PATH_GUIDE_BRANCH_CANDIDATE_RETENTION_MAPPING_REJECT = 265u;
+public static const uint PATH_GUIDE_BRANCH_CANDIDATE_RETENTION_CURRENT = 266u;
+public static const uint PATH_GUIDE_BRANCH_CANDIDATE_RETENTION_AGE_ONE = 267u;
+public static const uint PATH_GUIDE_BRANCH_CANDIDATE_RETENTION_AGE_TWO = 268u;
+public static const uint PATH_GUIDE_BRANCH_CANDIDATE_RETENTION_AGE_THREE = 269u;
+public static const uint PATH_GUIDE_BRANCH_CANDIDATE_RETENTION_EXPIRED = 270u;
+public static const uint PATH_GUIDE_BRANCH_CANDIDATE_RETENTION_IDENTITY_LIVE = 271u;
+public static const uint PATH_GUIDE_BRANCH_CANDIDATE_RETENTION_MAPPED_LIVE = 272u;
+public static const uint PATH_GUIDE_BRANCH_CANDIDATE_RETENTION_DELTA = 273u;
+public static const uint PATH_SHIFT_DIAGNOSTIC_COUNTER_COUNT = 274u;
 public static const uint PATH_SHIFT_DIAGNOSTIC_PAIR_MASK = 3u;
 public static const uint PATH_SHIFT_DIAGNOSTIC_MERGE_PAIR_OFFSET =
         PATH_SPATIAL_DIAGNOSTIC_PAIR_CAPACITY * 2u;
@@ -369,6 +382,7 @@ public static const uint PATH_GUIDE_PREVIOUS_REPLAY_PASS_FLAG = 256u;
 public static const uint PATH_GUIDE_PREVIOUS_AVAILABLE_FLAG = 512u;
 public static const uint PATH_GUIDE_BRANCH_PREVIOUS_AVAILABLE_FLAG = 1024u;
 public static const uint PATH_GUIDE_BRANCH_SCRATCH_VALIDATE_PASS_FLAG = 2048u;
+public static const uint PATH_GUIDE_BRANCH_CANDIDATE_RETENTION_PASS_FLAG = 4096u;
 // replayControl.y == 0 keeps a terminal sentinel outside the valid replay-segment domain. The
 // magic prevents a cleared or partially written record from being mistaken for an intentional
 // sample-copy terminal state.

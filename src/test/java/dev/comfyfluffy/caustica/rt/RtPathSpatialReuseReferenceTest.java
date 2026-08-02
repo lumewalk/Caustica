@@ -854,6 +854,44 @@ final class RtPathSpatialReuseReferenceTest {
     }
 
     @Test
+    void branchCandidateRetentionIsBoundedToFourLiveFrameAges() {
+        var identity = RtPathSpatialReuseReference.MappingKind.IDENTITY;
+        var mapped = RtPathSpatialReuseReference.MappingKind.DIFFUSE_RECONNECTION;
+        assertEquals(RtPathSpatialReuseReference.BranchCandidateRetentionOutcome.EMPTY,
+                retention(false, 20, 20, 7, 7, identity, identity, identity));
+        assertEquals(RtPathSpatialReuseReference.BranchCandidateRetentionOutcome.FUTURE_REJECT,
+                retention(true, 21, 20, 7, 7, identity, identity, identity));
+        assertEquals(RtPathSpatialReuseReference.BranchCandidateRetentionOutcome.GENERATION_REJECT,
+                retention(true, 20, 20, 6, 7, identity, identity, identity));
+        assertEquals(RtPathSpatialReuseReference.BranchCandidateRetentionOutcome.MAPPING_REJECT,
+                retention(true, 20, 20, 7, 7, mapped, identity, mapped));
+        assertEquals(RtPathSpatialReuseReference.BranchCandidateRetentionOutcome.CURRENT,
+                retention(true, 20, 20, 7, 7, mapped, mapped, mapped));
+        assertEquals(RtPathSpatialReuseReference.BranchCandidateRetentionOutcome.AGE_ONE,
+                retention(true, 19, 20, 7, 7, identity, identity, identity));
+        assertEquals(RtPathSpatialReuseReference.BranchCandidateRetentionOutcome.AGE_TWO,
+                retention(true, 18, 20, 7, 7, identity, identity, identity));
+        assertEquals(RtPathSpatialReuseReference.BranchCandidateRetentionOutcome.AGE_THREE,
+                retention(true, 17, 20, 7, 7, identity, identity, identity));
+        assertEquals(RtPathSpatialReuseReference.BranchCandidateRetentionOutcome.EXPIRED,
+                retention(true, 16, 20, 7, 7, identity, identity, identity));
+        assertTrue(RtPathSpatialReuseReference.BranchCandidateRetentionOutcome.CURRENT.live());
+        assertTrue(RtPathSpatialReuseReference.BranchCandidateRetentionOutcome.AGE_THREE.live());
+        assertFalse(RtPathSpatialReuseReference.BranchCandidateRetentionOutcome.EXPIRED.live());
+    }
+
+    private static RtPathSpatialReuseReference.BranchCandidateRetentionOutcome retention(
+            boolean promoted, long validationFrame, long currentFrame,
+            int storedGeneration, int currentGeneration,
+            RtPathSpatialReuseReference.MappingKind promotionMapping,
+            RtPathSpatialReuseReference.MappingKind metadataMapping,
+            RtPathSpatialReuseReference.MappingKind reservoirMapping) {
+        return RtPathSpatialReuseReference.branchCandidateRetentionOutcome(
+                promoted, validationFrame, currentFrame, storedGeneration, currentGeneration,
+                promotionMapping, metadataMapping, reservoirMapping);
+    }
+
+    @Test
     void pairedMomentsExposeCovarianceAndCorrelationWithoutBatchStorage() {
         var moments = new RtPathSpatialReuseReference.PairMoments();
         moments.add(1.0, 2.0);
@@ -1268,8 +1306,34 @@ final class RtPathSpatialReuseReferenceTest {
                 RtPathReservoirHistory.GUIDE_BRANCH_CANDIDATE_TAG_REPLAY_RETAINED_ADMITTED_INDEX);
         assertEquals(260,
                 RtPathReservoirHistory.GUIDE_BRANCH_CANDIDATE_TAG_REPLAY_DELTA_INDEX);
-        assertEquals(261, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
-        assertEquals(261 * Integer.BYTES,
+        assertEquals(261,
+                RtPathReservoirHistory.GUIDE_BRANCH_CANDIDATE_RETENTION_ATTEMPTED_INDEX);
+        assertEquals(262,
+                RtPathReservoirHistory.GUIDE_BRANCH_CANDIDATE_RETENTION_EMPTY_INDEX);
+        assertEquals(263,
+                RtPathReservoirHistory.GUIDE_BRANCH_CANDIDATE_RETENTION_FUTURE_REJECT_INDEX);
+        assertEquals(264,
+                RtPathReservoirHistory.GUIDE_BRANCH_CANDIDATE_RETENTION_GENERATION_REJECT_INDEX);
+        assertEquals(265,
+                RtPathReservoirHistory.GUIDE_BRANCH_CANDIDATE_RETENTION_MAPPING_REJECT_INDEX);
+        assertEquals(266,
+                RtPathReservoirHistory.GUIDE_BRANCH_CANDIDATE_RETENTION_CURRENT_INDEX);
+        assertEquals(267,
+                RtPathReservoirHistory.GUIDE_BRANCH_CANDIDATE_RETENTION_AGE_ONE_INDEX);
+        assertEquals(268,
+                RtPathReservoirHistory.GUIDE_BRANCH_CANDIDATE_RETENTION_AGE_TWO_INDEX);
+        assertEquals(269,
+                RtPathReservoirHistory.GUIDE_BRANCH_CANDIDATE_RETENTION_AGE_THREE_INDEX);
+        assertEquals(270,
+                RtPathReservoirHistory.GUIDE_BRANCH_CANDIDATE_RETENTION_EXPIRED_INDEX);
+        assertEquals(271,
+                RtPathReservoirHistory.GUIDE_BRANCH_CANDIDATE_RETENTION_IDENTITY_LIVE_INDEX);
+        assertEquals(272,
+                RtPathReservoirHistory.GUIDE_BRANCH_CANDIDATE_RETENTION_MAPPED_LIVE_INDEX);
+        assertEquals(273,
+                RtPathReservoirHistory.GUIDE_BRANCH_CANDIDATE_RETENTION_DELTA_INDEX);
+        assertEquals(274, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
+        assertEquals(274 * Integer.BYTES,
                 RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_COUNTER_BYTES);
         assertEquals(32, RtPathReservoirHistory.SHIFTED_RECEIVER_GUIDE_STRIDE);
         assertEquals(27_566_080L,
@@ -1281,10 +1345,11 @@ final class RtPathSpatialReuseReferenceTest {
         assertEquals(12288, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_SELECTION_PAIR_OFFSET);
         assertEquals(4096 * 8, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_PAIR_FLOAT_COUNT);
         assertEquals(4096, RtPathReservoirHistory.PATH_BRANCH_SCRATCH_CAPTURE_CAPACITY);
-        assertEquals(352, RtPathReservoirHistory.PATH_BRANCH_SCRATCH_CAPTURE_STRIDE);
-        assertEquals(4096 * 352,
+        assertEquals(4, RtPathReservoirHistory.PATH_BRANCH_CANDIDATE_HISTORY_SLOT_COUNT);
+        assertEquals(368, RtPathReservoirHistory.PATH_BRANCH_SCRATCH_CAPTURE_STRIDE);
+        assertEquals(4 * 4096 * 368,
                 RtPathReservoirHistory.PATH_BRANCH_SCRATCH_CAPTURE_BYTES);
-        assertEquals(4096 * 8 * Float.BYTES + 4096 * 352,
+        assertEquals(4096 * 8 * Float.BYTES + 4 * 4096 * 368,
                 RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_PAIR_BYTES);
     }
 }

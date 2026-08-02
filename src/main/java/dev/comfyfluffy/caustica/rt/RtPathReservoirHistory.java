@@ -37,6 +37,7 @@ final class RtPathReservoirHistory {
     static final int GUIDE_PREVIOUS_AVAILABLE_FLAG = 1 << 9;
     static final int GUIDE_BRANCH_PREVIOUS_AVAILABLE_FLAG = 1 << 10;
     static final int GUIDE_BRANCH_SCRATCH_VALIDATE_PASS_FLAG = 1 << 11;
+    static final int GUIDE_BRANCH_CANDIDATE_RETENTION_PASS_FLAG = 1 << 12;
     static final int SPATIAL_DIAGNOSTIC_CATEGORY_COUNT = 9;
     static final int SPATIAL_DIAGNOSTIC_STRICT_PAIR_CURSOR_INDEX =
             SPATIAL_DIAGNOSTIC_CATEGORY_COUNT;
@@ -291,7 +292,20 @@ final class RtPathReservoirHistory {
     static final int GUIDE_BRANCH_CANDIDATE_TAG_REPLAY_SELECTED_ADMITTED_INDEX = 258;
     static final int GUIDE_BRANCH_CANDIDATE_TAG_REPLAY_RETAINED_ADMITTED_INDEX = 259;
     static final int GUIDE_BRANCH_CANDIDATE_TAG_REPLAY_DELTA_INDEX = 260;
-    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 261;
+    static final int GUIDE_BRANCH_CANDIDATE_RETENTION_ATTEMPTED_INDEX = 261;
+    static final int GUIDE_BRANCH_CANDIDATE_RETENTION_EMPTY_INDEX = 262;
+    static final int GUIDE_BRANCH_CANDIDATE_RETENTION_FUTURE_REJECT_INDEX = 263;
+    static final int GUIDE_BRANCH_CANDIDATE_RETENTION_GENERATION_REJECT_INDEX = 264;
+    static final int GUIDE_BRANCH_CANDIDATE_RETENTION_MAPPING_REJECT_INDEX = 265;
+    static final int GUIDE_BRANCH_CANDIDATE_RETENTION_CURRENT_INDEX = 266;
+    static final int GUIDE_BRANCH_CANDIDATE_RETENTION_AGE_ONE_INDEX = 267;
+    static final int GUIDE_BRANCH_CANDIDATE_RETENTION_AGE_TWO_INDEX = 268;
+    static final int GUIDE_BRANCH_CANDIDATE_RETENTION_AGE_THREE_INDEX = 269;
+    static final int GUIDE_BRANCH_CANDIDATE_RETENTION_EXPIRED_INDEX = 270;
+    static final int GUIDE_BRANCH_CANDIDATE_RETENTION_IDENTITY_LIVE_INDEX = 271;
+    static final int GUIDE_BRANCH_CANDIDATE_RETENTION_MAPPED_LIVE_INDEX = 272;
+    static final int GUIDE_BRANCH_CANDIDATE_RETENTION_DELTA_INDEX = 273;
+    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 274;
     static final int SHIFTED_RECEIVER_GUIDE_STRIDE = 8 * Float.BYTES;
     static final int BRANCH_CANDIDATE_TAG_STRIDE = 2 * Integer.BYTES;
     static final int SPATIAL_DIAGNOSTIC_COUNTER_BYTES =
@@ -306,12 +320,17 @@ final class RtPathReservoirHistory {
     static final int SHIFTED_DIAGNOSTIC_PAIR_FLOAT_COUNT =
             SPATIAL_DIAGNOSTIC_PAIR_CAPACITY * 8;
     static final int PATH_BRANCH_SCRATCH_CAPTURE_CAPACITY = 4096;
+    static final int PATH_BRANCH_CANDIDATE_HISTORY_SLOT_COUNT = 4;
     static final int PATH_BRANCH_SCRATCH_CAPTURE_HEADER_BYTES = 4 * Integer.BYTES;
+    static final int PATH_BRANCH_CANDIDATE_PROMOTION_BYTES = 4 * Integer.BYTES;
     static final int PATH_BRANCH_SCRATCH_CAPTURE_STRIDE =
             PATH_BRANCH_SCRATCH_CAPTURE_HEADER_BYTES
-                    + PathReservoirData.BYTE_SIZE + PathSourceRootData.BYTE_SIZE;
+                    + PathReservoirData.BYTE_SIZE + PathSourceRootData.BYTE_SIZE
+                    + PATH_BRANCH_CANDIDATE_PROMOTION_BYTES;
     static final int PATH_BRANCH_SCRATCH_CAPTURE_BYTES =
-            PATH_BRANCH_SCRATCH_CAPTURE_CAPACITY * PATH_BRANCH_SCRATCH_CAPTURE_STRIDE;
+            PATH_BRANCH_CANDIDATE_HISTORY_SLOT_COUNT
+                    * PATH_BRANCH_SCRATCH_CAPTURE_CAPACITY
+                    * PATH_BRANCH_SCRATCH_CAPTURE_STRIDE;
     static final int SPATIAL_DIAGNOSTIC_PAIR_BYTES =
             SHIFTED_DIAGNOSTIC_PAIR_FLOAT_COUNT * Float.BYTES
                     + PATH_BRANCH_SCRATCH_CAPTURE_BYTES;
@@ -419,6 +438,7 @@ final class RtPathReservoirHistory {
     private final RtBuffer[] branchScratchSourceRoots = new RtBuffer[SLOT_COUNT];
     private RtPathTemporalPipeline temporalPipeline;
     private int spatialDiagnosticViewPending;
+    private boolean spatialDiagnosticPairsInitialized;
     private int width = -1;
     private int height = -1;
 
@@ -441,7 +461,7 @@ final class RtPathReservoirHistory {
                 VK10.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK10.VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                 true, "path spatial diagnostic counters");
         spatialDiagnosticPairs = ctx.createBuffer(SPATIAL_DIAGNOSTIC_PAIR_BYTES,
-                VK10.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                VK10.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK10.VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                 true, "path spatial diagnostic samples");
         temporalPipeline = RtPathTemporalPipeline.create(ctx, receiverMotion.view,
                 validationMetadata.view, debugColor.view,
@@ -450,6 +470,7 @@ final class RtPathReservoirHistory {
         state.reset();
         shiftedSnapshotState.reset();
         guideScratchSnapshotState.reset();
+        spatialDiagnosticPairsInitialized = false;
     }
 
     Frame beginFrame(RtHistoryState.Frame historyFrame) {
@@ -493,6 +514,11 @@ final class RtPathReservoirHistory {
         }
         VK10.vkCmdFillBuffer(cmd, spatialDiagnosticCounters.handle, 0L,
                 spatialDiagnosticCounters.size, 0);
+        if (!spatialDiagnosticPairsInitialized) {
+            VK10.vkCmdFillBuffer(cmd, spatialDiagnosticPairs.handle, 0L,
+                    spatialDiagnosticPairs.size, 0);
+            spatialDiagnosticPairsInitialized = true;
+        }
         try (var stack = org.lwjgl.system.MemoryStack.stackPush()) {
             VulkanCommandEncoder.memoryBarrier(cmd, stack);
         }
@@ -1172,6 +1198,30 @@ final class RtPathReservoirHistory {
                     counters.get(GUIDE_BRANCH_CANDIDATE_TAG_REPLAY_SELECTED_ADMITTED_INDEX));
             long guideBranchTagReplayRetainedAdmitted = Integer.toUnsignedLong(
                     counters.get(GUIDE_BRANCH_CANDIDATE_TAG_REPLAY_RETAINED_ADMITTED_INDEX));
+            long guideBranchRetentionAttempted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_CANDIDATE_RETENTION_ATTEMPTED_INDEX));
+            long guideBranchRetentionEmpty = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_CANDIDATE_RETENTION_EMPTY_INDEX));
+            long guideBranchRetentionFutureReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_CANDIDATE_RETENTION_FUTURE_REJECT_INDEX));
+            long guideBranchRetentionGenerationReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_CANDIDATE_RETENTION_GENERATION_REJECT_INDEX));
+            long guideBranchRetentionMappingReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_CANDIDATE_RETENTION_MAPPING_REJECT_INDEX));
+            long guideBranchRetentionCurrent = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_CANDIDATE_RETENTION_CURRENT_INDEX));
+            long guideBranchRetentionAgeOne = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_CANDIDATE_RETENTION_AGE_ONE_INDEX));
+            long guideBranchRetentionAgeTwo = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_CANDIDATE_RETENTION_AGE_TWO_INDEX));
+            long guideBranchRetentionAgeThree = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_CANDIDATE_RETENTION_AGE_THREE_INDEX));
+            long guideBranchRetentionExpired = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_CANDIDATE_RETENTION_EXPIRED_INDEX));
+            long guideBranchRetentionIdentityLive = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_CANDIDATE_RETENTION_IDENTITY_LIVE_INDEX));
+            long guideBranchRetentionMappedLive = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_CANDIDATE_RETENTION_MAPPED_LIVE_INDEX));
             long crossFrameReceiverReject = crossFrameReceiverSurfaceReject
                     + crossFrameReceiverSampleReject + crossFrameReceiverEdgeReject
                     + crossFrameReceiverTopologyReject + crossFrameReceiverDepthReject
@@ -1794,6 +1844,42 @@ final class RtPathReservoirHistory {
                             - guideBranchTagReplayEmpty
                             - guideBranchTagReplayMetadataReject
                             - guideBranchTagReplayAdmitted);
+            long guideBranchRetentionTerminal = guideBranchRetentionEmpty
+                    + guideBranchRetentionFutureReject
+                    + guideBranchRetentionGenerationReject
+                    + guideBranchRetentionMappingReject
+                    + guideBranchRetentionCurrent
+                    + guideBranchRetentionAgeOne
+                    + guideBranchRetentionAgeTwo
+                    + guideBranchRetentionAgeThree
+                    + guideBranchRetentionExpired;
+            long guideBranchRetentionLive = guideBranchRetentionCurrent
+                    + guideBranchRetentionAgeOne
+                    + guideBranchRetentionAgeTwo
+                    + guideBranchRetentionAgeThree;
+            CausticaMod.LOGGER.info(
+                    "RT path guide branch candidate retention: attempted={}, empty={}, "
+                            + "future={}, generation={}, mapping={}, current={}, age1={}, "
+                            + "age2={}, age3={}, expired={}, terminal={}, delta={}, live={}, "
+                            + "identity={}, mapped={}, liveDelta={}",
+                    guideBranchRetentionAttempted,
+                    guideBranchRetentionEmpty,
+                    guideBranchRetentionFutureReject,
+                    guideBranchRetentionGenerationReject,
+                    guideBranchRetentionMappingReject,
+                    guideBranchRetentionCurrent,
+                    guideBranchRetentionAgeOne,
+                    guideBranchRetentionAgeTwo,
+                    guideBranchRetentionAgeThree,
+                    guideBranchRetentionExpired,
+                    guideBranchRetentionTerminal,
+                    guideBranchRetentionAttempted - guideBranchRetentionTerminal,
+                    guideBranchRetentionLive,
+                    guideBranchRetentionIdentityLive,
+                    guideBranchRetentionMappedLive,
+                    guideBranchRetentionLive
+                            - guideBranchRetentionIdentityLive
+                            - guideBranchRetentionMappedLive);
             spatialDiagnosticViewPending = 0;
             return;
         }

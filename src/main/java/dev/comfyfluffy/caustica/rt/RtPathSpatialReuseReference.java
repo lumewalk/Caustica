@@ -1071,6 +1071,47 @@ final class RtPathSpatialReuseReference {
         RETAINED_ACCEPTED
     }
 
+    enum BranchCandidateRetentionOutcome {
+        EMPTY,
+        FUTURE_REJECT,
+        GENERATION_REJECT,
+        MAPPING_REJECT,
+        CURRENT,
+        AGE_ONE,
+        AGE_TWO,
+        AGE_THREE,
+        EXPIRED;
+
+        boolean live() {
+            return this == CURRENT || this == AGE_ONE || this == AGE_TWO || this == AGE_THREE;
+        }
+    }
+
+    /** Ordered CPU mirror for the bounded four-frame promotion-ring metadata audit. */
+    static BranchCandidateRetentionOutcome branchCandidateRetentionOutcome(
+            boolean promoted, long validationFrame, long currentFrame,
+            int storedGeneration, int currentGeneration,
+            MappingKind promotionMapping, MappingKind metadataMapping,
+            MappingKind reservoirMapping) {
+        if (!promoted) return BranchCandidateRetentionOutcome.EMPTY;
+        if (validationFrame > currentFrame) {
+            return BranchCandidateRetentionOutcome.FUTURE_REJECT;
+        }
+        if (storedGeneration != currentGeneration) {
+            return BranchCandidateRetentionOutcome.GENERATION_REJECT;
+        }
+        if (promotionMapping == null || promotionMapping != metadataMapping
+                || promotionMapping != reservoirMapping) {
+            return BranchCandidateRetentionOutcome.MAPPING_REJECT;
+        }
+        long age = currentFrame - validationFrame;
+        if (age == 0L) return BranchCandidateRetentionOutcome.CURRENT;
+        if (age == 1L) return BranchCandidateRetentionOutcome.AGE_ONE;
+        if (age == 2L) return BranchCandidateRetentionOutcome.AGE_TWO;
+        if (age == 3L) return BranchCandidateRetentionOutcome.AGE_THREE;
+        return BranchCandidateRetentionOutcome.EXPIRED;
+    }
+
     /**
      * Ordered CPU mirror for the post-barrier exact-lane validation sample. Reservoir and root
      * equality are bitwise requirements; acceptance remains diagnostic-only.
