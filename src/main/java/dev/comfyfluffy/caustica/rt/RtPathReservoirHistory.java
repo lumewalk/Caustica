@@ -217,7 +217,11 @@ final class RtPathReservoirHistory {
     static final int GUIDE_PREVIOUS_STABLE_SELECTION_POSITIVE_INDEX = 186;
     static final int GUIDE_PREVIOUS_STABLE_SELECTION_ZERO_INDEX = 187;
     static final int GUIDE_PREVIOUS_STABLE_SELECTION_INVALID_INDEX = 188;
-    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 189;
+    static final int GUIDE_PREVIOUS_STABLE_BERNOULLI_ELIGIBLE_INDEX = 189;
+    static final int GUIDE_PREVIOUS_STABLE_BERNOULLI_SELECTED_INDEX = 190;
+    static final int GUIDE_PREVIOUS_STABLE_BERNOULLI_RETAINED_INDEX = 191;
+    static final int GUIDE_PREVIOUS_STABLE_BERNOULLI_INVALID_INDEX = 192;
+    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 193;
     static final int SHIFTED_RECEIVER_GUIDE_STRIDE = 8 * Float.BYTES;
     static final int SPATIAL_DIAGNOSTIC_COUNTER_BYTES =
             SHIFTED_DIAGNOSTIC_COUNTER_COUNT * Integer.BYTES;
@@ -862,6 +866,14 @@ final class RtPathReservoirHistory {
                     counters.get(GUIDE_PREVIOUS_STABLE_SELECTION_ZERO_INDEX));
             long guidePreviousStableSelectionInvalid = Integer.toUnsignedLong(
                     counters.get(GUIDE_PREVIOUS_STABLE_SELECTION_INVALID_INDEX));
+            long guidePreviousStableBernoulliEligible = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_STABLE_BERNOULLI_ELIGIBLE_INDEX));
+            long guidePreviousStableBernoulliSelected = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_STABLE_BERNOULLI_SELECTED_INDEX));
+            long guidePreviousStableBernoulliRetained = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_STABLE_BERNOULLI_RETAINED_INDEX));
+            long guidePreviousStableBernoulliInvalid = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_STABLE_BERNOULLI_INVALID_INDEX));
             long crossFrameReceiverReject = crossFrameReceiverSurfaceReject
                     + crossFrameReceiverSampleReject + crossFrameReceiverEdgeReject
                     + crossFrameReceiverTopologyReject + crossFrameReceiverDepthReject
@@ -1262,6 +1274,17 @@ final class RtPathReservoirHistory {
                             - guidePreviousStableSelectionPositive
                             - guidePreviousStableSelectionZero
                             - guidePreviousStableSelectionInvalid);
+            CausticaMod.LOGGER.info(
+                    "RT path guide previous stable Bernoulli: eligible={}, "
+                            + "selected={},retained={},invalid={},delta={}",
+                    guidePreviousStableBernoulliEligible,
+                    guidePreviousStableBernoulliSelected,
+                    guidePreviousStableBernoulliRetained,
+                    guidePreviousStableBernoulliInvalid,
+                    guidePreviousStableBernoulliEligible
+                            - guidePreviousStableBernoulliSelected
+                            - guidePreviousStableBernoulliRetained
+                            - guidePreviousStableBernoulliInvalid);
             spatialDiagnosticViewPending = 0;
             return;
         }

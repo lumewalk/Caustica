@@ -2205,6 +2205,30 @@ public void pathGuidePreviousReplayValidate() {
                                                 ? PATH_GUIDE_PREVIOUS_STABLE_SELECTION_POSITIVE
                                                 : PATH_GUIDE_PREVIOUS_STABLE_SELECTION_ZERO;
                                 InterlockedAdd(counters[stableSelectionCategory], 1u);
+
+                                // Counter-only Bernoulli partition for the stable ratio. The local
+                                // hash is independent of both replay streams; this deliberately
+                                // records selected/retained/invalid outcomes without copying a
+                                // payload, composing a mapping, or writing history/estimator state.
+                                InterlockedAdd(counters[
+                                        PATH_GUIDE_PREVIOUS_STABLE_BERNOULLI_ELIGIBLE], 1u);
+                                uint stableBernoulliSeed = pathHash(pixelIndex
+                                        ^ worldPush.frameIndex * 747796405u
+                                        ^ 0xD1B54A35u);
+                                float stableBernoulliRandom = float(stableBernoulliSeed >> 8u)
+                                        * (1.0 / 16777216.0);
+                                bool stableBernoulliValid = stableSelectionValid
+                                        && isfinite(stableBernoulliRandom)
+                                        && stableBernoulliRandom >= 0.0
+                                        && stableBernoulliRandom < 1.0;
+                                bool stableBernoulliSelected = stableBernoulliValid
+                                        && stableBernoulliRandom < stableSelectionProbability;
+                                uint stableBernoulliCategory = !stableBernoulliValid
+                                        ? PATH_GUIDE_PREVIOUS_STABLE_BERNOULLI_INVALID
+                                        : stableBernoulliSelected
+                                                ? PATH_GUIDE_PREVIOUS_STABLE_BERNOULLI_SELECTED
+                                                : PATH_GUIDE_PREVIOUS_STABLE_BERNOULLI_RETAINED;
+                                InterlockedAdd(counters[stableBernoulliCategory], 1u);
                             }
                         }
                     }
