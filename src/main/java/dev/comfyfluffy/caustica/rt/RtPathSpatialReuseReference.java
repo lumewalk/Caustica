@@ -1001,6 +1001,66 @@ final class RtPathSpatialReuseReference {
         }
     }
 
+    enum GuidePreviousReplayOutcome {
+        LIFECYCLE_REJECT,
+        RECEIVER_REPROJECTION_REJECT,
+        PREVIOUS_EMPTY,
+        METADATA_REJECT,
+        RECEIVER_SURFACE_REJECT,
+        SOURCE_REPROJECTION_REJECT,
+        SOURCE_SURFACE_REJECT,
+        SOURCE_REPLAY_REJECT,
+        SELECTED_ACCEPTED,
+        RETAINED_ACCEPTED
+    }
+
+    /**
+     * Ordered, exclusive CPU authority for the one-frame guide-pair replay diagnostic. The result
+     * is classification only: acceptance does not authorize a merge, history write, or use as a
+     * spatial source.
+     */
+    static GuidePreviousReplayOutcome guidePreviousReplayOutcome(
+            boolean lifecycleAvailable,
+            boolean receiverReprojected,
+            boolean previousPresent,
+            boolean metadataValid,
+            boolean receiverSurfaceValid,
+            boolean sourceReprojected,
+            boolean sourceSurfaceValid,
+            boolean sourceReplayValid,
+            MappingKind mappingKind) {
+        if (!lifecycleAvailable) {
+            return GuidePreviousReplayOutcome.LIFECYCLE_REJECT;
+        }
+        if (!receiverReprojected) {
+            return GuidePreviousReplayOutcome.RECEIVER_REPROJECTION_REJECT;
+        }
+        if (!previousPresent) {
+            return GuidePreviousReplayOutcome.PREVIOUS_EMPTY;
+        }
+        if (!metadataValid) {
+            return GuidePreviousReplayOutcome.METADATA_REJECT;
+        }
+        if (!receiverSurfaceValid) {
+            return GuidePreviousReplayOutcome.RECEIVER_SURFACE_REJECT;
+        }
+        if (!sourceReprojected) {
+            return GuidePreviousReplayOutcome.SOURCE_REPROJECTION_REJECT;
+        }
+        if (!sourceSurfaceValid) {
+            return GuidePreviousReplayOutcome.SOURCE_SURFACE_REJECT;
+        }
+        if (!sourceReplayValid) {
+            return GuidePreviousReplayOutcome.SOURCE_REPLAY_REJECT;
+        }
+        if (mappingKind == null) {
+            throw new IllegalArgumentException("accepted guide replay requires a mapping kind");
+        }
+        return mappingKind == MappingKind.DIFFUSE_RECONNECTION
+                ? GuidePreviousReplayOutcome.SELECTED_ACCEPTED
+                : GuidePreviousReplayOutcome.RETAINED_ACCEPTED;
+    }
+
     /**
      * Shader-independent receiver-aware replay boundary for an ABI-10 one-hop diffuse mapping.
      * The source path is replayed from its original seeds; this record then applies the stored

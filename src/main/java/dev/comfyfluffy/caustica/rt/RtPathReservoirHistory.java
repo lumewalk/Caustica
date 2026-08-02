@@ -33,6 +33,8 @@ final class RtPathReservoirHistory {
     static final int MAPPING_REPLAY_PASS_FLAG = 1 << 5;
     static final int CROSS_FRAME_MAPPING_REPLAY_PASS_FLAG = 1 << 6;
     static final int GUIDE_SCRATCH_VALIDATE_PASS_FLAG = 1 << 7;
+    static final int GUIDE_PREVIOUS_REPLAY_PASS_FLAG = 1 << 8;
+    static final int GUIDE_PREVIOUS_AVAILABLE_FLAG = 1 << 9;
     static final int SPATIAL_DIAGNOSTIC_CATEGORY_COUNT = 9;
     static final int SPATIAL_DIAGNOSTIC_STRICT_PAIR_CURSOR_INDEX =
             SPATIAL_DIAGNOSTIC_CATEGORY_COUNT;
@@ -157,7 +159,18 @@ final class RtPathReservoirHistory {
     static final int GUIDE_ROOT_STORAGE_RETAINED_READY_INDEX = 128;
     static final int GUIDE_ROOT_STORAGE_MISSING_INDEX = 129;
     static final int GUIDE_ROOT_STORAGE_METADATA_REJECT_INDEX = 130;
-    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 131;
+    static final int GUIDE_PREVIOUS_REPLAY_ATTEMPTED_INDEX = 131;
+    static final int GUIDE_PREVIOUS_REPLAY_LIFECYCLE_REJECT_INDEX = 132;
+    static final int GUIDE_PREVIOUS_REPLAY_RECEIVER_REPROJECTION_REJECT_INDEX = 133;
+    static final int GUIDE_PREVIOUS_REPLAY_EMPTY_INDEX = 134;
+    static final int GUIDE_PREVIOUS_REPLAY_METADATA_REJECT_INDEX = 135;
+    static final int GUIDE_PREVIOUS_REPLAY_RECEIVER_SURFACE_REJECT_INDEX = 136;
+    static final int GUIDE_PREVIOUS_REPLAY_SOURCE_REPROJECTION_REJECT_INDEX = 137;
+    static final int GUIDE_PREVIOUS_REPLAY_SOURCE_SURFACE_REJECT_INDEX = 138;
+    static final int GUIDE_PREVIOUS_REPLAY_SOURCE_REPLAY_REJECT_INDEX = 139;
+    static final int GUIDE_PREVIOUS_REPLAY_SELECTED_ACCEPTED_INDEX = 140;
+    static final int GUIDE_PREVIOUS_REPLAY_RETAINED_ACCEPTED_INDEX = 141;
+    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 142;
     static final int SHIFTED_RECEIVER_GUIDE_STRIDE = 8 * Float.BYTES;
     static final int SPATIAL_DIAGNOSTIC_COUNTER_BYTES =
             SHIFTED_DIAGNOSTIC_COUNTER_COUNT * Integer.BYTES;
@@ -231,6 +244,7 @@ final class RtPathReservoirHistory {
 
     private final State state = new State();
     private final ShiftedSnapshotState shiftedSnapshotState = new ShiftedSnapshotState();
+    private final ShiftedSnapshotState guideScratchSnapshotState = new ShiftedSnapshotState();
     private final RtBuffer[] slots = new RtBuffer[SLOT_COUNT];
     private RtBuffer spatialDiagnosticCounters;
     private RtBuffer spatialDiagnosticPairs;
@@ -271,6 +285,7 @@ final class RtPathReservoirHistory {
                 spatialDiagnosticCounters.handle, spatialDiagnosticPairs.handle);
         state.reset();
         shiftedSnapshotState.reset();
+        guideScratchSnapshotState.reset();
     }
 
     Frame beginFrame(RtHistoryState.Frame historyFrame) {
@@ -314,6 +329,17 @@ final class RtPathReservoirHistory {
         }
         VK10.vkCmdFillBuffer(cmd, spatialDiagnosticCounters.handle, 0L,
                 spatialDiagnosticCounters.size, 0);
+        try (var stack = org.lwjgl.system.MemoryStack.stackPush()) {
+            VulkanCommandEncoder.memoryBarrier(cmd, stack);
+        }
+        spatialDiagnosticViewPending = SHIFTED_RADIANCE_DEBUG_VIEW;
+    }
+
+    void beginCurrentGuideScratch(VkCommandBuffer cmd) {
+        if (shiftedGuideScratchReservoirs == null
+                || shiftedGuideScratchSourceRoots == null) {
+            throw new IllegalStateException("Shifted guide scratch used before allocation");
+        }
         VK10.vkCmdFillBuffer(cmd, shiftedGuideScratchReservoirs.handle, 0L,
                 shiftedGuideScratchReservoirs.size, 0);
         VK10.vkCmdFillBuffer(cmd, shiftedGuideScratchSourceRoots.handle, 0L,
@@ -321,7 +347,6 @@ final class RtPathReservoirHistory {
         try (var stack = org.lwjgl.system.MemoryStack.stackPush()) {
             VulkanCommandEncoder.memoryBarrier(cmd, stack);
         }
-        spatialDiagnosticViewPending = SHIFTED_RADIANCE_DEBUG_VIEW;
     }
 
     void ensureShiftedSourceRoots(RtContext ctx) {
@@ -365,6 +390,7 @@ final class RtPathReservoirHistory {
                         (rootBytes + mappedBytes + receiverGuideBytes + mappedBytes + rootBytes)
                                 / (1024.0 * 1024.0)));
         shiftedSnapshotState.reset();
+        guideScratchSnapshotState.reset();
     }
 
     long shiftedDiagnosticCounterAddress() {
@@ -401,6 +427,10 @@ final class RtPathReservoirHistory {
         return shiftedSnapshotState.previousAvailable(frame, frameIndex);
     }
 
+    boolean previousGuideScratchAvailable(Frame frame, long frameIndex) {
+        return guideScratchSnapshotState.previousAvailable(frame, frameIndex);
+    }
+
     void beginCurrentShiftedSnapshot(VkCommandBuffer cmd) {
         if (shiftedMappedReservoirs == null) {
             throw new IllegalStateException("Shifted mapped snapshot used before allocation");
@@ -414,6 +444,10 @@ final class RtPathReservoirHistory {
 
     void commitShiftedSnapshot(Frame frame, long frameIndex) {
         shiftedSnapshotState.commit(frame, frameIndex);
+    }
+
+    void commitGuideScratchSnapshot(Frame frame, long frameIndex) {
+        guideScratchSnapshotState.commit(frame, frameIndex);
     }
 
     void pollSpatialDiagnosticCounters(RtContext ctx, long frameIndex) {
@@ -665,6 +699,28 @@ final class RtPathReservoirHistory {
                     counters.get(GUIDE_ROOT_STORAGE_MISSING_INDEX));
             long guideRootStorageMetadataReject = Integer.toUnsignedLong(
                     counters.get(GUIDE_ROOT_STORAGE_METADATA_REJECT_INDEX));
+            long guidePreviousReplayAttempted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_REPLAY_ATTEMPTED_INDEX));
+            long guidePreviousReplayLifecycleReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_REPLAY_LIFECYCLE_REJECT_INDEX));
+            long guidePreviousReplayReceiverReprojectionReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_REPLAY_RECEIVER_REPROJECTION_REJECT_INDEX));
+            long guidePreviousReplayEmpty = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_REPLAY_EMPTY_INDEX));
+            long guidePreviousReplayMetadataReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_REPLAY_METADATA_REJECT_INDEX));
+            long guidePreviousReplayReceiverSurfaceReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_REPLAY_RECEIVER_SURFACE_REJECT_INDEX));
+            long guidePreviousReplaySourceReprojectionReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_REPLAY_SOURCE_REPROJECTION_REJECT_INDEX));
+            long guidePreviousReplaySourceSurfaceReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_REPLAY_SOURCE_SURFACE_REJECT_INDEX));
+            long guidePreviousReplaySourceReplayReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_REPLAY_SOURCE_REPLAY_REJECT_INDEX));
+            long guidePreviousReplaySelectedAccepted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_REPLAY_SELECTED_ACCEPTED_INDEX));
+            long guidePreviousReplayRetainedAccepted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_REPLAY_RETAINED_ACCEPTED_INDEX));
             long crossFrameReceiverReject = crossFrameReceiverSurfaceReject
                     + crossFrameReceiverSampleReject + crossFrameReceiverEdgeReject
                     + crossFrameReceiverTopologyReject + crossFrameReceiverDepthReject
@@ -932,6 +988,29 @@ final class RtPathReservoirHistory {
                             - guideScratchStorageSelected - guideScratchStorageRetained,
                     guideRootStorageSelectedReady - guideScratchStorageSelected,
                     guideRootStorageRetainedReady - guideScratchStorageRetained);
+            long guidePreviousReplayTerminal = guidePreviousReplayLifecycleReject
+                    + guidePreviousReplayReceiverReprojectionReject
+                    + guidePreviousReplayEmpty + guidePreviousReplayMetadataReject
+                    + guidePreviousReplayReceiverSurfaceReject
+                    + guidePreviousReplaySourceReprojectionReject
+                    + guidePreviousReplaySourceSurfaceReject
+                    + guidePreviousReplaySourceReplayReject
+                    + guidePreviousReplaySelectedAccepted
+                    + guidePreviousReplayRetainedAccepted;
+            CausticaMod.LOGGER.info(
+                    "RT path guide previous replay: attempted={}, lifecycle={}, receiverReprojection={}, "
+                            + "empty={}, metadata={}, receiverSurface={}, sourceReprojection={}, "
+                            + "sourceSurface={}, sourceReplay={}, selectedAccepted={}, "
+                            + "retainedAccepted={}, terminal={}, delta={}",
+                    guidePreviousReplayAttempted, guidePreviousReplayLifecycleReject,
+                    guidePreviousReplayReceiverReprojectionReject, guidePreviousReplayEmpty,
+                    guidePreviousReplayMetadataReject, guidePreviousReplayReceiverSurfaceReject,
+                    guidePreviousReplaySourceReprojectionReject,
+                    guidePreviousReplaySourceSurfaceReject,
+                    guidePreviousReplaySourceReplayReject,
+                    guidePreviousReplaySelectedAccepted,
+                    guidePreviousReplayRetainedAccepted, guidePreviousReplayTerminal,
+                    guidePreviousReplayAttempted - guidePreviousReplayTerminal);
             spatialDiagnosticViewPending = 0;
             return;
         }
@@ -1008,6 +1087,7 @@ final class RtPathReservoirHistory {
     void reset() {
         state.reset();
         shiftedSnapshotState.reset();
+        guideScratchSnapshotState.reset();
     }
 
     RtBuffer finalBuffer(Frame frame) {
@@ -1092,6 +1172,7 @@ final class RtPathReservoirHistory {
         spatialDiagnosticViewPending = 0;
         state.reset();
         shiftedSnapshotState.reset();
+        guideScratchSnapshotState.reset();
     }
 
     private static String percent(long value, long total) {

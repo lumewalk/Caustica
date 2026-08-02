@@ -769,6 +769,45 @@ final class RtPathSpatialReuseReferenceTest {
     }
 
     @Test
+    void guidePreviousReplayReportsTheFirstExclusiveOutcome() {
+        var selected = RtPathSpatialReuseReference.MappingKind.DIFFUSE_RECONNECTION;
+        var retained = RtPathSpatialReuseReference.MappingKind.IDENTITY;
+
+        assertEquals(RtPathSpatialReuseReference.GuidePreviousReplayOutcome.LIFECYCLE_REJECT,
+                guideReplay(false, true, true, true, true, true, true, true, selected));
+        assertEquals(RtPathSpatialReuseReference.GuidePreviousReplayOutcome.RECEIVER_REPROJECTION_REJECT,
+                guideReplay(true, false, true, true, true, true, true, true, selected));
+        assertEquals(RtPathSpatialReuseReference.GuidePreviousReplayOutcome.PREVIOUS_EMPTY,
+                guideReplay(true, true, false, true, true, true, true, true, selected));
+        assertEquals(RtPathSpatialReuseReference.GuidePreviousReplayOutcome.METADATA_REJECT,
+                guideReplay(true, true, true, false, true, true, true, true, selected));
+        assertEquals(RtPathSpatialReuseReference.GuidePreviousReplayOutcome.RECEIVER_SURFACE_REJECT,
+                guideReplay(true, true, true, true, false, true, true, true, selected));
+        assertEquals(RtPathSpatialReuseReference.GuidePreviousReplayOutcome.SOURCE_REPROJECTION_REJECT,
+                guideReplay(true, true, true, true, true, false, true, true, selected));
+        assertEquals(RtPathSpatialReuseReference.GuidePreviousReplayOutcome.SOURCE_SURFACE_REJECT,
+                guideReplay(true, true, true, true, true, true, false, true, selected));
+        assertEquals(RtPathSpatialReuseReference.GuidePreviousReplayOutcome.SOURCE_REPLAY_REJECT,
+                guideReplay(true, true, true, true, true, true, true, false, selected));
+        assertEquals(RtPathSpatialReuseReference.GuidePreviousReplayOutcome.SELECTED_ACCEPTED,
+                guideReplay(true, true, true, true, true, true, true, true, selected));
+        assertEquals(RtPathSpatialReuseReference.GuidePreviousReplayOutcome.RETAINED_ACCEPTED,
+                guideReplay(true, true, true, true, true, true, true, true, retained));
+        assertThrows(IllegalArgumentException.class,
+                () -> guideReplay(true, true, true, true, true, true, true, true, null));
+    }
+
+    private static RtPathSpatialReuseReference.GuidePreviousReplayOutcome guideReplay(
+            boolean lifecycle, boolean receiverReprojection, boolean previous,
+            boolean metadata, boolean receiverSurface, boolean sourceReprojection,
+            boolean sourceSurface, boolean sourceReplay,
+            RtPathSpatialReuseReference.MappingKind mappingKind) {
+        return RtPathSpatialReuseReference.guidePreviousReplayOutcome(
+                lifecycle, receiverReprojection, previous, metadata, receiverSurface,
+                sourceReprojection, sourceSurface, sourceReplay, mappingKind);
+    }
+
+    @Test
     void pairedMomentsExposeCovarianceAndCorrelationWithoutBatchStorage() {
         var moments = new RtPathSpatialReuseReference.PairMoments();
         moments.add(1.0, 2.0);
@@ -958,8 +997,26 @@ final class RtPathSpatialReuseReferenceTest {
         assertEquals(128, RtPathReservoirHistory.GUIDE_ROOT_STORAGE_RETAINED_READY_INDEX);
         assertEquals(129, RtPathReservoirHistory.GUIDE_ROOT_STORAGE_MISSING_INDEX);
         assertEquals(130, RtPathReservoirHistory.GUIDE_ROOT_STORAGE_METADATA_REJECT_INDEX);
-        assertEquals(131, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
-        assertEquals(131 * Integer.BYTES,
+        assertEquals(131, RtPathReservoirHistory.GUIDE_PREVIOUS_REPLAY_ATTEMPTED_INDEX);
+        assertEquals(132, RtPathReservoirHistory.GUIDE_PREVIOUS_REPLAY_LIFECYCLE_REJECT_INDEX);
+        assertEquals(133,
+                RtPathReservoirHistory.GUIDE_PREVIOUS_REPLAY_RECEIVER_REPROJECTION_REJECT_INDEX);
+        assertEquals(134, RtPathReservoirHistory.GUIDE_PREVIOUS_REPLAY_EMPTY_INDEX);
+        assertEquals(135, RtPathReservoirHistory.GUIDE_PREVIOUS_REPLAY_METADATA_REJECT_INDEX);
+        assertEquals(136,
+                RtPathReservoirHistory.GUIDE_PREVIOUS_REPLAY_RECEIVER_SURFACE_REJECT_INDEX);
+        assertEquals(137,
+                RtPathReservoirHistory.GUIDE_PREVIOUS_REPLAY_SOURCE_REPROJECTION_REJECT_INDEX);
+        assertEquals(138,
+                RtPathReservoirHistory.GUIDE_PREVIOUS_REPLAY_SOURCE_SURFACE_REJECT_INDEX);
+        assertEquals(139,
+                RtPathReservoirHistory.GUIDE_PREVIOUS_REPLAY_SOURCE_REPLAY_REJECT_INDEX);
+        assertEquals(140,
+                RtPathReservoirHistory.GUIDE_PREVIOUS_REPLAY_SELECTED_ACCEPTED_INDEX);
+        assertEquals(141,
+                RtPathReservoirHistory.GUIDE_PREVIOUS_REPLAY_RETAINED_ACCEPTED_INDEX);
+        assertEquals(142, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
+        assertEquals(142 * Integer.BYTES,
                 RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_COUNTER_BYTES);
         assertEquals(32, RtPathReservoirHistory.SHIFTED_RECEIVER_GUIDE_STRIDE);
         assertEquals(27_566_080L,

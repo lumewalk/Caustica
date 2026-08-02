@@ -39,6 +39,7 @@ static void writeExactReceiverRayOrigin(PathSegment segment, uint2 pix,
     // receiver; retained-source/mapping replay dispatches must never overwrite the current sidecar.
     if (worldPush.pathShiftReceiverGuideAddr == 0u
             || (pc.historyFlags & PATH_MAPPING_REPLAY_PASS_FLAG) != 0u
+            || (pc.historyFlags & PATH_GUIDE_PREVIOUS_REPLAY_PASS_FLAG) != 0u
             || segment.bounce != 0 || hitDepth != 0) {
         return;
     }
@@ -1682,6 +1683,186 @@ public void pathMappingReplayValidate() {
             ? PATH_CROSS_FRAME_ACCEPTED : PATH_MAPPING_REPLAY_ACCEPTED], 1u);
 }
 
+// One-frame lifetime/replay audit for the paired guide reservoir and source-root scratch. The
+// previous pair is read before the host clears the same buffers for the current frame. It validates
+// receiver and source reprojection plus exact original-source replay, but never reconstructs a new
+// mapping, changes a weight, writes history, or touches the output image.
+public void pathGuidePreviousReplayValidate() {
+    if (pc.debugView != PATH_SHIFTED_RADIANCE_DEBUG_VIEW
+            || (pc.historyFlags & PATH_GUIDE_PREVIOUS_REPLAY_PASS_FLAG) == 0u
+            || worldPush.pathShiftDiagnosticCounterAddr == 0u
+            || worldPush.pathShiftGuideScratchAddr == 0u
+            || worldPush.pathShiftGuideRootScratchAddr == 0u) {
+        return;
+    }
+
+    uint2 pixel = DispatchRaysIndex().xy;
+    uint2 dimensions = DispatchRaysDimensions().xy;
+    uint pixelIndex = pixel.y * dimensions.x + pixel.x;
+    uint pixelCount = dimensions.x * dimensions.y;
+    DevicePtr<uint> counters =
+            DevicePtr<uint>(worldPush.pathShiftDiagnosticCounterAddr);
+    InterlockedAdd(counters[PATH_GUIDE_PREVIOUS_REPLAY_ATTEMPTED], 1u);
+
+    if ((pc.historyFlags & PATH_GUIDE_PREVIOUS_AVAILABLE_FLAG) == 0u) {
+        InterlockedAdd(counters[PATH_GUIDE_PREVIOUS_REPLAY_LIFECYCLE_REJECT], 1u);
+        return;
+    }
+
+    float2 previousPixel = float2(pixel) + 0.5 + gMotion[int2(pixel)];
+    int2 previousTexel = int2(floor(previousPixel));
+    if (any(previousTexel < int2(0, 0))
+            || any(previousTexel >= int2(dimensions))) {
+        InterlockedAdd(counters[
+                PATH_GUIDE_PREVIOUS_REPLAY_RECEIVER_REPROJECTION_REJECT], 1u);
+        return;
+    }
+    uint previousPixelIndex = uint(previousTexel.y) * dimensions.x
+            + uint(previousTexel.x);
+    PathReservoir stored = ConstPtr<PathReservoir>(
+            worldPush.pathShiftGuideScratchAddr)[previousPixelIndex];
+    if (all(stored.replayControl == uint4(0u)) && stored.identity.w == 0u) {
+        InterlockedAdd(counters[PATH_GUIDE_PREVIOUS_REPLAY_EMPTY], 1u);
+        return;
+    }
+
+    uint currentGeneration = pc.historyGeneration & PATH_GENERATION_MASK;
+    if (stored.replayControl.y == 0u) {
+        uint terminal = stored.replayControl.w;
+        bool sentinelValid = stored.replayControl.x == PATH_REPLAY_VERSION
+                && stored.replayControl.z == PATH_GUIDE_SCRATCH_SENTINEL_MAGIC
+                && stored.identity.w == currentGeneration
+                && (terminal == PATH_GUIDE_SAMPLE_COPY_EMPTY
+                        || terminal == PATH_GUIDE_SAMPLE_COPY_METADATA_REJECT
+                        || terminal == PATH_GUIDE_SAMPLE_COPY_ARITHMETIC_REJECT);
+        InterlockedAdd(counters[sentinelValid
+                ? PATH_GUIDE_PREVIOUS_REPLAY_EMPTY
+                : PATH_GUIDE_PREVIOUS_REPLAY_METADATA_REJECT], 1u);
+        return;
+    }
+
+    uint sourceIndex = stored.identity.y;
+    uint mappingKind = pathMappingKind(stored);
+    bool weightsValid = all(isfinite(stored.weights))
+            && all(stored.weights > float4(0.0));
+    bool metadataValid = weightsValid && pathReservoirSampleMetadataReady(stored)
+            && (stored.identity.w & PATH_GENERATION_MASK) == currentGeneration
+            && sourceIndex < pixelCount
+            && (mappingKind == PATH_MAPPING_IDENTITY
+                    || mappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION);
+    PathSourceRoot root = ConstPtr<PathSourceRoot>(
+            worldPush.pathShiftGuideRootScratchAddr)[previousPixelIndex];
+    bool rootFinite = all(isfinite(root.sourcePositionMaterial))
+            && all(isfinite(root.sourceNormalRoughness))
+            && all(isfinite(root.receiverPositionMaterial))
+            && all(isfinite(root.receiverNormalRoughness))
+            && all(isfinite(root.segment0.ro))
+            && all(isfinite(root.segment1.ro));
+    bool rootChainValid = stored.replayControl.y == 1u
+            ? root.segment0.nextRecord == PATH_NO_NEXT
+            : stored.replayControl.y == MAX_PATH_SEGMENTS
+                    && root.segment0.nextRecord != PATH_NO_NEXT
+                    && root.segment1.nextRecord == PATH_NO_NEXT;
+    if (!metadataValid || !rootFinite || !rootChainValid) {
+        InterlockedAdd(counters[PATH_GUIDE_PREVIOUS_REPLAY_METADATA_REJECT], 1u);
+        return;
+    }
+
+    float3 retainedRebase = worldPush.camOffset - worldPush.camDelta;
+    float4 retainedReceiverPositionMaterial = root.receiverPositionMaterial;
+    retainedReceiverPositionMaterial.xyz += retainedRebase;
+    float4 receiverPositionMaterial = gRestirPositionMaterial[int2(pixel)];
+    float4 receiverNormalRoughness = gRestirNormalRoughness[int2(pixel)];
+    if (!pathReplayPositionMatches(retainedReceiverPositionMaterial.xyz,
+                receiverPositionMaterial.xyz)
+            || !pathReplayColorMatches(root.receiverNormalRoughness.xyz,
+                receiverNormalRoughness.xyz)
+            || !pathReplayFloatMatches(root.receiverNormalRoughness.w,
+                receiverNormalRoughness.w)
+            || uint(max(retainedReceiverPositionMaterial.w, 0.0))
+                    != uint(max(receiverPositionMaterial.w, 0.0))) {
+        InterlockedAdd(counters[
+                PATH_GUIDE_PREVIOUS_REPLAY_RECEIVER_SURFACE_REJECT], 1u);
+        return;
+    }
+
+    uint2 previousSourcePixel = uint2(sourceIndex % dimensions.x,
+            sourceIndex / dimensions.x);
+    float4 retainedSourcePositionMaterial = root.sourcePositionMaterial;
+    retainedSourcePositionMaterial.xyz += retainedRebase;
+    float3 currentSourceCamRelative = root.sourcePositionMaterial.xyz
+            - worldPush.camDelta;
+    float4 sourceClip = mul(worldPush.curViewProj,
+            float4(currentSourceCamRelative, 1.0));
+    bool sourceMotionFound = false;
+    bool sourceReprojected = false;
+    int2 sourceTexel = int2(previousSourcePixel);
+    if (sourceClip.w > 0.0 && all(isfinite(sourceClip))) {
+        float2 sourceNdc = sourceClip.xy / sourceClip.w;
+        int2 projectedSourceTexel = int2(floor(
+                (sourceNdc * 0.5 + 0.5) * float2(dimensions)));
+        for (int oy = -1; oy <= 1 && !sourceReprojected; ++oy) {
+            for (int ox = -1; ox <= 1 && !sourceReprojected; ++ox) {
+                int2 candidateTexel = projectedSourceTexel + int2(ox, oy);
+                if (any(candidateTexel < int2(0, 0))
+                        || any(candidateTexel >= int2(dimensions))) continue;
+                int2 candidatePreviousTexel = int2(floor(float2(candidateTexel)
+                        + 0.5 + gMotion[candidateTexel]));
+                if (any(candidatePreviousTexel != int2(previousSourcePixel))) continue;
+                sourceMotionFound = true;
+                float4 candidatePosition = gRestirPositionMaterial[candidateTexel];
+                float4 candidateNormal = gRestirNormalRoughness[candidateTexel];
+                if (pathReplayPositionMatches(retainedSourcePositionMaterial.xyz,
+                            candidatePosition.xyz)
+                        && pathReplayColorMatches(root.sourceNormalRoughness.xyz,
+                            candidateNormal.xyz)
+                        && pathReplayFloatMatches(root.sourceNormalRoughness.w,
+                            candidateNormal.w)
+                        && uint(max(retainedSourcePositionMaterial.w, 0.0))
+                                == uint(max(candidatePosition.w, 0.0))) {
+                    sourceTexel = candidateTexel;
+                    sourceReprojected = true;
+                }
+            }
+        }
+    }
+    if (!sourceMotionFound) {
+        InterlockedAdd(counters[
+                PATH_GUIDE_PREVIOUS_REPLAY_SOURCE_REPROJECTION_REJECT], 1u);
+        return;
+    }
+    if (!sourceReprojected) {
+        InterlockedAdd(counters[
+                PATH_GUIDE_PREVIOUS_REPLAY_SOURCE_SURFACE_REJECT], 1u);
+        return;
+    }
+
+    PathReplayAggregate replay = pathReplayAggregateEmpty();
+    uint expectedSegments = stored.replayControl.y;
+    for (uint leaf = 0u; leaf < MAX_PATH_SEGMENTS; ++leaf) {
+        if (leaf >= expectedSegments) break;
+        PackedPathSegment packed = leaf == 0u ? root.segment0 : root.segment1;
+        packed.ro += retainedRebase;
+        PathSegment segment = unpackPathSegment(packed);
+        uint replaySeed = leaf == 0u ? stored.replay.x : stored.replay.z;
+        uint proposalReplaySeed = leaf == 0u ? stored.replay.y : stored.replay.w;
+        PathTraceResult traced = tracePathSeeded(
+                segment, uint2(sourceTexel), true, replaySeed, proposalReplaySeed);
+        pathReplayAccumulate(replay, traced, leaf);
+    }
+    bool replayMatches = mappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION
+            ? pathMappingSourceReplayMatches(stored, replay)
+            : pathReplayCompare(stored, replay) == 0u;
+    if (!replayMatches) {
+        InterlockedAdd(counters[
+                PATH_GUIDE_PREVIOUS_REPLAY_SOURCE_REPLAY_REJECT], 1u);
+        return;
+    }
+    InterlockedAdd(counters[mappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION
+            ? PATH_GUIDE_PREVIOUS_REPLAY_SELECTED_ACCEPTED
+            : PATH_GUIDE_PREVIOUS_REPLAY_RETAINED_ACCEPTED], 1u);
+}
+
 // Storage/lifetime audit for the future guide-driven sample. The cross-frame replay dispatch writes
 // one complete PathReservoir or one ABI-tagged terminal sentinel per eligible receiver. A distinct
 // same-frame dispatch reads that device memory after a barrier; it never consumes or updates history.
@@ -1816,6 +1997,10 @@ public void pathGuideScratchValidate() {
 [shader("raygeneration")]
 void main() {
     worldPush = ConstPtr<WorldPush>(pc.worldPushAddr)[0];
+    if ((pc.historyFlags & PATH_GUIDE_PREVIOUS_REPLAY_PASS_FLAG) != 0u) {
+        pathGuidePreviousReplayValidate();
+        return;
+    }
     if ((pc.historyFlags & PATH_GUIDE_SCRATCH_VALIDATE_PASS_FLAG) != 0u) {
         pathGuideScratchValidate();
         return;

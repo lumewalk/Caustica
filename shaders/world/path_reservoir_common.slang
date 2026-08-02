@@ -130,7 +130,18 @@ public static const uint PATH_GUIDE_ROOT_STORAGE_SELECTED_READY = 127u;
 public static const uint PATH_GUIDE_ROOT_STORAGE_RETAINED_READY = 128u;
 public static const uint PATH_GUIDE_ROOT_STORAGE_MISSING = 129u;
 public static const uint PATH_GUIDE_ROOT_STORAGE_METADATA_REJECT = 130u;
-public static const uint PATH_SHIFT_DIAGNOSTIC_COUNTER_COUNT = 131u;
+public static const uint PATH_GUIDE_PREVIOUS_REPLAY_ATTEMPTED = 131u;
+public static const uint PATH_GUIDE_PREVIOUS_REPLAY_LIFECYCLE_REJECT = 132u;
+public static const uint PATH_GUIDE_PREVIOUS_REPLAY_RECEIVER_REPROJECTION_REJECT = 133u;
+public static const uint PATH_GUIDE_PREVIOUS_REPLAY_EMPTY = 134u;
+public static const uint PATH_GUIDE_PREVIOUS_REPLAY_METADATA_REJECT = 135u;
+public static const uint PATH_GUIDE_PREVIOUS_REPLAY_RECEIVER_SURFACE_REJECT = 136u;
+public static const uint PATH_GUIDE_PREVIOUS_REPLAY_SOURCE_REPROJECTION_REJECT = 137u;
+public static const uint PATH_GUIDE_PREVIOUS_REPLAY_SOURCE_SURFACE_REJECT = 138u;
+public static const uint PATH_GUIDE_PREVIOUS_REPLAY_SOURCE_REPLAY_REJECT = 139u;
+public static const uint PATH_GUIDE_PREVIOUS_REPLAY_SELECTED_ACCEPTED = 140u;
+public static const uint PATH_GUIDE_PREVIOUS_REPLAY_RETAINED_ACCEPTED = 141u;
+public static const uint PATH_SHIFT_DIAGNOSTIC_COUNTER_COUNT = 142u;
 public static const uint PATH_SHIFT_DIAGNOSTIC_PAIR_MASK = 3u;
 public static const uint PATH_SHIFT_DIAGNOSTIC_MERGE_PAIR_OFFSET =
         PATH_SPATIAL_DIAGNOSTIC_PAIR_CAPACITY * 2u;
@@ -235,6 +246,8 @@ public static const uint PATH_CANONICAL_MODE_FLAG = 16u;
 public static const uint PATH_MAPPING_REPLAY_PASS_FLAG = 32u;
 public static const uint PATH_CROSS_FRAME_MAPPING_REPLAY_PASS_FLAG = 64u;
 public static const uint PATH_GUIDE_SCRATCH_VALIDATE_PASS_FLAG = 128u;
+public static const uint PATH_GUIDE_PREVIOUS_REPLAY_PASS_FLAG = 256u;
+public static const uint PATH_GUIDE_PREVIOUS_AVAILABLE_FLAG = 512u;
 // replayControl.y == 0 keeps a terminal sentinel outside the valid replay-segment domain. The
 // magic prevents a cleared or partially written record from being mistaken for an intentional
 // sample-copy terminal state.

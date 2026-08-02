@@ -578,6 +578,28 @@ addresses. The next bounded gate is an isolated one-frame ping-pong/replay exper
 reservoir and root. Neither buffer may enter committed history, become a spatial source, compose a
 mapping/Jacobian, or affect the estimator before that replay gate passes.
 
+The isolated one-frame replay gate is now proven without another full-resolution allocation. A
+separate CPU lifecycle token allows the paired scratch only on the immediately following view-20
+frame with the same history generation and valid path-history continuity. A read-before-clear
+raygen pass reprojects and validates the current receiver, independently reprojects and validates
+the retained source key, then exactly replays the stored original source root. Selected diffuse
+mappings use the receiver-aware source replay contract, while retained identity samples use the
+generic exact replay contract. A barrier completes all reads before the same reservoir/root pair is
+cleared and rewritten for the current frame. The pass is counter-only: accepted samples are not
+reconstructed, selected, weighted, exposed as spatial sources, or committed to history.
+
+Fresh Vulkan/RTX 5060 Ti validation produced 25 readbacks and 21536000 attempted pixels. Every
+readback preserved `attempted = terminal = 861440` and `delta = 0`; lifecycle, metadata, and source
+surface rejects stayed zero. The deliberate camera movement failed closed through 98688 receiver
+reprojection rejects and 11 receiver-surface rejects, then recovered. Across the 23 settled
+readbacks, exact replay accepted 54810 selected mappings and 1688 retained identity samples; only 15
+strict source-replay tails and one independent source-reprojection reject remained. The complete
+run accepted 57542 selected and 1791 retained samples. The lazy view-20 allocation therefore remains
+606453760 bytes (578.36 MiB), and ordinary rendering still receives zero scratch addresses. The next
+bounded gate may reconstruct receiver-aware mapping, visibility, and target from these accepted
+previous pairs, but must remain diagnostic-only and must not update GRIS weights, sample selection,
+committed history, or the ordinary estimator.
+
 ## Delivery Phases
 
 ### Phase 0 — Wavefront Integration Baseline

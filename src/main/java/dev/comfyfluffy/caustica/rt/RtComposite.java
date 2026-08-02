@@ -937,11 +937,14 @@ public final class RtComposite {
                              boolean restirPt) {
         int debugView = debugView();
         boolean previousShiftedSnapshot = false;
+        boolean previousGuideScratch = false;
         if (restirPt) {
             pathReservoirs.pollSpatialDiagnosticCounters(ctx, frameCounter);
             if (debugView == RtPathReservoirHistory.SHIFTED_RADIANCE_DEBUG_VIEW) {
                 pathReservoirs.ensureShiftedSourceRoots(ctx);
                 previousShiftedSnapshot = pathReservoirs.previousShiftedSnapshotAvailable(
+                        pathReservoirFrame, frameCounter);
+                previousGuideScratch = pathReservoirs.previousGuideScratchAvailable(
                         pathReservoirFrame, frameCounter);
             }
         }
@@ -1162,8 +1165,34 @@ public final class RtComposite {
             ByteBuffer mappingReplayPushConstants = null;
             ByteBuffer crossFrameMappingReplayPushConstants = null;
             ByteBuffer guideScratchValidatePushConstants = null;
+            ByteBuffer guidePreviousReplayPushConstants = null;
             if (restirPt
                      && debugView == RtPathReservoirHistory.SHIFTED_RADIANCE_DEBUG_VIEW) {
+                guidePreviousReplayPushConstants =
+                        stack.malloc(WorldPushConstantsData.BYTE_SIZE);
+                new WorldPushConstantsData(
+                        worldConstants.worldPushAddr(),
+                        worldConstants.tableAddr(),
+                        worldConstants.entityTableAddr(),
+                        worldConstants.materialTableAddr(),
+                        worldConstants.lightBufAddr(),
+                        worldConstants.lightAliasAddr(),
+                        worldConstants.lightLocalAliasAddr(),
+                        worldConstants.lightGridCellAddr(),
+                        worldConstants.lightGridSpanAddr(),
+                        worldConstants.pathQueueAddr(),
+                        worldConstants.directReservoirAddr(),
+                        worldConstants.pathReservoirAddr(),
+                        worldConstants.pathReservoirPreviousAddr(),
+                        worldConstants.frameIndex(),
+                        worldConstants.debugView(),
+                        worldConstants.historyFlags()
+                                | RtPathReservoirHistory.GUIDE_PREVIOUS_REPLAY_PASS_FLAG
+                                | (previousGuideScratch
+                                        ? RtPathReservoirHistory.GUIDE_PREVIOUS_AVAILABLE_FLAG
+                                        : 0),
+                        worldConstants.historyGeneration())
+                        .write(guidePreviousReplayPushConstants);
                 mappingReplayPushConstants =
                         stack.malloc(WorldPushConstantsData.BYTE_SIZE);
                 new WorldPushConstantsData(
@@ -1267,7 +1296,17 @@ public final class RtComposite {
                 VulkanCommandEncoder.memoryBarrier(cmd, stack);
                 if (debugView == RtPathReservoirHistory.SHIFTED_RADIANCE_DEBUG_VIEW) {
                     pathReservoirs.beginShiftedRadianceDiagnostics(cmd);
+                    try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd,
+                                 "path guide previous replay");
+                         RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage(
+                                 "frame.pathGuidePreviousReplay")) {
+                        active.trace(cmd, renderW, renderH,
+                                guidePreviousReplayPushConstants, 1);
+                    }
                     VulkanCommandEncoder.memoryBarrier(cmd, stack);
+                    // Previous guide records and roots have now been consumed. Reuse the same
+                    // isolated buffers for the current frame instead of allocating a second pair.
+                    pathReservoirs.beginCurrentGuideScratch(cmd);
                     if (previousShiftedSnapshot) {
                         try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd,
                                      "path cross-frame mapping replay");
@@ -1285,6 +1324,8 @@ public final class RtComposite {
                                     guideScratchValidatePushConstants, 1);
                         }
                         VulkanCommandEncoder.memoryBarrier(cmd, stack);
+                        pathReservoirs.commitGuideScratchSnapshot(
+                                pathReservoirFrame, frameCounter);
                     }
                     // The previous snapshot has now been consumed. Clear only the mapped-record
                     // gate; source-root lanes may remain stale because a zero mapping never reads them.
