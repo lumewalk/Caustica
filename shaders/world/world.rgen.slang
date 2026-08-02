@@ -2290,6 +2290,88 @@ public void pathGuidePreviousReplayValidate() {
                                         : PATH_GUIDE_PREVIOUS_BRANCH_RETAINED_PAYLOAD_INVALID],
                                         stableBernoulliValid && !stableBernoulliSelected
                                                 ? 1u : 0u);
+
+                                // Audit the exact lane policy for a future branch record without
+                                // constructing or copying either PathReservoir. A selected source
+                                // must rewrite receiver-dependent lanes, preserve the original
+                                // replay/proposal path, and install one direct mapping descriptor.
+                                // A retained current sample must preserve its opaque payload. Only
+                                // the shared weight lane is branch-dependent in both cases.
+                                InterlockedAdd(counters[PATH_GUIDE_PREVIOUS_LANE_ELIGIBLE],
+                                        stableBernoulliValid ? 1u : 0u);
+                                uint currentSourceIndex = uint(sourceTexel.y) * dimensions.x
+                                        + uint(sourceTexel.x);
+                                bool selectedRewriteReady = selectedPayloadValid
+                                        && all(isfinite(visibleRadiance))
+                                        && all(visibleRadiance >= float3(0.0))
+                                        && isfinite(shiftedTarget) && shiftedTarget > 0.0
+                                        && isfinite(stored.proposalShift.x)
+                                        && stored.proposalShift.x > 0.0
+                                        && isfinite(replay.footprint) && replay.footprint > 0.0
+                                        && isfinite(pssJacobian) && pssJacobian > 0.0
+                                        && currentSourceIndex < pixelCount
+                                        && replay.canonicalValid != 0u
+                                        && replay.reconnectionValid != 0u
+                                        && replay.reconnectionDepth == 1u
+                                        && replay.reconnectionEventKind
+                                                == PATH_RECONNECTION_EVENT_DIFFUSE
+                                        && all(isfinite(replay.reconnectionVertex))
+                                        && all(isfinite(replay.reconnectionNormal))
+                                        && isfinite(receiverPdf) && receiverPdf > 0.0
+                                        && all(isfinite(receiverThroughput))
+                                        && all(receiverThroughput >= float3(0.0))
+                                        && pathPackMetadata(pc.historyGeneration,
+                                                replay.depth, replay.transportMask)
+                                                == pathPackMetadata(currentGeneration,
+                                                        replay.depth, replay.transportMask);
+                                InterlockedAdd(counters[selectedRewriteReady
+                                        ? PATH_GUIDE_PREVIOUS_LANE_SELECTED_REWRITE_READY
+                                        : PATH_GUIDE_PREVIOUS_LANE_SELECTED_REWRITE_REJECT],
+                                        stableBernoulliSelected ? 1u : 0u);
+
+                                bool selectedPreserveReady = selectedPayloadValid
+                                        && pathMappingSourceReplayMatches(stored, replay)
+                                        && stored.replayControl.x == PATH_REPLAY_VERSION
+                                        && stored.replayControl.y == replay.replaySegmentCount
+                                        && stored.replayControl.z == replay.replayState
+                                        && stored.replayControl.w == replay.proposalReplayState
+                                        && stored.identity.z == replay.topologyKey
+                                        && pathReplayFloatMatches(stored.proposalShift.z,
+                                                replay.footprint);
+                                InterlockedAdd(counters[selectedPreserveReady
+                                        ? PATH_GUIDE_PREVIOUS_LANE_SELECTED_PRESERVE_READY
+                                        : PATH_GUIDE_PREVIOUS_LANE_SELECTED_PRESERVE_REJECT],
+                                        stableBernoulliSelected ? 1u : 0u);
+
+                                bool retainedPreserveReady = retainedPayloadValid
+                                        && pathMappingKind(current) == PATH_MAPPING_IDENTITY
+                                        && current.replayControl.x == PATH_REPLAY_VERSION
+                                        && current.replayControl.y >= 1u
+                                        && current.replayControl.y <= MAX_PATH_SEGMENTS
+                                        && current.identity.y < pixelCount
+                                        && (current.identity.w & PATH_GENERATION_MASK)
+                                                == currentGeneration;
+                                InterlockedAdd(counters[retainedPreserveReady
+                                        ? PATH_GUIDE_PREVIOUS_LANE_RETAINED_PRESERVE_READY
+                                        : PATH_GUIDE_PREVIOUS_LANE_RETAINED_PRESERVE_REJECT],
+                                        stableBernoulliValid && !stableBernoulliSelected
+                                                ? 1u : 0u);
+
+                                float chosenFinalWeight = stableBernoulliSelected
+                                        ? sourceFinalWeightResult : currentFinalWeight;
+                                bool chosenWeightsReady = stableBernoulliValid
+                                        && nextValid
+                                        && isfinite(nextWeightSum) && nextWeightSum > 0.0
+                                        && isfinite(nextEffectiveCount)
+                                        && nextEffectiveCount > 0.0
+                                        && isfinite(chosenFinalWeight)
+                                        && chosenFinalWeight > 0.0
+                                        && isfinite(min(nextEffectiveCount * 0.25, 1.0))
+                                        && min(nextEffectiveCount * 0.25, 1.0) > 0.0;
+                                InterlockedAdd(counters[chosenWeightsReady
+                                        ? PATH_GUIDE_PREVIOUS_LANE_WEIGHTS_READY
+                                        : PATH_GUIDE_PREVIOUS_LANE_WEIGHTS_REJECT],
+                                        stableBernoulliValid ? 1u : 0u);
                             }
                         }
                     }

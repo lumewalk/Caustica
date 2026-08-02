@@ -230,7 +230,16 @@ final class RtPathReservoirHistory {
     static final int GUIDE_PREVIOUS_BRANCH_SELECTED_PAYLOAD_INVALID_INDEX = 199;
     static final int GUIDE_PREVIOUS_BRANCH_RETAINED_PAYLOAD_VALID_INDEX = 200;
     static final int GUIDE_PREVIOUS_BRANCH_RETAINED_PAYLOAD_INVALID_INDEX = 201;
-    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 202;
+    static final int GUIDE_PREVIOUS_LANE_ELIGIBLE_INDEX = 202;
+    static final int GUIDE_PREVIOUS_LANE_SELECTED_REWRITE_READY_INDEX = 203;
+    static final int GUIDE_PREVIOUS_LANE_SELECTED_REWRITE_REJECT_INDEX = 204;
+    static final int GUIDE_PREVIOUS_LANE_SELECTED_PRESERVE_READY_INDEX = 205;
+    static final int GUIDE_PREVIOUS_LANE_SELECTED_PRESERVE_REJECT_INDEX = 206;
+    static final int GUIDE_PREVIOUS_LANE_RETAINED_PRESERVE_READY_INDEX = 207;
+    static final int GUIDE_PREVIOUS_LANE_RETAINED_PRESERVE_REJECT_INDEX = 208;
+    static final int GUIDE_PREVIOUS_LANE_WEIGHTS_READY_INDEX = 209;
+    static final int GUIDE_PREVIOUS_LANE_WEIGHTS_REJECT_INDEX = 210;
+    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 211;
     static final int SHIFTED_RECEIVER_GUIDE_STRIDE = 8 * Float.BYTES;
     static final int SPATIAL_DIAGNOSTIC_COUNTER_BYTES =
             SHIFTED_DIAGNOSTIC_COUNTER_COUNT * Integer.BYTES;
@@ -901,6 +910,24 @@ final class RtPathReservoirHistory {
                     counters.get(GUIDE_PREVIOUS_BRANCH_RETAINED_PAYLOAD_VALID_INDEX));
             long guidePreviousBranchRetainedPayloadInvalid = Integer.toUnsignedLong(
                     counters.get(GUIDE_PREVIOUS_BRANCH_RETAINED_PAYLOAD_INVALID_INDEX));
+            long guidePreviousLaneEligible = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_LANE_ELIGIBLE_INDEX));
+            long guidePreviousLaneSelectedRewriteReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_LANE_SELECTED_REWRITE_READY_INDEX));
+            long guidePreviousLaneSelectedRewriteReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_LANE_SELECTED_REWRITE_REJECT_INDEX));
+            long guidePreviousLaneSelectedPreserveReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_LANE_SELECTED_PRESERVE_READY_INDEX));
+            long guidePreviousLaneSelectedPreserveReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_LANE_SELECTED_PRESERVE_REJECT_INDEX));
+            long guidePreviousLaneRetainedPreserveReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_LANE_RETAINED_PRESERVE_READY_INDEX));
+            long guidePreviousLaneRetainedPreserveReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_LANE_RETAINED_PRESERVE_REJECT_INDEX));
+            long guidePreviousLaneWeightsReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_LANE_WEIGHTS_READY_INDEX));
+            long guidePreviousLaneWeightsReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_LANE_WEIGHTS_REJECT_INDEX));
             long crossFrameReceiverReject = crossFrameReceiverSurfaceReject
                     + crossFrameReceiverSampleReject + crossFrameReceiverEdgeReject
                     + crossFrameReceiverTopologyReject + crossFrameReceiverDepthReject
@@ -1341,6 +1368,33 @@ final class RtPathReservoirHistory {
                     guidePreviousBranchRetained
                             - guidePreviousBranchRetainedPayloadValid
                             - guidePreviousBranchRetainedPayloadInvalid);
+            CausticaMod.LOGGER.info(
+                    "RT path guide previous lane plan: eligible={}, "
+                            + "selectedRewrite[ready={},reject={},delta={}] "
+                            + "selectedPreserve[ready={},reject={},delta={}] "
+                            + "retainedPreserve[ready={},reject={},delta={}] "
+                            + "weights[ready={},reject={},delta={}]",
+                    guidePreviousLaneEligible,
+                    guidePreviousLaneSelectedRewriteReady,
+                    guidePreviousLaneSelectedRewriteReject,
+                    guidePreviousBranchSelected
+                            - guidePreviousLaneSelectedRewriteReady
+                            - guidePreviousLaneSelectedRewriteReject,
+                    guidePreviousLaneSelectedPreserveReady,
+                    guidePreviousLaneSelectedPreserveReject,
+                    guidePreviousBranchSelected
+                            - guidePreviousLaneSelectedPreserveReady
+                            - guidePreviousLaneSelectedPreserveReject,
+                    guidePreviousLaneRetainedPreserveReady,
+                    guidePreviousLaneRetainedPreserveReject,
+                    guidePreviousBranchRetained
+                            - guidePreviousLaneRetainedPreserveReady
+                            - guidePreviousLaneRetainedPreserveReject,
+                    guidePreviousLaneWeightsReady,
+                    guidePreviousLaneWeightsReject,
+                    guidePreviousLaneEligible
+                            - guidePreviousLaneWeightsReady
+                            - guidePreviousLaneWeightsReject);
             spatialDiagnosticViewPending = 0;
             return;
         }

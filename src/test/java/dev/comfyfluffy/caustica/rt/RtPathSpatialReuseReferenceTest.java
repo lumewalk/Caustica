@@ -1113,8 +1113,25 @@ final class RtPathSpatialReuseReferenceTest {
                 RtPathReservoirHistory.GUIDE_PREVIOUS_BRANCH_RETAINED_PAYLOAD_VALID_INDEX);
         assertEquals(201,
                 RtPathReservoirHistory.GUIDE_PREVIOUS_BRANCH_RETAINED_PAYLOAD_INVALID_INDEX);
-        assertEquals(202, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
-        assertEquals(202 * Integer.BYTES,
+        assertEquals(202, RtPathReservoirHistory.GUIDE_PREVIOUS_LANE_ELIGIBLE_INDEX);
+        assertEquals(203,
+                RtPathReservoirHistory.GUIDE_PREVIOUS_LANE_SELECTED_REWRITE_READY_INDEX);
+        assertEquals(204,
+                RtPathReservoirHistory.GUIDE_PREVIOUS_LANE_SELECTED_REWRITE_REJECT_INDEX);
+        assertEquals(205,
+                RtPathReservoirHistory.GUIDE_PREVIOUS_LANE_SELECTED_PRESERVE_READY_INDEX);
+        assertEquals(206,
+                RtPathReservoirHistory.GUIDE_PREVIOUS_LANE_SELECTED_PRESERVE_REJECT_INDEX);
+        assertEquals(207,
+                RtPathReservoirHistory.GUIDE_PREVIOUS_LANE_RETAINED_PRESERVE_READY_INDEX);
+        assertEquals(208,
+                RtPathReservoirHistory.GUIDE_PREVIOUS_LANE_RETAINED_PRESERVE_REJECT_INDEX);
+        assertEquals(209,
+                RtPathReservoirHistory.GUIDE_PREVIOUS_LANE_WEIGHTS_READY_INDEX);
+        assertEquals(210,
+                RtPathReservoirHistory.GUIDE_PREVIOUS_LANE_WEIGHTS_REJECT_INDEX);
+        assertEquals(211, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
+        assertEquals(211 * Integer.BYTES,
                 RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_COUNTER_BYTES);
         assertEquals(32, RtPathReservoirHistory.SHIFTED_RECEIVER_GUIDE_STRIDE);
         assertEquals(27_566_080L,
