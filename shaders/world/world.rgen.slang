@@ -2107,6 +2107,7 @@ public void pathGuidePreviousReplayValidate() {
                                 bool currentFinalValid = false;
                                 bool currentDenominatorValid = false;
                                 float currentDenominator = 0.0;
+                                float currentFinalWeight = 0.0;
                                 if (nextValid) {
                                     if (nextWeightSum == 0.0) {
                                         currentFinalValid = true;
@@ -2115,8 +2116,7 @@ public void pathGuidePreviousReplayValidate() {
                                             && current.sampleRadianceTarget.w > 0.0) {
                                         currentDenominator = nextEffectiveCount
                                                 * current.sampleRadianceTarget.w;
-                                        float currentFinalWeight = nextWeightSum
-                                                / currentDenominator;
+                                        currentFinalWeight = nextWeightSum / currentDenominator;
                                         currentDenominatorValid = isfinite(currentDenominator)
                                                 && currentDenominator > 0.0
                                                 && isfinite(currentFinalWeight)
@@ -2131,6 +2131,7 @@ public void pathGuidePreviousReplayValidate() {
                                 bool sourceFinalValid = false;
                                 bool sourceDenominatorValid = false;
                                 float sourceDenominator = 0.0;
+                                float sourceFinalWeightResult = 0.0;
                                 if (nextValid) {
                                     if (nextWeightSum == 0.0) {
                                         sourceFinalValid = true;
@@ -2139,8 +2140,7 @@ public void pathGuidePreviousReplayValidate() {
                                             && shiftedTarget > 0.0) {
                                         sourceDenominator = nextEffectiveCount
                                                 * shiftedTarget;
-                                        float sourceFinalWeightResult = nextWeightSum
-                                                / sourceDenominator;
+                                        sourceFinalWeightResult = nextWeightSum / sourceDenominator;
                                         sourceDenominatorValid = isfinite(sourceDenominator)
                                                 && sourceDenominator > 0.0
                                                 && isfinite(sourceFinalWeightResult)
@@ -2229,6 +2229,67 @@ public void pathGuidePreviousReplayValidate() {
                                                 ? PATH_GUIDE_PREVIOUS_STABLE_BERNOULLI_SELECTED
                                                 : PATH_GUIDE_PREVIOUS_STABLE_BERNOULLI_RETAINED;
                                 InterlockedAdd(counters[stableBernoulliCategory], 1u);
+
+                                // Branch-specific final-state and payload readiness audit. The
+                                // selected/retained branch is classified only after the stable
+                                // Bernoulli result; no reservoir payload is copied, rewritten, or
+                                // allowed to reach history or the ordinary estimator.
+                                InterlockedAdd(counters[PATH_GUIDE_PREVIOUS_BRANCH_ELIGIBLE],
+                                        stableBernoulliValid ? 1u : 0u);
+                                bool selectedFinalStateValid = stableBernoulliSelected
+                                        && nextValid
+                                        && sourceFinalValid
+                                        && isfinite(sourceFinalWeightResult)
+                                        && sourceFinalWeightResult > 0.0
+                                        && isfinite(nextWeightSum)
+                                        && nextWeightSum >= 0.0
+                                        && isfinite(nextEffectiveCount)
+                                        && nextEffectiveCount > 0.0
+                                        && isfinite(shiftedTarget)
+                                        && shiftedTarget > 0.0;
+                                bool retainedFinalStateValid = stableBernoulliValid
+                                        && !stableBernoulliSelected
+                                        && nextValid
+                                        && currentFinalValid
+                                        && isfinite(currentFinalWeight)
+                                        && currentFinalWeight > 0.0
+                                        && isfinite(nextWeightSum)
+                                        && nextWeightSum >= 0.0
+                                        && isfinite(nextEffectiveCount)
+                                        && nextEffectiveCount > 0.0
+                                        && isfinite(current.sampleRadianceTarget.w)
+                                        && current.sampleRadianceTarget.w > 0.0;
+                                InterlockedAdd(counters[selectedFinalStateValid
+                                        ? PATH_GUIDE_PREVIOUS_BRANCH_SELECTED_FINAL_VALID
+                                        : PATH_GUIDE_PREVIOUS_BRANCH_SELECTED_FINAL_INVALID],
+                                        stableBernoulliSelected ? 1u : 0u);
+                                InterlockedAdd(counters[retainedFinalStateValid
+                                        ? PATH_GUIDE_PREVIOUS_BRANCH_RETAINED_FINAL_VALID
+                                        : PATH_GUIDE_PREVIOUS_BRANCH_RETAINED_FINAL_INVALID],
+                                        stableBernoulliValid && !stableBernoulliSelected
+                                                ? 1u : 0u);
+
+                                bool selectedPayloadValid = selectedFinalStateValid
+                                        && pathReservoirSampleMetadataReady(stored)
+                                        && all(isfinite(stored.weights))
+                                        && all(stored.weights >= float4(0.0))
+                                        && all(isfinite(replay.canonicalRadiance))
+                                        && all(replay.canonicalRadiance >= float3(0.0))
+                                        && all(isfinite(replay.reconnectionThroughput))
+                                        && all(replay.reconnectionThroughput >= float3(0.0));
+                                bool retainedPayloadValid = retainedFinalStateValid
+                                        && pathReservoirSampleMetadataReady(current)
+                                        && all(isfinite(current.weights))
+                                        && all(current.weights >= float4(0.0));
+                                InterlockedAdd(counters[selectedPayloadValid
+                                        ? PATH_GUIDE_PREVIOUS_BRANCH_SELECTED_PAYLOAD_VALID
+                                        : PATH_GUIDE_PREVIOUS_BRANCH_SELECTED_PAYLOAD_INVALID],
+                                        stableBernoulliSelected ? 1u : 0u);
+                                InterlockedAdd(counters[retainedPayloadValid
+                                        ? PATH_GUIDE_PREVIOUS_BRANCH_RETAINED_PAYLOAD_VALID
+                                        : PATH_GUIDE_PREVIOUS_BRANCH_RETAINED_PAYLOAD_INVALID],
+                                        stableBernoulliValid && !stableBernoulliSelected
+                                                ? 1u : 0u);
                             }
                         }
                     }

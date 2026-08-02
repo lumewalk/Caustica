@@ -221,7 +221,16 @@ final class RtPathReservoirHistory {
     static final int GUIDE_PREVIOUS_STABLE_BERNOULLI_SELECTED_INDEX = 190;
     static final int GUIDE_PREVIOUS_STABLE_BERNOULLI_RETAINED_INDEX = 191;
     static final int GUIDE_PREVIOUS_STABLE_BERNOULLI_INVALID_INDEX = 192;
-    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 193;
+    static final int GUIDE_PREVIOUS_BRANCH_ELIGIBLE_INDEX = 193;
+    static final int GUIDE_PREVIOUS_BRANCH_SELECTED_FINAL_VALID_INDEX = 194;
+    static final int GUIDE_PREVIOUS_BRANCH_SELECTED_FINAL_INVALID_INDEX = 195;
+    static final int GUIDE_PREVIOUS_BRANCH_RETAINED_FINAL_VALID_INDEX = 196;
+    static final int GUIDE_PREVIOUS_BRANCH_RETAINED_FINAL_INVALID_INDEX = 197;
+    static final int GUIDE_PREVIOUS_BRANCH_SELECTED_PAYLOAD_VALID_INDEX = 198;
+    static final int GUIDE_PREVIOUS_BRANCH_SELECTED_PAYLOAD_INVALID_INDEX = 199;
+    static final int GUIDE_PREVIOUS_BRANCH_RETAINED_PAYLOAD_VALID_INDEX = 200;
+    static final int GUIDE_PREVIOUS_BRANCH_RETAINED_PAYLOAD_INVALID_INDEX = 201;
+    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 202;
     static final int SHIFTED_RECEIVER_GUIDE_STRIDE = 8 * Float.BYTES;
     static final int SPATIAL_DIAGNOSTIC_COUNTER_BYTES =
             SHIFTED_DIAGNOSTIC_COUNTER_COUNT * Integer.BYTES;
@@ -874,6 +883,24 @@ final class RtPathReservoirHistory {
                     counters.get(GUIDE_PREVIOUS_STABLE_BERNOULLI_RETAINED_INDEX));
             long guidePreviousStableBernoulliInvalid = Integer.toUnsignedLong(
                     counters.get(GUIDE_PREVIOUS_STABLE_BERNOULLI_INVALID_INDEX));
+            long guidePreviousBranchEligible = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_BRANCH_ELIGIBLE_INDEX));
+            long guidePreviousBranchSelectedFinalValid = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_BRANCH_SELECTED_FINAL_VALID_INDEX));
+            long guidePreviousBranchSelectedFinalInvalid = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_BRANCH_SELECTED_FINAL_INVALID_INDEX));
+            long guidePreviousBranchRetainedFinalValid = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_BRANCH_RETAINED_FINAL_VALID_INDEX));
+            long guidePreviousBranchRetainedFinalInvalid = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_BRANCH_RETAINED_FINAL_INVALID_INDEX));
+            long guidePreviousBranchSelectedPayloadValid = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_BRANCH_SELECTED_PAYLOAD_VALID_INDEX));
+            long guidePreviousBranchSelectedPayloadInvalid = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_BRANCH_SELECTED_PAYLOAD_INVALID_INDEX));
+            long guidePreviousBranchRetainedPayloadValid = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_BRANCH_RETAINED_PAYLOAD_VALID_INDEX));
+            long guidePreviousBranchRetainedPayloadInvalid = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_BRANCH_RETAINED_PAYLOAD_INVALID_INDEX));
             long crossFrameReceiverReject = crossFrameReceiverSurfaceReject
                     + crossFrameReceiverSampleReject + crossFrameReceiverEdgeReject
                     + crossFrameReceiverTopologyReject + crossFrameReceiverDepthReject
@@ -1285,6 +1312,35 @@ final class RtPathReservoirHistory {
                             - guidePreviousStableBernoulliSelected
                             - guidePreviousStableBernoulliRetained
                             - guidePreviousStableBernoulliInvalid);
+            long guidePreviousBranchSelected = guidePreviousStableBernoulliSelected;
+            long guidePreviousBranchRetained = guidePreviousStableBernoulliRetained;
+            CausticaMod.LOGGER.info(
+                    "RT path guide previous branch arithmetic: eligible={}, "
+                            + "selectedFinal[valid={},invalid={},delta={}] "
+                            + "retainedFinal[valid={},invalid={},delta={}] "
+                            + "selectedPayload[valid={},invalid={},delta={}] "
+                            + "retainedPayload[valid={},invalid={},delta={}]",
+                    guidePreviousBranchEligible,
+                    guidePreviousBranchSelectedFinalValid,
+                    guidePreviousBranchSelectedFinalInvalid,
+                    guidePreviousBranchSelected
+                            - guidePreviousBranchSelectedFinalValid
+                            - guidePreviousBranchSelectedFinalInvalid,
+                    guidePreviousBranchRetainedFinalValid,
+                    guidePreviousBranchRetainedFinalInvalid,
+                    guidePreviousBranchRetained
+                            - guidePreviousBranchRetainedFinalValid
+                            - guidePreviousBranchRetainedFinalInvalid,
+                    guidePreviousBranchSelectedPayloadValid,
+                    guidePreviousBranchSelectedPayloadInvalid,
+                    guidePreviousBranchSelected
+                            - guidePreviousBranchSelectedPayloadValid
+                            - guidePreviousBranchSelectedPayloadInvalid,
+                    guidePreviousBranchRetainedPayloadValid,
+                    guidePreviousBranchRetainedPayloadInvalid,
+                    guidePreviousBranchRetained
+                            - guidePreviousBranchRetainedPayloadValid
+                            - guidePreviousBranchRetainedPayloadInvalid);
             spatialDiagnosticViewPending = 0;
             return;
         }

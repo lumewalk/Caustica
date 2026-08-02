@@ -1096,8 +1096,25 @@ final class RtPathSpatialReuseReferenceTest {
                 RtPathReservoirHistory.GUIDE_PREVIOUS_STABLE_BERNOULLI_RETAINED_INDEX);
         assertEquals(192,
                 RtPathReservoirHistory.GUIDE_PREVIOUS_STABLE_BERNOULLI_INVALID_INDEX);
-        assertEquals(193, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
-        assertEquals(193 * Integer.BYTES,
+        assertEquals(193, RtPathReservoirHistory.GUIDE_PREVIOUS_BRANCH_ELIGIBLE_INDEX);
+        assertEquals(194,
+                RtPathReservoirHistory.GUIDE_PREVIOUS_BRANCH_SELECTED_FINAL_VALID_INDEX);
+        assertEquals(195,
+                RtPathReservoirHistory.GUIDE_PREVIOUS_BRANCH_SELECTED_FINAL_INVALID_INDEX);
+        assertEquals(196,
+                RtPathReservoirHistory.GUIDE_PREVIOUS_BRANCH_RETAINED_FINAL_VALID_INDEX);
+        assertEquals(197,
+                RtPathReservoirHistory.GUIDE_PREVIOUS_BRANCH_RETAINED_FINAL_INVALID_INDEX);
+        assertEquals(198,
+                RtPathReservoirHistory.GUIDE_PREVIOUS_BRANCH_SELECTED_PAYLOAD_VALID_INDEX);
+        assertEquals(199,
+                RtPathReservoirHistory.GUIDE_PREVIOUS_BRANCH_SELECTED_PAYLOAD_INVALID_INDEX);
+        assertEquals(200,
+                RtPathReservoirHistory.GUIDE_PREVIOUS_BRANCH_RETAINED_PAYLOAD_VALID_INDEX);
+        assertEquals(201,
+                RtPathReservoirHistory.GUIDE_PREVIOUS_BRANCH_RETAINED_PAYLOAD_INVALID_INDEX);
+        assertEquals(202, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
+        assertEquals(202 * Integer.BYTES,
                 RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_COUNTER_BYTES);
         assertEquals(32, RtPathReservoirHistory.SHIFTED_RECEIVER_GUIDE_STRIDE);
         assertEquals(27_566_080L,
