@@ -185,7 +185,14 @@ final class RtPathReservoirHistory {
     static final int GUIDE_PREVIOUS_TARGET_POSITIVE_INDEX = 154;
     static final int GUIDE_PREVIOUS_TARGET_ZERO_INDEX = 155;
     static final int GUIDE_PREVIOUS_TARGET_INVALID_INDEX = 156;
-    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 157;
+    static final int GUIDE_PREVIOUS_STORED_METADATA_ELIGIBLE_INDEX = 157;
+    static final int GUIDE_PREVIOUS_STORED_TARGET_MATCH_INDEX = 158;
+    static final int GUIDE_PREVIOUS_STORED_TARGET_MISMATCH_INDEX = 159;
+    static final int GUIDE_PREVIOUS_STORED_TARGET_INVALID_INDEX = 160;
+    static final int GUIDE_PREVIOUS_STORED_THROUGHPUT_MATCH_INDEX = 161;
+    static final int GUIDE_PREVIOUS_STORED_THROUGHPUT_MISMATCH_INDEX = 162;
+    static final int GUIDE_PREVIOUS_STORED_THROUGHPUT_INVALID_INDEX = 163;
+    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 164;
     static final int SHIFTED_RECEIVER_GUIDE_STRIDE = 8 * Float.BYTES;
     static final int SPATIAL_DIAGNOSTIC_COUNTER_BYTES =
             SHIFTED_DIAGNOSTIC_COUNTER_COUNT * Integer.BYTES;
@@ -766,6 +773,20 @@ final class RtPathReservoirHistory {
                     counters.get(GUIDE_PREVIOUS_TARGET_ZERO_INDEX));
             long guidePreviousTargetInvalid = Integer.toUnsignedLong(
                     counters.get(GUIDE_PREVIOUS_TARGET_INVALID_INDEX));
+            long guidePreviousStoredMetadataEligible = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_STORED_METADATA_ELIGIBLE_INDEX));
+            long guidePreviousStoredTargetMatch = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_STORED_TARGET_MATCH_INDEX));
+            long guidePreviousStoredTargetMismatch = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_STORED_TARGET_MISMATCH_INDEX));
+            long guidePreviousStoredTargetInvalid = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_STORED_TARGET_INVALID_INDEX));
+            long guidePreviousStoredThroughputMatch = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_STORED_THROUGHPUT_MATCH_INDEX));
+            long guidePreviousStoredThroughputMismatch = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_STORED_THROUGHPUT_MISMATCH_INDEX));
+            long guidePreviousStoredThroughputInvalid = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_STORED_THROUGHPUT_INVALID_INDEX));
             long crossFrameReceiverReject = crossFrameReceiverSurfaceReject
                     + crossFrameReceiverSampleReject + crossFrameReceiverEdgeReject
                     + crossFrameReceiverTopologyReject + crossFrameReceiverDepthReject
@@ -1081,6 +1102,24 @@ final class RtPathReservoirHistory {
                     guidePreviousTargetEligible, guidePreviousTargetPositive,
                     guidePreviousTargetZero, guidePreviousTargetInvalid,
                     guidePreviousTargetEligible - guidePreviousTargetTerminal);
+            long guidePreviousStoredTargetTerminal = guidePreviousStoredTargetMatch
+                    + guidePreviousStoredTargetMismatch + guidePreviousStoredTargetInvalid;
+            long guidePreviousStoredThroughputTerminal = guidePreviousStoredThroughputMatch
+                    + guidePreviousStoredThroughputMismatch
+                    + guidePreviousStoredThroughputInvalid;
+            CausticaMod.LOGGER.info(
+                    "RT path guide previous stored metadata: eligible={}, "
+                            + "target[match={},mismatch={},invalid={},delta={}] "
+                            + "throughput[match={},mismatch={},invalid={},delta={}]",
+                    guidePreviousStoredMetadataEligible,
+                    guidePreviousStoredTargetMatch, guidePreviousStoredTargetMismatch,
+                    guidePreviousStoredTargetInvalid,
+                    guidePreviousStoredMetadataEligible - guidePreviousStoredTargetTerminal,
+                    guidePreviousStoredThroughputMatch,
+                    guidePreviousStoredThroughputMismatch,
+                    guidePreviousStoredThroughputInvalid,
+                    guidePreviousStoredMetadataEligible
+                            - guidePreviousStoredThroughputTerminal);
             spatialDiagnosticViewPending = 0;
             return;
         }

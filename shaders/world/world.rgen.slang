@@ -2000,6 +2000,41 @@ public void pathGuidePreviousReplayValidate() {
                                                 ? PATH_GUIDE_PREVIOUS_TARGET_POSITIVE
                                                 : PATH_GUIDE_PREVIOUS_TARGET_ZERO;
                                 InterlockedAdd(counters[targetCategory], 1u);
+
+                                // Compare the reconstructed previous result with the exact lanes
+                                // captured in the paired scratch record. These are independent
+                                // reproducibility audits: they never alter mapping, selection,
+                                // weights, history, or the ordinary estimator.
+                                InterlockedAdd(counters[
+                                        PATH_GUIDE_PREVIOUS_STORED_METADATA_ELIGIBLE], 1u);
+                                bool storedTargetValid =
+                                        all(isfinite(stored.sampleRadianceTarget))
+                                        && all(stored.sampleRadianceTarget >= float4(0.0));
+                                bool targetMatchesStored = targetValid && storedTargetValid
+                                        && pathReplayColorMatches(visibleRadiance,
+                                                stored.sampleRadianceTarget.xyz)
+                                        && pathReplayFloatMatches(shiftedTarget,
+                                                stored.sampleRadianceTarget.w);
+                                InterlockedAdd(counters[targetValid && storedTargetValid
+                                        ? targetMatchesStored
+                                                ? PATH_GUIDE_PREVIOUS_STORED_TARGET_MATCH
+                                                : PATH_GUIDE_PREVIOUS_STORED_TARGET_MISMATCH
+                                        : PATH_GUIDE_PREVIOUS_STORED_TARGET_INVALID], 1u);
+
+                                bool storedThroughputValid =
+                                        all(isfinite(stored.reconnectionThroughput.xyz))
+                                        && all(stored.reconnectionThroughput.xyz
+                                                >= float3(0.0));
+                                bool throughputMatchesStored = storedThroughputValid
+                                        && all(isfinite(receiverThroughput))
+                                        && all(receiverThroughput >= float3(0.0))
+                                        && pathReplayColorMatches(receiverThroughput,
+                                                stored.reconnectionThroughput.xyz);
+                                InterlockedAdd(counters[storedThroughputValid
+                                        ? throughputMatchesStored
+                                                ? PATH_GUIDE_PREVIOUS_STORED_THROUGHPUT_MATCH
+                                                : PATH_GUIDE_PREVIOUS_STORED_THROUGHPUT_MISMATCH
+                                        : PATH_GUIDE_PREVIOUS_STORED_THROUGHPUT_INVALID], 1u);
                             }
                         }
                     }

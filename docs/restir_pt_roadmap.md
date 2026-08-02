@@ -622,6 +622,26 @@ MiB). The next bounded gate is a counter-only comparison of the reconstructed pr
 stored source target/throughput metadata; merge weights, selection, history, and estimator use remain
 prohibited.
 
+The stored-metadata audit keeps that boundary and adds no new full-resolution storage or ABI lane.
+After a selected previous diffuse record reaches finite visibility and target evaluation, seven
+view-20 counters (indices 157--163) compare reconstructed visible RGB/target with the paired scratch
+record's `sampleRadianceTarget`, and independently compare receiver-guide throughput with
+`reconnectionThroughput.xyz`. Each comparison has match, mismatch, and invalid categories with its
+own exact eligible identity. The audit does not generate RNG, compute a merge weight, select a sample,
+write scratch/history, compose mappings, change the debug image, or contribute to the estimator.
+Fresh Vulkan/RTX 5060 Ti validation produced 29 readbacks and 245581 metadata-eligible selected
+records. Both target and throughput partitions preserved exact zero-delta accounting on every
+readback, with no invalid arithmetic. Receiver throughput matched the stored lane for 245572 records;
+all nine mismatches occurred in the two brief camera-motion readbacks, while the other 27 readbacks
+had 245263/245263 exact throughput matches. Visible target matched for 245564 records. Its 17
+mismatches split exactly into the same nine motion-dependent throughput changes and eight fresh
+occlusions; the three tinted visibility results still matched. This proves why persistent reuse must
+reconstruct the current receiver target instead of copying the stored one. No Vulkan device, GPU,
+shader, or memory failure was logged. The next bounded gate may audit the previous-pair GRIS merge
+weight from the freshly reconstructed target, stored source final weight/count, and directly
+recomputed PSS Jacobian, but must remain counter-only with no RNG, selection, history write, mapping
+composition, or estimator use.
+
 ## Delivery Phases
 
 ### Phase 0 — Wavefront Integration Baseline

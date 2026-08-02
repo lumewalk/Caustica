@@ -1030,8 +1030,20 @@ final class RtPathSpatialReuseReferenceTest {
         assertEquals(154, RtPathReservoirHistory.GUIDE_PREVIOUS_TARGET_POSITIVE_INDEX);
         assertEquals(155, RtPathReservoirHistory.GUIDE_PREVIOUS_TARGET_ZERO_INDEX);
         assertEquals(156, RtPathReservoirHistory.GUIDE_PREVIOUS_TARGET_INVALID_INDEX);
-        assertEquals(157, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
-        assertEquals(157 * Integer.BYTES,
+        assertEquals(157,
+                RtPathReservoirHistory.GUIDE_PREVIOUS_STORED_METADATA_ELIGIBLE_INDEX);
+        assertEquals(158, RtPathReservoirHistory.GUIDE_PREVIOUS_STORED_TARGET_MATCH_INDEX);
+        assertEquals(159,
+                RtPathReservoirHistory.GUIDE_PREVIOUS_STORED_TARGET_MISMATCH_INDEX);
+        assertEquals(160, RtPathReservoirHistory.GUIDE_PREVIOUS_STORED_TARGET_INVALID_INDEX);
+        assertEquals(161,
+                RtPathReservoirHistory.GUIDE_PREVIOUS_STORED_THROUGHPUT_MATCH_INDEX);
+        assertEquals(162,
+                RtPathReservoirHistory.GUIDE_PREVIOUS_STORED_THROUGHPUT_MISMATCH_INDEX);
+        assertEquals(163,
+                RtPathReservoirHistory.GUIDE_PREVIOUS_STORED_THROUGHPUT_INVALID_INDEX);
+        assertEquals(164, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
+        assertEquals(164 * Integer.BYTES,
                 RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_COUNTER_BYTES);
         assertEquals(32, RtPathReservoirHistory.SHIFTED_RECEIVER_GUIDE_STRIDE);
         assertEquals(27_566_080L,
