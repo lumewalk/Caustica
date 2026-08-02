@@ -681,14 +681,18 @@ branch. Selected/rejected and retained/rejected categories preserved exact per-f
 zero total deltas. The assembled record is still register-only: it has not been written to device
 memory or committed to history.
 
-The immediate next T-050 gate is to pair each register-only selected/retained record with its exact
-branch-specific `PathSourceRoot` companion and validate the pair through one-frame ping-pong/replay
-accounting. Persistent mapped history remains blocked until that pair passes exact replay, receiver
-remap, current visibility/target reconstruction, lifecycle invalidation, and exclusive accounting as
-one chain. Mapped records remain forbidden as new spatial sources, previous mapping Jacobians are
-never composed, and ordinary estimator integration remains out of scope. Detailed chronological
-evidence and superseded experiments live in the local `tasks_archive.md`; this roadmap is the durable
-mathematical authority.
+The register-only reservoir/root pairing gate is now proven. The branch-specific `PathSourceRoot`
+companion is assembled in registers and validated against the selected or retained record without
+writing either scratch buffer. A fresh Vulkan/RTX 5060 Ti quick-play produced 251 readbacks covering
+474215 eligible pairs: 424425 selected-ready, 0 selected-reject, 49789 retained-ready and one
+retained reject. Every pair delta was zero; the one reject is the already-known upstream
+zero-current-weight fail-closed record, while root capture, chain and identity rejects were zero
+after recovery. Persistent mapped history remains blocked until the next isolated one-frame
+ping-pong/replay gate passes exact replay, receiver remap, current visibility/target reconstruction,
+lifecycle invalidation and exclusive accounting as one chain. Mapped records remain forbidden as new
+spatial sources, previous mapping Jacobians are never composed, and ordinary estimator integration
+remains out of scope. Detailed chronological evidence and superseded experiments live in the local
+`tasks_archive.md`; this roadmap is the durable mathematical authority.
 
 ## Delivery Phases
 

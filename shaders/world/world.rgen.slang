@@ -1837,6 +1837,10 @@ public void pathGuidePreviousReplayValidate() {
                 PATH_GUIDE_PREVIOUS_REPLAY_SOURCE_SURFACE_REJECT], 1u);
         return;
     }
+    float4 currentSourcePositionMaterial =
+            gRestirPositionMaterial[sourceTexel];
+    float4 currentSourceNormalRoughness =
+            gRestirNormalRoughness[sourceTexel];
 
     PathReplayAggregate replay = pathReplayAggregateEmpty();
     uint expectedSegments = stored.replayControl.y;
@@ -2450,6 +2454,115 @@ public void pathGuidePreviousReplayValidate() {
                                         : PATH_GUIDE_PREVIOUS_RECORD_RETAINED_REJECT],
                                         stableBernoulliValid && !stableBernoulliSelected
                                                 ? 1u : 0u);
+
+                                // Pair the register-only reservoir with the exact source-root
+                                // provenance that a future ping-pong write would carry. Selected
+                                // history advances the old root into the current camera-relative
+                                // frame; retained history captures a fresh current queue chain.
+                                // This remains a register/counter audit and never writes either
+                                // scratch buffer or committed history.
+                                InterlockedAdd(counters[PATH_GUIDE_PREVIOUS_PAIR_ELIGIBLE],
+                                        stableBernoulliValid ? 1u : 0u);
+                                PathSourceRoot branchRoot = {};
+                                bool branchRootReady = false;
+                                uint branchSourceIndex = branchRecord.identity.y;
+                                uint2 branchSourcePixel = uint2(
+                                        branchSourceIndex % dimensions.x,
+                                        branchSourceIndex / dimensions.x);
+                                float4 branchSourcePositionMaterial =
+                                        gRestirPositionMaterial[int2(branchSourcePixel)];
+                                float4 branchSourceNormalRoughness =
+                                        gRestirNormalRoughness[int2(branchSourcePixel)];
+                                if (stableBernoulliSelected && selectedRecordReady) {
+                                    branchRoot = root;
+                                    branchRoot.sourcePositionMaterial =
+                                            currentSourcePositionMaterial;
+                                    branchRoot.sourcePositionMaterial.xyz -=
+                                            worldPush.camOffset;
+                                    branchRoot.sourceNormalRoughness =
+                                            currentSourceNormalRoughness;
+                                    branchRoot.receiverPositionMaterial =
+                                            receiverPositionMaterial;
+                                    branchRoot.receiverPositionMaterial.xyz -=
+                                            worldPush.camOffset;
+                                    branchRoot.receiverNormalRoughness =
+                                            receiverNormalRoughness;
+                                    branchRoot.segment0.ro -= worldPush.camDelta;
+                                    branchRoot.segment1.ro -= worldPush.camDelta;
+                                    branchRootReady = true;
+                                } else if (!stableBernoulliSelected && retainedRecordReady) {
+                                    branchRootReady = pathCaptureCurrentGuideRoot(
+                                            branchRecord, dimensions,
+                                            receiverPositionMaterial,
+                                            receiverNormalRoughness,
+                                            branchRoot);
+                                }
+                                uint branchSegments = branchRecord.replayControl.y;
+                                bool branchRootFinite = all(isfinite(
+                                        branchRoot.sourcePositionMaterial))
+                                        && all(isfinite(branchRoot.sourceNormalRoughness))
+                                        && all(isfinite(branchRoot.receiverPositionMaterial))
+                                        && all(isfinite(branchRoot.receiverNormalRoughness))
+                                        && all(isfinite(branchRoot.segment0.ro))
+                                        && all(isfinite(branchRoot.segment1.ro));
+                                bool branchRootChainValid = branchSegments == 1u
+                                        ? branchRoot.segment0.nextRecord == PATH_NO_NEXT
+                                        : branchSegments == MAX_PATH_SEGMENTS
+                                                && branchRoot.segment0.nextRecord
+                                                        != PATH_NO_NEXT
+                                                && branchRoot.segment1.nextRecord
+                                                        == PATH_NO_NEXT;
+                                bool branchRootIdentityValid = !stableBernoulliSelected
+                                        ? branchRootReady
+                                        : branchRootFinite
+                                                && pathReplayPositionMatches(
+                                                        branchRoot.sourcePositionMaterial.xyz
+                                                                + worldPush.camOffset,
+                                                        branchSourcePositionMaterial.xyz)
+                                                && pathReplayColorMatches(
+                                                        branchRoot.sourceNormalRoughness.xyz,
+                                                        branchSourceNormalRoughness.xyz)
+                                                && pathReplayFloatMatches(
+                                                        branchRoot.sourceNormalRoughness.w,
+                                                        branchSourceNormalRoughness.w)
+                                                && pathReplayPositionMatches(
+                                                        branchRoot.receiverPositionMaterial.xyz
+                                                                + worldPush.camOffset,
+                                                        receiverPositionMaterial.xyz)
+                                                && pathReplayColorMatches(
+                                                        branchRoot.receiverNormalRoughness.xyz,
+                                                        receiverNormalRoughness.xyz)
+                                                && pathReplayFloatMatches(
+                                                        branchRoot.receiverNormalRoughness.w,
+                                                        receiverNormalRoughness.w)
+                                                && uint(max(branchRoot.sourcePositionMaterial.w,
+                                                        0.0))
+                                                        == uint(max(branchSourcePositionMaterial.w,
+                                                                0.0))
+                                                && uint(max(branchRoot.receiverPositionMaterial.w,
+                                                        0.0))
+                                                        == uint(max(receiverPositionMaterial.w,
+                                                                0.0));
+                                bool branchPairReady = stableBernoulliValid
+                                        && branchRootReady
+                                        && branchRootChainValid
+                                        && branchRootIdentityValid;
+                                InterlockedAdd(counters[branchPairReady
+                                        ? stableBernoulliSelected
+                                                ? PATH_GUIDE_PREVIOUS_PAIR_SELECTED_READY
+                                                : PATH_GUIDE_PREVIOUS_PAIR_RETAINED_READY
+                                        : stableBernoulliSelected
+                                                ? PATH_GUIDE_PREVIOUS_PAIR_SELECTED_REJECT
+                                                : PATH_GUIDE_PREVIOUS_PAIR_RETAINED_REJECT],
+                                        stableBernoulliValid ? 1u : 0u);
+                                if (stableBernoulliValid && !branchPairReady) {
+                                    InterlockedAdd(counters[!branchRootReady
+                                            ? PATH_GUIDE_PREVIOUS_PAIR_ROOT_CAPTURE_REJECT
+                                            : !branchRootChainValid
+                                                    ? PATH_GUIDE_PREVIOUS_PAIR_ROOT_CHAIN_REJECT
+                                                    : PATH_GUIDE_PREVIOUS_PAIR_ROOT_IDENTITY_REJECT],
+                                            1u);
+                                }
                             }
                         }
                     }

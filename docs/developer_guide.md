@@ -387,13 +387,15 @@ never be reused as the Bernoulli denominator: runtime diagnostics demonstrated f
 above one in that formulation. Do not clamp those cases. Use the overflow-stable relative ratio
 defined by the CPU reference and mirrored in `pathStableSelectionProbability`.
 
-The register-only full-record gate is now proven: selected and retained records are assembled in
-shader registers and passed through `pathReservoirSampleMetadataReady`; the latest 48 readbacks had
-76722 eligible pairs, 68605 selected-ready, 8116 retained-ready and one explicit retained reject for
-the zero-current-weight fail-closed case. Exact per-frame category deltas stayed zero. The next gate
-is the paired branch-specific `PathSourceRoot` companion and its one-frame ping-pong/replay audit.
-The record must still not be stored, advance either replay RNG stream, commit history, expose a mapped
-record as another spatial source, compose a prior Jacobian, or contribute to the estimator.
+The register-only full-record gate is proven: selected and retained records are assembled in shader
+registers and passed through `pathReservoirSampleMetadataReady`. The paired branch-specific
+`PathSourceRoot` companion is now also proven in the same register-only pass. A fresh quick-play
+produced 251 Vulkan readbacks with 474215 eligible pairs, 424425 selected-ready, 0 selected-reject,
+49789 retained-ready and one explicit retained reject for the upstream zero-current-weight
+fail-closed case. Exact pair and branch deltas stayed zero; root capture/chain/identity rejects were
+zero after that record-level reject. The next gate is isolated one-frame ping-pong/replay of this
+paired record. It must still not be stored, advance either replay RNG stream, commit history, expose a
+mapped record as another spatial source, compose a prior Jacobian, or contribute to the estimator.
 
 For a fresh runtime check, use debug view 20 and inspect `run/logs/latest.log`. Normal operation
 requires `RT bring-up OK`, Vulkan, the intended NVIDIA device, exact zero-delta counter partitions,

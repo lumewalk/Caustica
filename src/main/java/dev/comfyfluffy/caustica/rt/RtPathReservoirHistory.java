@@ -244,7 +244,15 @@ final class RtPathReservoirHistory {
     static final int GUIDE_PREVIOUS_RECORD_SELECTED_REJECT_INDEX = 213;
     static final int GUIDE_PREVIOUS_RECORD_RETAINED_READY_INDEX = 214;
     static final int GUIDE_PREVIOUS_RECORD_RETAINED_REJECT_INDEX = 215;
-    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 216;
+    static final int GUIDE_PREVIOUS_PAIR_ELIGIBLE_INDEX = 216;
+    static final int GUIDE_PREVIOUS_PAIR_SELECTED_READY_INDEX = 217;
+    static final int GUIDE_PREVIOUS_PAIR_SELECTED_REJECT_INDEX = 218;
+    static final int GUIDE_PREVIOUS_PAIR_RETAINED_READY_INDEX = 219;
+    static final int GUIDE_PREVIOUS_PAIR_RETAINED_REJECT_INDEX = 220;
+    static final int GUIDE_PREVIOUS_PAIR_ROOT_CAPTURE_REJECT_INDEX = 221;
+    static final int GUIDE_PREVIOUS_PAIR_ROOT_CHAIN_REJECT_INDEX = 222;
+    static final int GUIDE_PREVIOUS_PAIR_ROOT_IDENTITY_REJECT_INDEX = 223;
+    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 224;
     static final int SHIFTED_RECEIVER_GUIDE_STRIDE = 8 * Float.BYTES;
     static final int SPATIAL_DIAGNOSTIC_COUNTER_BYTES =
             SHIFTED_DIAGNOSTIC_COUNTER_COUNT * Integer.BYTES;
@@ -943,6 +951,22 @@ final class RtPathReservoirHistory {
                     counters.get(GUIDE_PREVIOUS_RECORD_RETAINED_READY_INDEX));
             long guidePreviousRecordRetainedReject = Integer.toUnsignedLong(
                     counters.get(GUIDE_PREVIOUS_RECORD_RETAINED_REJECT_INDEX));
+            long guidePreviousPairEligible = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_PAIR_ELIGIBLE_INDEX));
+            long guidePreviousPairSelectedReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_PAIR_SELECTED_READY_INDEX));
+            long guidePreviousPairSelectedReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_PAIR_SELECTED_REJECT_INDEX));
+            long guidePreviousPairRetainedReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_PAIR_RETAINED_READY_INDEX));
+            long guidePreviousPairRetainedReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_PAIR_RETAINED_REJECT_INDEX));
+            long guidePreviousPairRootCaptureReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_PAIR_ROOT_CAPTURE_REJECT_INDEX));
+            long guidePreviousPairRootChainReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_PAIR_ROOT_CHAIN_REJECT_INDEX));
+            long guidePreviousPairRootIdentityReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_PAIR_ROOT_IDENTITY_REJECT_INDEX));
             long crossFrameReceiverReject = crossFrameReceiverSurfaceReject
                     + crossFrameReceiverSampleReject + crossFrameReceiverEdgeReject
                     + crossFrameReceiverTopologyReject + crossFrameReceiverDepthReject
@@ -1430,6 +1454,35 @@ final class RtPathReservoirHistory {
                             - guidePreviousRecordSelectedReject
                             - guidePreviousRecordRetainedReady
                             - guidePreviousRecordRetainedReject);
+            CausticaMod.LOGGER.info(
+                    "RT path guide previous reservoir-root pair: eligible={}, "
+                            + "selected[ready={},reject={},delta={}] "
+                            + "retained[ready={},reject={},delta={}] totalDelta={}",
+                    guidePreviousPairEligible,
+                    guidePreviousPairSelectedReady,
+                    guidePreviousPairSelectedReject,
+                    guidePreviousBranchSelected
+                            - guidePreviousPairSelectedReady
+                            - guidePreviousPairSelectedReject,
+                    guidePreviousPairRetainedReady,
+                    guidePreviousPairRetainedReject,
+                    guidePreviousBranchRetained
+                            - guidePreviousPairRetainedReady
+                            - guidePreviousPairRetainedReject,
+                    guidePreviousPairEligible
+                            - guidePreviousPairSelectedReady
+                            - guidePreviousPairSelectedReject
+                            - guidePreviousPairRetainedReady
+                            - guidePreviousPairRetainedReject);
+            CausticaMod.LOGGER.info(
+                    "RT path guide previous reservoir-root reject reasons: capture={}, chain={}, "
+                            + "identity={}, total={}",
+                    guidePreviousPairRootCaptureReject,
+                    guidePreviousPairRootChainReject,
+                    guidePreviousPairRootIdentityReject,
+                    guidePreviousPairRootCaptureReject
+                            + guidePreviousPairRootChainReject
+                            + guidePreviousPairRootIdentityReject);
             spatialDiagnosticViewPending = 0;
             return;
         }
