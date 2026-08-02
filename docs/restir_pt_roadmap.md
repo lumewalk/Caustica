@@ -674,17 +674,21 @@ outcomes. Selected records require freshly reconstructed receiver radiance/targe
 throughput, reconnection geometry, current source key and generation; they preserve the original
 canonical proposal and replay root. Retained records preserve the current opaque sample payload.
 Both branches receive only the already validated weight-sum, effective-count, final-weight and
-confidence lane. The latest Vulkan audit covered 31119 eligible previous pairs with zero rewrite,
-preservation, weight, or accounting rejects. These are counter-only proofs: no complete branch record
-has yet been written to device memory or committed to history.
+confidence lane. The latest register-only record audit covered 48 Vulkan readbacks / 76722 eligible
+previous pairs: 68605 selected records and 8116 retained records passed the common metadata validator;
+there was one explicit retained reject caused by the already-known zero-current-weight fail-closed
+branch. Selected/rejected and retained/rejected categories preserved exact per-frame accounting and
+zero total deltas. The assembled record is still register-only: it has not been written to device
+memory or committed to history.
 
-The immediate T-050 gate is register-only full-record assembly followed by the common reservoir
-metadata validator. Persistent mapped history remains blocked until the assembled record and its
-source-root companion pass exact replay, receiver remap, current visibility/target reconstruction,
-lifecycle invalidation, and exclusive accounting as one chain. Mapped records remain forbidden as
-new spatial sources, previous mapping Jacobians are never composed, and ordinary estimator
-integration remains out of scope. Detailed chronological evidence and superseded experiments live in
-the local `tasks_archive.md`; this roadmap is the durable mathematical authority.
+The immediate next T-050 gate is to pair each register-only selected/retained record with its exact
+branch-specific `PathSourceRoot` companion and validate the pair through one-frame ping-pong/replay
+accounting. Persistent mapped history remains blocked until that pair passes exact replay, receiver
+remap, current visibility/target reconstruction, lifecycle invalidation, and exclusive accounting as
+one chain. Mapped records remain forbidden as new spatial sources, previous mapping Jacobians are
+never composed, and ordinary estimator integration remains out of scope. Detailed chronological
+evidence and superseded experiments live in the local `tasks_archive.md`; this roadmap is the durable
+mathematical authority.
 
 ## Delivery Phases
 

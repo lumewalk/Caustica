@@ -2372,6 +2372,84 @@ public void pathGuidePreviousReplayValidate() {
                                         ? PATH_GUIDE_PREVIOUS_LANE_WEIGHTS_READY
                                         : PATH_GUIDE_PREVIOUS_LANE_WEIGHTS_REJECT],
                                         stableBernoulliValid ? 1u : 0u);
+
+                                // Assemble the complete hypothetical next record in registers and
+                                // pass both branches through the common metadata validator. This is
+                                // deliberately the last gate before any device write: selected paths
+                                // rewrite only receiver-dependent lanes while retaining the original
+                                // proposal/replay root; retained paths keep the current opaque payload
+                                // bit-for-bit. Neither branch is stored or exposed to the estimator.
+                                InterlockedAdd(counters[PATH_GUIDE_PREVIOUS_RECORD_ELIGIBLE],
+                                        stableBernoulliValid ? 1u : 0u);
+                                PathReservoir branchRecord = current;
+                                if (stableBernoulliSelected) {
+                                    branchRecord.sampleRadianceTarget = float4(
+                                            visibleRadiance, shiftedTarget);
+                                    branchRecord.proposalShift = float4(
+                                            stored.proposalShift.x,
+                                            pssJacobian,
+                                            stored.proposalShift.z,
+                                            stored.proposalShift.w);
+                                    branchRecord.proposalComponents = stored.proposalComponents;
+                                    branchRecord.canonicalRadianceTarget = float4(
+                                            visibleRadiance, shiftedTarget);
+                                    branchRecord.identity = uint4(
+                                            stored.identity.x,
+                                            currentSourceIndex,
+                                            replay.topologyKey,
+                                            pathPackMetadata(currentGeneration,
+                                                    replay.depth, replay.transportMask));
+                                    branchRecord.replay = stored.replay;
+                                    branchRecord.replayControl = stored.replayControl;
+                                    branchRecord.reconnectionVertex = float4(
+                                            replay.reconnectionVertex,
+                                            asfloat(pathPackReconnectionMetadata(
+                                                    replay.reconnectionDepth,
+                                                    replay.reconnectionEventKind,
+                                                    replay.reconnectionValid != 0u)));
+                                    branchRecord.reconnectionNormalPdf = float4(
+                                            replay.reconnectionNormal, receiverPdf);
+                                    branchRecord.reconnectionThroughput = float4(
+                                            receiverThroughput,
+                                            asfloat(PATH_MAPPING_DIFFUSE_RECONNECTION));
+                                }
+                                branchRecord.weights = float4(
+                                        nextWeightSum,
+                                        nextEffectiveCount,
+                                        chosenFinalWeight,
+                                        min(nextEffectiveCount * 0.25, 1.0));
+
+                                bool branchCommonMetadataReady = chosenWeightsReady
+                                        && pathReservoirSampleMetadataReady(branchRecord)
+                                        && all(isfinite(branchRecord.weights))
+                                        && all(branchRecord.weights > float4(0.0));
+                                bool selectedRecordReady = stableBernoulliSelected
+                                        && selectedRewriteReady
+                                        && selectedPreserveReady
+                                        && branchCommonMetadataReady
+                                        && pathMappingSourceReplayMatches(branchRecord, replay)
+                                        && pathMappingKind(branchRecord)
+                                                == PATH_MAPPING_DIFFUSE_RECONNECTION
+                                        && branchRecord.identity.y == currentSourceIndex
+                                        && all(asuint(branchRecord.sampleRadianceTarget)
+                                                == asuint(branchRecord.canonicalRadianceTarget));
+                                bool retainedRecordReady = stableBernoulliValid
+                                        && !stableBernoulliSelected
+                                        && retainedPreserveReady
+                                        && branchCommonMetadataReady
+                                        && pathReservoirSampleMetadataMatches(
+                                                branchRecord, current)
+                                        && pathMappingKind(branchRecord)
+                                                == PATH_MAPPING_IDENTITY;
+                                InterlockedAdd(counters[selectedRecordReady
+                                        ? PATH_GUIDE_PREVIOUS_RECORD_SELECTED_READY
+                                        : PATH_GUIDE_PREVIOUS_RECORD_SELECTED_REJECT],
+                                        stableBernoulliSelected ? 1u : 0u);
+                                InterlockedAdd(counters[retainedRecordReady
+                                        ? PATH_GUIDE_PREVIOUS_RECORD_RETAINED_READY
+                                        : PATH_GUIDE_PREVIOUS_RECORD_RETAINED_REJECT],
+                                        stableBernoulliValid && !stableBernoulliSelected
+                                                ? 1u : 0u);
                             }
                         }
                     }

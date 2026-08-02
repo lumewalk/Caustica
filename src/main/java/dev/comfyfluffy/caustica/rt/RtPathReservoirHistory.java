@@ -239,7 +239,12 @@ final class RtPathReservoirHistory {
     static final int GUIDE_PREVIOUS_LANE_RETAINED_PRESERVE_REJECT_INDEX = 208;
     static final int GUIDE_PREVIOUS_LANE_WEIGHTS_READY_INDEX = 209;
     static final int GUIDE_PREVIOUS_LANE_WEIGHTS_REJECT_INDEX = 210;
-    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 211;
+    static final int GUIDE_PREVIOUS_RECORD_ELIGIBLE_INDEX = 211;
+    static final int GUIDE_PREVIOUS_RECORD_SELECTED_READY_INDEX = 212;
+    static final int GUIDE_PREVIOUS_RECORD_SELECTED_REJECT_INDEX = 213;
+    static final int GUIDE_PREVIOUS_RECORD_RETAINED_READY_INDEX = 214;
+    static final int GUIDE_PREVIOUS_RECORD_RETAINED_REJECT_INDEX = 215;
+    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 216;
     static final int SHIFTED_RECEIVER_GUIDE_STRIDE = 8 * Float.BYTES;
     static final int SPATIAL_DIAGNOSTIC_COUNTER_BYTES =
             SHIFTED_DIAGNOSTIC_COUNTER_COUNT * Integer.BYTES;
@@ -928,6 +933,16 @@ final class RtPathReservoirHistory {
                     counters.get(GUIDE_PREVIOUS_LANE_WEIGHTS_READY_INDEX));
             long guidePreviousLaneWeightsReject = Integer.toUnsignedLong(
                     counters.get(GUIDE_PREVIOUS_LANE_WEIGHTS_REJECT_INDEX));
+            long guidePreviousRecordEligible = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_RECORD_ELIGIBLE_INDEX));
+            long guidePreviousRecordSelectedReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_RECORD_SELECTED_READY_INDEX));
+            long guidePreviousRecordSelectedReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_RECORD_SELECTED_REJECT_INDEX));
+            long guidePreviousRecordRetainedReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_RECORD_RETAINED_READY_INDEX));
+            long guidePreviousRecordRetainedReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_RECORD_RETAINED_REJECT_INDEX));
             long crossFrameReceiverReject = crossFrameReceiverSurfaceReject
                     + crossFrameReceiverSampleReject + crossFrameReceiverEdgeReject
                     + crossFrameReceiverTopologyReject + crossFrameReceiverDepthReject
@@ -1395,6 +1410,26 @@ final class RtPathReservoirHistory {
                     guidePreviousLaneEligible
                             - guidePreviousLaneWeightsReady
                             - guidePreviousLaneWeightsReject);
+            CausticaMod.LOGGER.info(
+                    "RT path guide previous register record: eligible={}, "
+                            + "selected[ready={},reject={},delta={}] "
+                            + "retained[ready={},reject={},delta={}] totalDelta={}",
+                    guidePreviousRecordEligible,
+                    guidePreviousRecordSelectedReady,
+                    guidePreviousRecordSelectedReject,
+                    guidePreviousBranchSelected
+                            - guidePreviousRecordSelectedReady
+                            - guidePreviousRecordSelectedReject,
+                    guidePreviousRecordRetainedReady,
+                    guidePreviousRecordRetainedReject,
+                    guidePreviousBranchRetained
+                            - guidePreviousRecordRetainedReady
+                            - guidePreviousRecordRetainedReject,
+                    guidePreviousRecordEligible
+                            - guidePreviousRecordSelectedReady
+                            - guidePreviousRecordSelectedReject
+                            - guidePreviousRecordRetainedReady
+                            - guidePreviousRecordRetainedReject);
             spatialDiagnosticViewPending = 0;
             return;
         }

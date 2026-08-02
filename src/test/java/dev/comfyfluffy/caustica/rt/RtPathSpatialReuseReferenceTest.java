@@ -1130,8 +1130,17 @@ final class RtPathSpatialReuseReferenceTest {
                 RtPathReservoirHistory.GUIDE_PREVIOUS_LANE_WEIGHTS_READY_INDEX);
         assertEquals(210,
                 RtPathReservoirHistory.GUIDE_PREVIOUS_LANE_WEIGHTS_REJECT_INDEX);
-        assertEquals(211, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
-        assertEquals(211 * Integer.BYTES,
+        assertEquals(211, RtPathReservoirHistory.GUIDE_PREVIOUS_RECORD_ELIGIBLE_INDEX);
+        assertEquals(212,
+                RtPathReservoirHistory.GUIDE_PREVIOUS_RECORD_SELECTED_READY_INDEX);
+        assertEquals(213,
+                RtPathReservoirHistory.GUIDE_PREVIOUS_RECORD_SELECTED_REJECT_INDEX);
+        assertEquals(214,
+                RtPathReservoirHistory.GUIDE_PREVIOUS_RECORD_RETAINED_READY_INDEX);
+        assertEquals(215,
+                RtPathReservoirHistory.GUIDE_PREVIOUS_RECORD_RETAINED_REJECT_INDEX);
+        assertEquals(216, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
+        assertEquals(216 * Integer.BYTES,
                 RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_COUNTER_BYTES);
         assertEquals(32, RtPathReservoirHistory.SHIFTED_RECEIVER_GUIDE_STRIDE);
         assertEquals(27_566_080L,
