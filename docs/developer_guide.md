@@ -363,6 +363,41 @@ stronger scene-specific equalities `positive = clear + tinted` and `zero = occlu
 all 77. This proves RGB-transmitted canonical target arithmetic without authorizing its use. The
 next bounded stage may audit the finite GRIS candidate/merge-weight terms with counters only.
 
+### Current T-050 diagnostic workflow
+
+The current spatial path work remains isolated in debug view 20. It does not update committed path
+history or the ordinary estimator. At 1280×673 its complete lazy diagnostic allocation is about
+578.36 MiB and consists of the 176 B/pixel guide reservoir scratch, its 160 B/pixel source-root
+companion, and the exact two-lane receiver guide. Ordinary rendering receives zero addresses for
+these resources.
+
+The proven one-frame chain is:
+
+1. reproject current receiver and original source independently;
+2. validate position, normal, roughness and full material identity;
+3. replay the original source seeds exactly;
+4. recompute direct source→current-receiver geometry, directional PDFs and PSS Jacobian;
+5. rebuild receiver throughput, trace current visibility and reconstruct shifted target;
+6. form the GRIS merge weight with source M limited to eight;
+7. choose through the overflow-stable uncapped relative ratio;
+8. audit selected/retained final arithmetic and future lane policy.
+
+The accumulated reservoir sum may still be stored with the `1e30` cap, but that capped value must
+never be reused as the Bernoulli denominator: runtime diagnostics demonstrated finite probabilities
+above one in that formulation. Do not clamp those cases. Use the overflow-stable relative ratio
+defined by the CPU reference and mirrored in `pathStableSelectionProbability`.
+
+The next gate may construct a complete selected or retained `PathReservoir` only in shader registers
+and pass it through `pathReservoirSampleMetadataReady`. It must not store the record, advance either
+replay RNG stream, commit history, expose a mapped record as another spatial source, compose a prior
+Jacobian, or contribute to the estimator.
+
+For a fresh runtime check, use debug view 20 and inspect `run/logs/latest.log`. Normal operation
+requires `RT bring-up OK`, Vulkan, the intended NVIDIA device, exact zero-delta counter partitions,
+and no `DEVICE_LOST`, `VK_ERROR`, GPU fault or shader compilation error. Debug colors and sparse
+white/colored pixels are diagnostic states, not final render quality. Mojang/Realms 401 messages are
+unrelated authentication noise.
+
 ## Linux
 
 Set `DLSS_SDK` and `VULKAN_SDK` before configuring CMake:

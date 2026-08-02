@@ -658,8 +658,33 @@ deltas. The previous-source final-weight branch was valid for all 188935 records
 current-retained branch was valid for 45060 and rejected 143875 because the current reservoir had no
 positive target, matching the CPU reference's fail-closed selected-sample denominator rule. No RNG,
 selection, reservoir/history write, mapping composition, estimator contribution, or invalid GPU
-arithmetic was introduced. The next bounded gate may audit the two hypothetical final weights'
-selection-probability denominator without actually sampling either branch.
+arithmetic was introduced.
+
+The capped accumulated weight is a storage bound, not a probability denominator. Runtime A/B showed
+finite cases where `mergeWeight / min(currentWeightSum + mergeWeight, 1e30)` exceeds one. Selection
+therefore uses an overflow-stable form of the uncapped relative ratio: divide the smaller weight by
+the larger before forming the final ratio, without summing the two large values or clamping the
+result. The stored sum remains capped at `1e30`, effective M remains capped at `16777216`, and source
+M remains limited to eight. This separation is part of the estimator contract and must not be
+collapsed by an implementation shortcut.
+
+The diagnostic Bernoulli, branch arithmetic, and lane-policy gates are now proven. A local hash
+independent of both replay RNG streams partitions the stable probability into selected and retained
+outcomes. Selected records require freshly reconstructed receiver radiance/target, directional PDF,
+throughput, reconnection geometry, current source key and generation; they preserve the original
+canonical proposal and replay root. Retained records preserve the current opaque sample payload.
+Both branches receive only the already validated weight-sum, effective-count, final-weight and
+confidence lane. The latest Vulkan audit covered 31119 eligible previous pairs with zero rewrite,
+preservation, weight, or accounting rejects. These are counter-only proofs: no complete branch record
+has yet been written to device memory or committed to history.
+
+The immediate T-050 gate is register-only full-record assembly followed by the common reservoir
+metadata validator. Persistent mapped history remains blocked until the assembled record and its
+source-root companion pass exact replay, receiver remap, current visibility/target reconstruction,
+lifecycle invalidation, and exclusive accounting as one chain. Mapped records remain forbidden as
+new spatial sources, previous mapping Jacobians are never composed, and ordinary estimator
+integration remains out of scope. Detailed chronological evidence and superseded experiments live in
+the local `tasks_archive.md`; this roadmap is the durable mathematical authority.
 
 ## Delivery Phases
 
