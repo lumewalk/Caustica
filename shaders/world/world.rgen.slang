@@ -2035,6 +2035,44 @@ public void pathGuidePreviousReplayValidate() {
                                                 ? PATH_GUIDE_PREVIOUS_STORED_THROUGHPUT_MATCH
                                                 : PATH_GUIDE_PREVIOUS_STORED_THROUGHPUT_MISMATCH
                                         : PATH_GUIDE_PREVIOUS_STORED_THROUGHPUT_INVALID], 1u);
+
+                                // Counter-only GRIS arithmetic audit. The source final weight and
+                                // effective count come from the stored guide reservoir; the target
+                                // and PSS Jacobian are the freshly reconstructed current-receiver
+                                // values above. No RNG, selection, merge, or reservoir mutation is
+                                // performed here.
+                                InterlockedAdd(counters[
+                                        PATH_GUIDE_PREVIOUS_WEIGHT_ELIGIBLE], 1u);
+                                float sourceFinalWeight = stored.weights.z;
+                                float sourceEffectiveCount = min(
+                                        stored.weights.y, PATH_TEMPORAL_MAX_SOURCE_COUNT);
+                                bool weightTermsValid = targetValid
+                                        && isfinite(shiftedTarget)
+                                        && shiftedTarget >= 0.0
+                                        && isfinite(sourceFinalWeight)
+                                        && sourceFinalWeight >= 0.0
+                                        && isfinite(sourceEffectiveCount)
+                                        && sourceEffectiveCount >= 0.0
+                                        && isfinite(pssJacobian)
+                                        && pssJacobian > 0.0;
+                                float mergeWeight = weightTermsValid
+                                        ? shiftedTarget * sourceFinalWeight
+                                                * sourceEffectiveCount * pssJacobian
+                                        : 0.0;
+                                bool mergeWeightPositive = weightTermsValid
+                                        && isfinite(mergeWeight)
+                                        && mergeWeight > 0.0;
+                                bool mergeWeightZero = weightTermsValid
+                                        && (!mergeWeightPositive);
+                                uint weightCategory = !weightTermsValid
+                                        || (!isfinite(mergeWeight) || mergeWeight < 0.0)
+                                        ? PATH_GUIDE_PREVIOUS_WEIGHT_INVALID
+                                        : mergeWeightPositive
+                                                ? PATH_GUIDE_PREVIOUS_WEIGHT_POSITIVE
+                                                : mergeWeightZero
+                                                        ? PATH_GUIDE_PREVIOUS_WEIGHT_ZERO
+                                                        : PATH_GUIDE_PREVIOUS_WEIGHT_INVALID;
+                                InterlockedAdd(counters[weightCategory], 1u);
                             }
                         }
                     }

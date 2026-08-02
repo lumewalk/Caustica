@@ -642,6 +642,16 @@ weight from the freshly reconstructed target, stored source final weight/count, 
 recomputed PSS Jacobian, but must remain counter-only with no RNG, selection, history write, mapping
 composition, or estimator use.
 
+That merge-weight arithmetic audit is now proven. Sixteen fresh view-20 readbacks covered 134487
+eligible previous mappings. The exact partition was `zero = 6`, `positive = 134481`, `invalid = 0`,
+with `eligible = terminal` and `delta = 0` on every readback. The six zero weights matched the six
+zero-target/occluded reconstructions; every positive reconstructed target produced a finite positive
+weight. Two stored-throughput mismatches occurred only in the brief camera-motion population and
+did not create invalid weight terms. The audit still performs no selection, RNG, weight/history
+write, mapping composition, or estimator work. The next bounded gate may audit hypothetical
+`nextWeightSum`, effective-count cap, and final reservoir weight arithmetic, still without selecting
+or writing a sample.
+
 ## Delivery Phases
 
 ### Phase 0 — Wavefront Integration Baseline

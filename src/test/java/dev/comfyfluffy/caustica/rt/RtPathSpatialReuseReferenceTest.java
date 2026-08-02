@@ -1042,8 +1042,12 @@ final class RtPathSpatialReuseReferenceTest {
                 RtPathReservoirHistory.GUIDE_PREVIOUS_STORED_THROUGHPUT_MISMATCH_INDEX);
         assertEquals(163,
                 RtPathReservoirHistory.GUIDE_PREVIOUS_STORED_THROUGHPUT_INVALID_INDEX);
-        assertEquals(164, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
-        assertEquals(164 * Integer.BYTES,
+        assertEquals(164, RtPathReservoirHistory.GUIDE_PREVIOUS_WEIGHT_ELIGIBLE_INDEX);
+        assertEquals(165, RtPathReservoirHistory.GUIDE_PREVIOUS_WEIGHT_ZERO_INDEX);
+        assertEquals(166, RtPathReservoirHistory.GUIDE_PREVIOUS_WEIGHT_POSITIVE_INDEX);
+        assertEquals(167, RtPathReservoirHistory.GUIDE_PREVIOUS_WEIGHT_INVALID_INDEX);
+        assertEquals(168, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
+        assertEquals(168 * Integer.BYTES,
                 RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_COUNTER_BYTES);
         assertEquals(32, RtPathReservoirHistory.SHIFTED_RECEIVER_GUIDE_STRIDE);
         assertEquals(27_566_080L,

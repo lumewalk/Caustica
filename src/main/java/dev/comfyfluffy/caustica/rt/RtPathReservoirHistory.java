@@ -192,7 +192,11 @@ final class RtPathReservoirHistory {
     static final int GUIDE_PREVIOUS_STORED_THROUGHPUT_MATCH_INDEX = 161;
     static final int GUIDE_PREVIOUS_STORED_THROUGHPUT_MISMATCH_INDEX = 162;
     static final int GUIDE_PREVIOUS_STORED_THROUGHPUT_INVALID_INDEX = 163;
-    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 164;
+    static final int GUIDE_PREVIOUS_WEIGHT_ELIGIBLE_INDEX = 164;
+    static final int GUIDE_PREVIOUS_WEIGHT_ZERO_INDEX = 165;
+    static final int GUIDE_PREVIOUS_WEIGHT_POSITIVE_INDEX = 166;
+    static final int GUIDE_PREVIOUS_WEIGHT_INVALID_INDEX = 167;
+    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 168;
     static final int SHIFTED_RECEIVER_GUIDE_STRIDE = 8 * Float.BYTES;
     static final int SPATIAL_DIAGNOSTIC_COUNTER_BYTES =
             SHIFTED_DIAGNOSTIC_COUNTER_COUNT * Integer.BYTES;
@@ -787,6 +791,14 @@ final class RtPathReservoirHistory {
                     counters.get(GUIDE_PREVIOUS_STORED_THROUGHPUT_MISMATCH_INDEX));
             long guidePreviousStoredThroughputInvalid = Integer.toUnsignedLong(
                     counters.get(GUIDE_PREVIOUS_STORED_THROUGHPUT_INVALID_INDEX));
+            long guidePreviousWeightEligible = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_WEIGHT_ELIGIBLE_INDEX));
+            long guidePreviousWeightZero = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_WEIGHT_ZERO_INDEX));
+            long guidePreviousWeightPositive = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_WEIGHT_POSITIVE_INDEX));
+            long guidePreviousWeightInvalid = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_WEIGHT_INVALID_INDEX));
             long crossFrameReceiverReject = crossFrameReceiverSurfaceReject
                     + crossFrameReceiverSampleReject + crossFrameReceiverEdgeReject
                     + crossFrameReceiverTopologyReject + crossFrameReceiverDepthReject
@@ -1120,6 +1132,15 @@ final class RtPathReservoirHistory {
                     guidePreviousStoredThroughputInvalid,
                     guidePreviousStoredMetadataEligible
                             - guidePreviousStoredThroughputTerminal);
+            long guidePreviousWeightTerminal = guidePreviousWeightZero
+                    + guidePreviousWeightPositive + guidePreviousWeightInvalid;
+            CausticaMod.LOGGER.info(
+                    "RT path guide previous weight: eligible={}, zero={}, positive={}, "
+                            + "invalid={}, terminal={}, delta={}",
+                    guidePreviousWeightEligible, guidePreviousWeightZero,
+                    guidePreviousWeightPositive, guidePreviousWeightInvalid,
+                    guidePreviousWeightTerminal,
+                    guidePreviousWeightEligible - guidePreviousWeightTerminal);
             spatialDiagnosticViewPending = 0;
             return;
         }
