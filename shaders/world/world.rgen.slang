@@ -40,6 +40,7 @@ static void writeExactReceiverRayOrigin(PathSegment segment, uint2 pix,
     if (worldPush.pathShiftReceiverGuideAddr == 0u
             || (pc.historyFlags & PATH_MAPPING_REPLAY_PASS_FLAG) != 0u
             || (pc.historyFlags & PATH_GUIDE_PREVIOUS_REPLAY_PASS_FLAG) != 0u
+            || (pc.historyFlags & PATH_GUIDE_BRANCH_AGE_REPLAY_PASS_FLAG) != 0u
             || segment.bounce != 0 || hitDepth != 0) {
         return;
     }
@@ -1690,7 +1691,7 @@ public void pathMappingReplayValidate() {
 static const uint PATH_BRANCH_SCRATCH_CAPTURE_CAPACITY = 4096u;
 static const uint PATH_BRANCH_SCRATCH_CAPTURE_BYTE_OFFSET = 131072u;
 static const uint PATH_BRANCH_CANDIDATE_HISTORY_SLOT_COUNT = 4u;
-static const uint PATH_BRANCH_SCRATCH_CAPTURE_STRIDE_BYTES = 368u;
+static const uint PATH_BRANCH_SCRATCH_CAPTURE_STRIDE_BYTES = 384u;
 static const uint PATH_BRANCH_SCRATCH_CAPTURE_SLOT_BYTES =
         PATH_BRANCH_SCRATCH_CAPTURE_CAPACITY * PATH_BRANCH_SCRATCH_CAPTURE_STRIDE_BYTES;
 static const uint PATH_BRANCH_CANDIDATE_PROMOTION_MAGIC = 0xC411DA7Eu;
@@ -1724,6 +1725,8 @@ struct PathBranchScratchCapture {
     PathReservoir reservoir;
     PathSourceRoot root;
     uint4 promotion; // magic, validation frame, generation, mapping kind
+    float3 replayCameraDelta; // accumulated capture-to-current camera translation
+    uint replayCameraFrame; // last frame that advanced replayCameraDelta
 };
 
 static bool pathReservoirBitsMatch(PathReservoir a, PathReservoir b) {
@@ -1816,6 +1819,8 @@ static void pathBranchScratchStorageValidate() {
     }
     expected.promotion = uint4(PATH_BRANCH_CANDIDATE_PROMOTION_MAGIC,
             worldPush.frameIndex, currentGeneration, expected.metadata.y);
+    expected.replayCameraDelta = float3(0.0);
+    expected.replayCameraFrame = worldPush.frameIndex;
     captures[sampleIndex] = expected;
     InterlockedAdd(counters[PATH_GUIDE_BRANCH_CANDIDATE_TAG_WRITE_ELIGIBLE], 1u);
     DevicePtr<uint2> candidateTags = DevicePtr<uint2>(pathBranchCandidateTagAddress(
@@ -1847,7 +1852,7 @@ static void pathBranchCandidateRetentionValidate() {
     InterlockedAdd(counters[PATH_GUIDE_BRANCH_CANDIDATE_RETENTION_ATTEMPTED], 1u);
     uint slot = linearIndex / PATH_BRANCH_SCRATCH_CAPTURE_CAPACITY;
     uint sampleIndex = linearIndex % PATH_BRANCH_SCRATCH_CAPTURE_CAPACITY;
-    ConstPtr<PathBranchScratchCapture> captures = ConstPtr<PathBranchScratchCapture>(
+    DevicePtr<PathBranchScratchCapture> captures = DevicePtr<PathBranchScratchCapture>(
             pathBranchCaptureStorageAddress(worldPush.pathShiftDiagnosticPairAddr, slot));
     PathBranchScratchCapture capture = captures[sampleIndex];
     if (capture.promotion.x != PATH_BRANCH_CANDIDATE_PROMOTION_MAGIC) {
@@ -1874,6 +1879,13 @@ static void pathBranchCandidateRetentionValidate() {
     }
 
     uint age = worldPush.frameIndex - capture.promotion.y;
+    if (age > 0u && age < PATH_BRANCH_CANDIDATE_HISTORY_SLOT_COUNT
+            && capture.replayCameraFrame == worldPush.frameIndex - 1u
+            && all(isfinite(capture.replayCameraDelta))) {
+        capture.replayCameraDelta += worldPush.camDelta;
+        capture.replayCameraFrame = worldPush.frameIndex;
+        captures[sampleIndex] = capture;
+    }
     if (age == 0u) {
         InterlockedAdd(counters[PATH_GUIDE_BRANCH_CANDIDATE_RETENTION_CURRENT], 1u);
     } else if (age == 1u) {
@@ -1889,6 +1901,123 @@ static void pathBranchCandidateRetentionValidate() {
     InterlockedAdd(counters[mappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION
             ? PATH_GUIDE_BRANCH_CANDIDATE_RETENTION_MAPPED_LIVE
             : PATH_GUIDE_BRANCH_CANDIDATE_RETENTION_IDENTITY_LIVE], 1u);
+}
+
+static void pathBranchAgeReplayValidate() {
+    if (pc.debugView != PATH_SHIFTED_RADIANCE_DEBUG_VIEW
+            || (pc.historyFlags & PATH_GUIDE_BRANCH_AGE_REPLAY_PASS_FLAG) == 0u
+            || worldPush.pathShiftDiagnosticCounterAddr == 0u
+            || worldPush.pathShiftDiagnosticPairAddr == 0u) {
+        return;
+    }
+    uint linearIndex = DispatchRaysIndex().y * DispatchRaysDimensions().x
+            + DispatchRaysIndex().x;
+    uint entryCount = PATH_BRANCH_SCRATCH_CAPTURE_CAPACITY
+            * PATH_BRANCH_CANDIDATE_HISTORY_SLOT_COUNT;
+    if (linearIndex >= entryCount) return;
+
+    DevicePtr<uint> counters = DevicePtr<uint>(worldPush.pathShiftDiagnosticCounterAddr);
+    InterlockedAdd(counters[PATH_GUIDE_BRANCH_AGE_REPLAY_ATTEMPTED], 1u);
+    uint slot = linearIndex / PATH_BRANCH_SCRATCH_CAPTURE_CAPACITY;
+    uint sampleIndex = linearIndex % PATH_BRANCH_SCRATCH_CAPTURE_CAPACITY;
+    ConstPtr<PathBranchScratchCapture> captures = ConstPtr<PathBranchScratchCapture>(
+            pathBranchCaptureStorageAddress(worldPush.pathShiftDiagnosticPairAddr, slot));
+    PathBranchScratchCapture capture = captures[sampleIndex];
+    if (capture.promotion.x != PATH_BRANCH_CANDIDATE_PROMOTION_MAGIC) {
+        InterlockedAdd(counters[PATH_GUIDE_BRANCH_AGE_REPLAY_EMPTY], 1u);
+        return;
+    }
+
+    uint currentGeneration = pc.historyGeneration & PATH_GENERATION_MASK;
+    uint mappingKind = capture.promotion.w;
+    bool metadataValid = capture.promotion.y <= worldPush.frameIndex
+            && capture.promotion.z == currentGeneration
+            && (mappingKind == PATH_MAPPING_IDENTITY
+                    || mappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION)
+            && capture.metadata.y == mappingKind
+            && capture.metadata.z == capture.promotion.y
+            && capture.metadata.w == currentGeneration
+            && pathMappingKind(capture.reservoir) == mappingKind;
+    if (!metadataValid) {
+        InterlockedAdd(counters[PATH_GUIDE_BRANCH_AGE_REPLAY_METADATA_REJECT], 1u);
+        return;
+    }
+    uint age = worldPush.frameIndex - capture.promotion.y;
+    if (age == 0u) {
+        InterlockedAdd(counters[PATH_GUIDE_BRANCH_AGE_REPLAY_CURRENT_SKIP], 1u);
+        return;
+    }
+    if (age >= PATH_BRANCH_CANDIDATE_HISTORY_SLOT_COUNT) {
+        InterlockedAdd(counters[PATH_GUIDE_BRANCH_AGE_REPLAY_EXPIRED], 1u);
+        return;
+    }
+    if (capture.replayCameraFrame != worldPush.frameIndex
+            || !all(isfinite(capture.replayCameraDelta))) {
+        InterlockedAdd(counters[PATH_GUIDE_BRANCH_AGE_REPLAY_PROVENANCE_REJECT], 1u);
+        return;
+    }
+
+    PathReservoir stored = capture.reservoir;
+    PathSourceRoot root = capture.root;
+    bool reservoirReady = all(isfinite(stored.weights))
+            && all(stored.weights > float4(0.0))
+            && pathReservoirSampleMetadataReady(stored)
+            && (stored.identity.w & PATH_GENERATION_MASK) == currentGeneration;
+    bool rootFinite = all(isfinite(root.sourcePositionMaterial))
+            && all(isfinite(root.sourceNormalRoughness))
+            && all(isfinite(root.receiverPositionMaterial))
+            && all(isfinite(root.receiverNormalRoughness))
+            && all(isfinite(root.segment0.ro))
+            && all(isfinite(root.segment1.ro));
+    bool rootChainValid = stored.replayControl.y == 1u
+            ? root.segment0.nextRecord == PATH_NO_NEXT
+            : stored.replayControl.y == MAX_PATH_SEGMENTS
+                    && root.segment0.nextRecord != PATH_NO_NEXT
+                    && root.segment1.nextRecord == PATH_NO_NEXT;
+    if (!reservoirReady || !rootFinite || !rootChainValid) {
+        InterlockedAdd(counters[PATH_GUIDE_BRANCH_AGE_REPLAY_METADATA_REJECT], 1u);
+        return;
+    }
+    InterlockedAdd(counters[age == 1u
+            ? PATH_GUIDE_BRANCH_AGE_REPLAY_AGE_ONE_ELIGIBLE
+            : age == 2u
+                    ? PATH_GUIDE_BRANCH_AGE_REPLAY_AGE_TWO_ELIGIBLE
+                    : PATH_GUIDE_BRANCH_AGE_REPLAY_AGE_THREE_ELIGIBLE], 1u);
+
+    // The compact record retains the immutable original queue root. Only its separate camera
+    // provenance is advanced. In particular, a mapped reservoir is never shifted again or used as
+    // another spatial source; its original seeds are checked with the mapping-source comparator.
+    float3 replayRebase = worldPush.camOffset - capture.replayCameraDelta;
+    PathReplayAggregate replay = pathReplayAggregateEmpty();
+    uint expectedSegments = stored.replayControl.y;
+    for (uint leaf = 0u; leaf < MAX_PATH_SEGMENTS; ++leaf) {
+        if (leaf >= expectedSegments) break;
+        PackedPathSegment packed = leaf == 0u ? root.segment0 : root.segment1;
+        packed.ro += replayRebase;
+        PathSegment segment = unpackPathSegment(packed);
+        uint replaySeed = leaf == 0u ? stored.replay.x : stored.replay.z;
+        uint proposalReplaySeed = leaf == 0u ? stored.replay.y : stored.replay.w;
+        PathTraceResult traced = tracePathSeeded(
+                segment, uint2(0u), true, replaySeed, proposalReplaySeed);
+        pathReplayAccumulate(replay, traced, leaf);
+    }
+    bool replayMatches = mappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION
+            ? pathMappingSourceReplayMatches(stored, replay)
+            : pathReplayCompare(stored, replay) == 0u;
+    if (replayMatches) {
+        InterlockedAdd(counters[age == 1u
+                ? PATH_GUIDE_BRANCH_AGE_REPLAY_AGE_ONE_ACCEPTED
+                : age == 2u
+                        ? PATH_GUIDE_BRANCH_AGE_REPLAY_AGE_TWO_ACCEPTED
+                        : PATH_GUIDE_BRANCH_AGE_REPLAY_AGE_THREE_ACCEPTED], 1u);
+    }
+    InterlockedAdd(counters[mappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION
+            ? replayMatches
+                    ? PATH_GUIDE_BRANCH_AGE_REPLAY_MAPPED_ROOT_ACCEPTED
+                    : PATH_GUIDE_BRANCH_AGE_REPLAY_MAPPED_ROOT_REJECT
+            : replayMatches
+                    ? PATH_GUIDE_BRANCH_AGE_REPLAY_IDENTITY_ACCEPTED
+                    : PATH_GUIDE_BRANCH_AGE_REPLAY_IDENTITY_REJECT], 1u);
 }
 
 static void pathBranchScratchReplayValidate() {
@@ -3166,6 +3295,10 @@ public void pathGuideScratchValidate() {
 [shader("raygeneration")]
 void main() {
     worldPush = ConstPtr<WorldPush>(pc.worldPushAddr)[0];
+    if ((pc.historyFlags & PATH_GUIDE_BRANCH_AGE_REPLAY_PASS_FLAG) != 0u) {
+        pathBranchAgeReplayValidate();
+        return;
+    }
     if ((pc.historyFlags & PATH_GUIDE_BRANCH_CANDIDATE_RETENTION_PASS_FLAG) != 0u) {
         pathBranchCandidateRetentionValidate();
         return;

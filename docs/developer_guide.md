@@ -413,11 +413,12 @@ addresses are zero outside view 20. The next required boundary was explicit bit-
 between the register pair and its device-written payload/root.
 
 The post-barrier storage audit now follows that write pass. It captures at most 4096 complete
-expected register pairs per ring slot. The record is now 368 bytes: metadata, the 176-byte
-`PathReservoir`, the 160-byte `PathSourceRoot`, and a 16-byte promotion marker written only after
-the raw 32-bit lane comparison passes. The diagnostic counter buffer is now 274 uints / 1096 bytes.
-Four capture slots use 5.75 MiB; together with the pre-existing sample area the host-visible
-diagnostic sample buffer is 6160384 bytes (5.875 MiB). WorldPush remains 672 bytes
+expected register pairs per ring slot. The record is now 384 bytes: metadata, the 176-byte
+`PathReservoir`, the 160-byte `PathSourceRoot`, a 16-byte promotion marker written only after
+the raw 32-bit lane comparison passes, and a 16-byte replay-camera provenance lane. The diagnostic
+counter buffer is now 292 uints / 1168 bytes. Four capture slots use 6 MiB; together with the
+pre-existing sample area the host-visible diagnostic sample buffer is 6422528 bytes (6.125 MiB).
+WorldPush remains 672 bytes
 and replay ABI remains 10. The runtime log line
 `RT path guide branch scratch storage` must show `eligible == completed`, `attempted == captured`,
 zero metadata/reservoir/root/pair rejects, and zero write/validation deltas. The proven run covered
@@ -443,9 +444,23 @@ The line `RT path guide branch candidate retention` must satisfy `attempted == t
 `live == identity + mapped`; future/generation/mapping rejects and both deltas must remain zero in a
 stable run. Sixteen fresh readbacks covered 262144 entries: 136707 live records (34278 current,
 33855 age 1, 34263 age 2, 34311 age 3), 10211 expired, and 115226 empty. Mapping ownership split
-exactly into 13789 identity and 122918 mapped live records. The next gate may add age-aware replay
-admission, but it must use the original source-root provenance directly and must reject any attempt
-to use a mapped result as another spatial source.
+exactly into 13789 identity and 122918 mapped live records.
+
+Age-aware replay now runs in a separate post-retention pass. The compact provenance lane starts at
+zero on validation and accumulates exactly one `camDelta` per subsequent live frame; skipped or
+duplicated advancement fails closed. Ages 1–3 reconstruct the original packed queue origins with
+`current camOffset - cumulative camera delta` and retrace only the stored original seeds. Identity
+records use exact generic replay comparison. Diffuse-mapped records use the source-replay comparator;
+the pass never calls reconnection mapping and therefore cannot use a mapped result as another spatial
+source. Current records are skipped and age 4+ records are expired.
+
+The runtime line `RT path guide branch age replay` must show nonzero eligible and accepted counts for
+each age, `provenance=0`, and `delta=replayDelta=ageDelta=0`. The proven run covered 20 readbacks and
+327680 attempts. All 107342 age-eligible records split across age 1/2/3 as 35612/35867/35863, with
+accepted counts 35123/35179/35051. Overall acceptance was 105353 (10382 identity and 94971 mapped
+original-root), while 1989 exact replay rejects remained explicit. Metadata/provenance rejects and
+all accounting deltas were zero. This pass still does not reproject a receiver, construct a new
+mapping, change weights, write history, or affect the estimator.
 
 For a fresh runtime check, use debug view 20 and inspect `run/logs/latest.log`. Normal operation
 requires `RT bring-up OK`, Vulkan, the intended NVIDIA device, exact zero-delta counter partitions,

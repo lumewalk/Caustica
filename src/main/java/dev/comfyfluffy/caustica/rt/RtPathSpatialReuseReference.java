@@ -1112,6 +1112,80 @@ final class RtPathSpatialReuseReference {
         return BranchCandidateRetentionOutcome.EXPIRED;
     }
 
+    record BranchReplayCameraProvenance(double deltaX, double deltaY, double deltaZ,
+                                        long advancedFrame) {
+        BranchReplayCameraProvenance {
+            if (!Double.isFinite(deltaX) || !Double.isFinite(deltaY)
+                    || !Double.isFinite(deltaZ)) {
+                throw new IllegalArgumentException("branch replay camera provenance must be finite");
+            }
+        }
+
+        static BranchReplayCameraProvenance capture(long frame) {
+            return new BranchReplayCameraProvenance(0.0, 0.0, 0.0, frame);
+        }
+
+        BranchReplayCameraProvenance advance(
+                long currentFrame, double frameDeltaX, double frameDeltaY, double frameDeltaZ) {
+            if (currentFrame != advancedFrame + 1L) {
+                throw new IllegalArgumentException(
+                        "branch replay provenance must advance exactly one frame");
+            }
+            return new BranchReplayCameraProvenance(
+                    deltaX + frameDeltaX, deltaY + frameDeltaY, deltaZ + frameDeltaZ,
+                    currentFrame);
+        }
+    }
+
+    enum BranchCandidateAgeReplayOutcome {
+        EMPTY,
+        METADATA_REJECT,
+        CURRENT_SKIP,
+        EXPIRED,
+        PROVENANCE_REJECT,
+        IDENTITY_ACCEPTED,
+        IDENTITY_REJECT,
+        MAPPED_ORIGINAL_ROOT_ACCEPTED,
+        MAPPED_ORIGINAL_ROOT_REJECT
+    }
+
+    /** CPU mirror for age-aware original-root replay; it never authorizes another spatial shift. */
+    static BranchCandidateAgeReplayOutcome branchCandidateAgeReplayOutcome(
+            BranchCandidateRetentionOutcome retention, boolean provenanceCurrent,
+            MappingKind mappingKind, boolean originalRootReplayMatches) {
+        if (retention == null) {
+            throw new IllegalArgumentException("branch retention outcome is required");
+        }
+        if (retention == BranchCandidateRetentionOutcome.EMPTY) {
+            return BranchCandidateAgeReplayOutcome.EMPTY;
+        }
+        if (retention == BranchCandidateRetentionOutcome.FUTURE_REJECT
+                || retention == BranchCandidateRetentionOutcome.GENERATION_REJECT
+                || retention == BranchCandidateRetentionOutcome.MAPPING_REJECT) {
+            return BranchCandidateAgeReplayOutcome.METADATA_REJECT;
+        }
+        if (retention == BranchCandidateRetentionOutcome.CURRENT) {
+            return BranchCandidateAgeReplayOutcome.CURRENT_SKIP;
+        }
+        if (retention == BranchCandidateRetentionOutcome.EXPIRED) {
+            return BranchCandidateAgeReplayOutcome.EXPIRED;
+        }
+        if (!provenanceCurrent) {
+            return BranchCandidateAgeReplayOutcome.PROVENANCE_REJECT;
+        }
+        if (mappingKind == null) {
+            throw new IllegalArgumentException("age replay requires a mapping kind");
+        }
+        if (mappingKind == MappingKind.DIFFUSE_RECONNECTION) {
+            return originalRootReplayMatches
+                    ? BranchCandidateAgeReplayOutcome.MAPPED_ORIGINAL_ROOT_ACCEPTED
+                    : BranchCandidateAgeReplayOutcome.MAPPED_ORIGINAL_ROOT_REJECT;
+        }
+        return originalRootReplayMatches
+                ? BranchCandidateAgeReplayOutcome.IDENTITY_ACCEPTED
+                : BranchCandidateAgeReplayOutcome.IDENTITY_REJECT;
+    }
+
     /**
      * Ordered CPU mirror for the post-barrier exact-lane validation sample. Reservoir and root
      * equality are bitwise requirements; acceptance remains diagnostic-only.

@@ -38,6 +38,7 @@ final class RtPathReservoirHistory {
     static final int GUIDE_BRANCH_PREVIOUS_AVAILABLE_FLAG = 1 << 10;
     static final int GUIDE_BRANCH_SCRATCH_VALIDATE_PASS_FLAG = 1 << 11;
     static final int GUIDE_BRANCH_CANDIDATE_RETENTION_PASS_FLAG = 1 << 12;
+    static final int GUIDE_BRANCH_AGE_REPLAY_PASS_FLAG = 1 << 13;
     static final int SPATIAL_DIAGNOSTIC_CATEGORY_COUNT = 9;
     static final int SPATIAL_DIAGNOSTIC_STRICT_PAIR_CURSOR_INDEX =
             SPATIAL_DIAGNOSTIC_CATEGORY_COUNT;
@@ -305,7 +306,25 @@ final class RtPathReservoirHistory {
     static final int GUIDE_BRANCH_CANDIDATE_RETENTION_IDENTITY_LIVE_INDEX = 271;
     static final int GUIDE_BRANCH_CANDIDATE_RETENTION_MAPPED_LIVE_INDEX = 272;
     static final int GUIDE_BRANCH_CANDIDATE_RETENTION_DELTA_INDEX = 273;
-    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 274;
+    static final int GUIDE_BRANCH_AGE_REPLAY_ATTEMPTED_INDEX = 274;
+    static final int GUIDE_BRANCH_AGE_REPLAY_EMPTY_INDEX = 275;
+    static final int GUIDE_BRANCH_AGE_REPLAY_METADATA_REJECT_INDEX = 276;
+    static final int GUIDE_BRANCH_AGE_REPLAY_CURRENT_SKIP_INDEX = 277;
+    static final int GUIDE_BRANCH_AGE_REPLAY_EXPIRED_INDEX = 278;
+    static final int GUIDE_BRANCH_AGE_REPLAY_PROVENANCE_REJECT_INDEX = 279;
+    static final int GUIDE_BRANCH_AGE_REPLAY_AGE_ONE_ELIGIBLE_INDEX = 280;
+    static final int GUIDE_BRANCH_AGE_REPLAY_AGE_TWO_ELIGIBLE_INDEX = 281;
+    static final int GUIDE_BRANCH_AGE_REPLAY_AGE_THREE_ELIGIBLE_INDEX = 282;
+    static final int GUIDE_BRANCH_AGE_REPLAY_IDENTITY_ACCEPTED_INDEX = 283;
+    static final int GUIDE_BRANCH_AGE_REPLAY_IDENTITY_REJECT_INDEX = 284;
+    static final int GUIDE_BRANCH_AGE_REPLAY_MAPPED_ROOT_ACCEPTED_INDEX = 285;
+    static final int GUIDE_BRANCH_AGE_REPLAY_MAPPED_ROOT_REJECT_INDEX = 286;
+    static final int GUIDE_BRANCH_AGE_REPLAY_DELTA_INDEX = 287;
+    static final int GUIDE_BRANCH_AGE_REPLAY_AGE_ONE_ACCEPTED_INDEX = 288;
+    static final int GUIDE_BRANCH_AGE_REPLAY_AGE_TWO_ACCEPTED_INDEX = 289;
+    static final int GUIDE_BRANCH_AGE_REPLAY_AGE_THREE_ACCEPTED_INDEX = 290;
+    static final int GUIDE_BRANCH_AGE_REPLAY_AGE_DELTA_INDEX = 291;
+    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 292;
     static final int SHIFTED_RECEIVER_GUIDE_STRIDE = 8 * Float.BYTES;
     static final int BRANCH_CANDIDATE_TAG_STRIDE = 2 * Integer.BYTES;
     static final int SPATIAL_DIAGNOSTIC_COUNTER_BYTES =
@@ -323,10 +342,12 @@ final class RtPathReservoirHistory {
     static final int PATH_BRANCH_CANDIDATE_HISTORY_SLOT_COUNT = 4;
     static final int PATH_BRANCH_SCRATCH_CAPTURE_HEADER_BYTES = 4 * Integer.BYTES;
     static final int PATH_BRANCH_CANDIDATE_PROMOTION_BYTES = 4 * Integer.BYTES;
+    static final int PATH_BRANCH_CANDIDATE_REPLAY_PROVENANCE_BYTES = 4 * Integer.BYTES;
     static final int PATH_BRANCH_SCRATCH_CAPTURE_STRIDE =
             PATH_BRANCH_SCRATCH_CAPTURE_HEADER_BYTES
                     + PathReservoirData.BYTE_SIZE + PathSourceRootData.BYTE_SIZE
-                    + PATH_BRANCH_CANDIDATE_PROMOTION_BYTES;
+                    + PATH_BRANCH_CANDIDATE_PROMOTION_BYTES
+                    + PATH_BRANCH_CANDIDATE_REPLAY_PROVENANCE_BYTES;
     static final int PATH_BRANCH_SCRATCH_CAPTURE_BYTES =
             PATH_BRANCH_CANDIDATE_HISTORY_SLOT_COUNT
                     * PATH_BRANCH_SCRATCH_CAPTURE_CAPACITY
@@ -1222,6 +1243,38 @@ final class RtPathReservoirHistory {
                     counters.get(GUIDE_BRANCH_CANDIDATE_RETENTION_IDENTITY_LIVE_INDEX));
             long guideBranchRetentionMappedLive = Integer.toUnsignedLong(
                     counters.get(GUIDE_BRANCH_CANDIDATE_RETENTION_MAPPED_LIVE_INDEX));
+            long guideBranchAgeReplayAttempted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_AGE_REPLAY_ATTEMPTED_INDEX));
+            long guideBranchAgeReplayEmpty = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_AGE_REPLAY_EMPTY_INDEX));
+            long guideBranchAgeReplayMetadataReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_AGE_REPLAY_METADATA_REJECT_INDEX));
+            long guideBranchAgeReplayCurrentSkip = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_AGE_REPLAY_CURRENT_SKIP_INDEX));
+            long guideBranchAgeReplayExpired = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_AGE_REPLAY_EXPIRED_INDEX));
+            long guideBranchAgeReplayProvenanceReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_AGE_REPLAY_PROVENANCE_REJECT_INDEX));
+            long guideBranchAgeReplayAgeOneEligible = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_AGE_REPLAY_AGE_ONE_ELIGIBLE_INDEX));
+            long guideBranchAgeReplayAgeTwoEligible = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_AGE_REPLAY_AGE_TWO_ELIGIBLE_INDEX));
+            long guideBranchAgeReplayAgeThreeEligible = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_AGE_REPLAY_AGE_THREE_ELIGIBLE_INDEX));
+            long guideBranchAgeReplayIdentityAccepted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_AGE_REPLAY_IDENTITY_ACCEPTED_INDEX));
+            long guideBranchAgeReplayIdentityReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_AGE_REPLAY_IDENTITY_REJECT_INDEX));
+            long guideBranchAgeReplayMappedRootAccepted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_AGE_REPLAY_MAPPED_ROOT_ACCEPTED_INDEX));
+            long guideBranchAgeReplayMappedRootReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_AGE_REPLAY_MAPPED_ROOT_REJECT_INDEX));
+            long guideBranchAgeReplayAgeOneAccepted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_AGE_REPLAY_AGE_ONE_ACCEPTED_INDEX));
+            long guideBranchAgeReplayAgeTwoAccepted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_AGE_REPLAY_AGE_TWO_ACCEPTED_INDEX));
+            long guideBranchAgeReplayAgeThreeAccepted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_AGE_REPLAY_AGE_THREE_ACCEPTED_INDEX));
             long crossFrameReceiverReject = crossFrameReceiverSurfaceReject
                     + crossFrameReceiverSampleReject + crossFrameReceiverEdgeReject
                     + crossFrameReceiverTopologyReject + crossFrameReceiverDepthReject
@@ -1880,6 +1933,55 @@ final class RtPathReservoirHistory {
                     guideBranchRetentionLive
                             - guideBranchRetentionIdentityLive
                             - guideBranchRetentionMappedLive);
+            long guideBranchAgeReplayEligible = guideBranchAgeReplayAgeOneEligible
+                    + guideBranchAgeReplayAgeTwoEligible
+                    + guideBranchAgeReplayAgeThreeEligible;
+            long guideBranchAgeReplayAccepted = guideBranchAgeReplayIdentityAccepted
+                    + guideBranchAgeReplayMappedRootAccepted;
+            long guideBranchAgeReplayRejected = guideBranchAgeReplayIdentityReject
+                    + guideBranchAgeReplayMappedRootReject;
+            long guideBranchAgeReplayTerminal = guideBranchAgeReplayEmpty
+                    + guideBranchAgeReplayMetadataReject
+                    + guideBranchAgeReplayCurrentSkip
+                    + guideBranchAgeReplayExpired
+                    + guideBranchAgeReplayProvenanceReject
+                    + guideBranchAgeReplayAccepted
+                    + guideBranchAgeReplayRejected;
+            CausticaMod.LOGGER.info(
+                    "RT path guide branch age replay: attempted={}, empty={}, metadata={}, "
+                            + "current={}, expired={}, provenance={}, age[one={},two={},three={}] "
+                            + "ageAccepted[one={},two={},three={}] "
+                            + "eligible={}, identity[accepted={},reject={}] "
+                            + "mappedOriginalRoot[accepted={},reject={}] accepted={}, reject={}, "
+                            + "terminal={}, delta={}, replayDelta={}, ageDelta={}",
+                    guideBranchAgeReplayAttempted,
+                    guideBranchAgeReplayEmpty,
+                    guideBranchAgeReplayMetadataReject,
+                    guideBranchAgeReplayCurrentSkip,
+                    guideBranchAgeReplayExpired,
+                    guideBranchAgeReplayProvenanceReject,
+                    guideBranchAgeReplayAgeOneEligible,
+                    guideBranchAgeReplayAgeTwoEligible,
+                    guideBranchAgeReplayAgeThreeEligible,
+                    guideBranchAgeReplayAgeOneAccepted,
+                    guideBranchAgeReplayAgeTwoAccepted,
+                    guideBranchAgeReplayAgeThreeAccepted,
+                    guideBranchAgeReplayEligible,
+                    guideBranchAgeReplayIdentityAccepted,
+                    guideBranchAgeReplayIdentityReject,
+                    guideBranchAgeReplayMappedRootAccepted,
+                    guideBranchAgeReplayMappedRootReject,
+                    guideBranchAgeReplayAccepted,
+                    guideBranchAgeReplayRejected,
+                    guideBranchAgeReplayTerminal,
+                    guideBranchAgeReplayAttempted - guideBranchAgeReplayTerminal,
+                    guideBranchAgeReplayEligible
+                            - guideBranchAgeReplayAccepted
+                            - guideBranchAgeReplayRejected,
+                    guideBranchAgeReplayAccepted
+                            - guideBranchAgeReplayAgeOneAccepted
+                            - guideBranchAgeReplayAgeTwoAccepted
+                            - guideBranchAgeReplayAgeThreeAccepted);
             spatialDiagnosticViewPending = 0;
             return;
         }

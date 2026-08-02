@@ -750,6 +750,19 @@ retention and expiry only. It does not authorize replay from the ring, mapping/J
 committed history, or estimator contribution. The next replay gate must consume the original
 source-root provenance directly and fail closed if a mapped result would become another source.
 
+Age-aware original-root replay is now proven for every live ring age. A separate 16-byte lane stores
+the cumulative capture-to-current camera translation plus the exact frame last advanced; it starts
+at zero after exact promotion and can advance only from frame N to N+1. Ages 1–3 reconstruct the
+immutable packed source-root origins in the current camera/terrain rebase and retrace their saved
+seeds. Identity records use full replay comparison, while mapped records use only the original-source
+comparator. No reconnection mapping is called, so a mapped result cannot become another spatial
+source. Twenty Vulkan readbacks covered 107342 eligible records: age 1/2/3 accepted
+35123/35179/35051 respectively, for 105353 total accepts and 1989 explicit fail-closed replay
+rejects. Metadata/provenance rejects and terminal/replay/age accounting deltas were all zero. This
+still authorizes no receiver reconnection, mapping composition, weight update, history write, or
+estimator contribution. The next gate is direct world-space reprojection/admission of the retained
+receiver root for ages 1–3, without chaining per-frame motion vectors.
+
 ## Delivery Phases
 
 ### Phase 0 — Wavefront Integration Baseline

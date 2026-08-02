@@ -273,7 +273,25 @@ public static const uint PATH_GUIDE_BRANCH_CANDIDATE_RETENTION_EXPIRED = 270u;
 public static const uint PATH_GUIDE_BRANCH_CANDIDATE_RETENTION_IDENTITY_LIVE = 271u;
 public static const uint PATH_GUIDE_BRANCH_CANDIDATE_RETENTION_MAPPED_LIVE = 272u;
 public static const uint PATH_GUIDE_BRANCH_CANDIDATE_RETENTION_DELTA = 273u;
-public static const uint PATH_SHIFT_DIAGNOSTIC_COUNTER_COUNT = 274u;
+public static const uint PATH_GUIDE_BRANCH_AGE_REPLAY_ATTEMPTED = 274u;
+public static const uint PATH_GUIDE_BRANCH_AGE_REPLAY_EMPTY = 275u;
+public static const uint PATH_GUIDE_BRANCH_AGE_REPLAY_METADATA_REJECT = 276u;
+public static const uint PATH_GUIDE_BRANCH_AGE_REPLAY_CURRENT_SKIP = 277u;
+public static const uint PATH_GUIDE_BRANCH_AGE_REPLAY_EXPIRED = 278u;
+public static const uint PATH_GUIDE_BRANCH_AGE_REPLAY_PROVENANCE_REJECT = 279u;
+public static const uint PATH_GUIDE_BRANCH_AGE_REPLAY_AGE_ONE_ELIGIBLE = 280u;
+public static const uint PATH_GUIDE_BRANCH_AGE_REPLAY_AGE_TWO_ELIGIBLE = 281u;
+public static const uint PATH_GUIDE_BRANCH_AGE_REPLAY_AGE_THREE_ELIGIBLE = 282u;
+public static const uint PATH_GUIDE_BRANCH_AGE_REPLAY_IDENTITY_ACCEPTED = 283u;
+public static const uint PATH_GUIDE_BRANCH_AGE_REPLAY_IDENTITY_REJECT = 284u;
+public static const uint PATH_GUIDE_BRANCH_AGE_REPLAY_MAPPED_ROOT_ACCEPTED = 285u;
+public static const uint PATH_GUIDE_BRANCH_AGE_REPLAY_MAPPED_ROOT_REJECT = 286u;
+public static const uint PATH_GUIDE_BRANCH_AGE_REPLAY_DELTA = 287u;
+public static const uint PATH_GUIDE_BRANCH_AGE_REPLAY_AGE_ONE_ACCEPTED = 288u;
+public static const uint PATH_GUIDE_BRANCH_AGE_REPLAY_AGE_TWO_ACCEPTED = 289u;
+public static const uint PATH_GUIDE_BRANCH_AGE_REPLAY_AGE_THREE_ACCEPTED = 290u;
+public static const uint PATH_GUIDE_BRANCH_AGE_REPLAY_AGE_DELTA = 291u;
+public static const uint PATH_SHIFT_DIAGNOSTIC_COUNTER_COUNT = 292u;
 public static const uint PATH_SHIFT_DIAGNOSTIC_PAIR_MASK = 3u;
 public static const uint PATH_SHIFT_DIAGNOSTIC_MERGE_PAIR_OFFSET =
         PATH_SPATIAL_DIAGNOSTIC_PAIR_CAPACITY * 2u;
@@ -383,6 +401,7 @@ public static const uint PATH_GUIDE_PREVIOUS_AVAILABLE_FLAG = 512u;
 public static const uint PATH_GUIDE_BRANCH_PREVIOUS_AVAILABLE_FLAG = 1024u;
 public static const uint PATH_GUIDE_BRANCH_SCRATCH_VALIDATE_PASS_FLAG = 2048u;
 public static const uint PATH_GUIDE_BRANCH_CANDIDATE_RETENTION_PASS_FLAG = 4096u;
+public static const uint PATH_GUIDE_BRANCH_AGE_REPLAY_PASS_FLAG = 8192u;
 // replayControl.y == 0 keeps a terminal sentinel outside the valid replay-segment domain. The
 // magic prevents a cleared or partially written record from being mistaken for an intentional
 // sample-copy terminal state.
