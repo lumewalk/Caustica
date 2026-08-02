@@ -760,8 +760,18 @@ source. Twenty Vulkan readbacks covered 107342 eligible records: age 1/2/3 accep
 35123/35179/35051 respectively, for 105353 total accepts and 1989 explicit fail-closed replay
 rejects. Metadata/provenance rejects and terminal/replay/age accounting deltas were all zero. This
 still authorizes no receiver reconnection, mapping composition, weight update, history write, or
-estimator contribution. The next gate is direct world-space reprojection/admission of the retained
-receiver root for ages 1–3, without chaining per-frame motion vectors.
+estimator contribution.
+
+The next isolated gate directly reprojects the retained receiver root for ages 1–3. It converts the
+capture-time camera-relative root with the cumulative camera delta, projects it with the current
+view-projection, and searches only a 3x3 current-guide footprint. It never chains motion vectors.
+Strict position/normal/roughness/full-material comparison admitted 109946 of 110106 replay-approved
+records across 22 Vulkan readbacks (age 1/2/3: 36917/36489/36540); 160 surface changes failed closed,
+clip/bounds rejects were zero, and terminal plus mapping accounting were exact. The next gate is a
+register/counter-only direct source-to-current-receiver remap for these admitted aged records. It
+must recompute geometry, directional PDFs and Jacobian from the immutable original source root and
+must not multiply or compose the previously stored mapping Jacobian. History and estimator writes
+remain forbidden.
 
 ## Delivery Phases
 

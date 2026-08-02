@@ -459,8 +459,19 @@ each age, `provenance=0`, and `delta=replayDelta=ageDelta=0`. The proven run cov
 327680 attempts. All 107342 age-eligible records split across age 1/2/3 as 35612/35867/35863, with
 accepted counts 35123/35179/35051. Overall acceptance was 105353 (10382 identity and 94971 mapped
 original-root), while 1989 exact replay rejects remained explicit. Metadata/provenance rejects and
-all accounting deltas were zero. This pass still does not reproject a receiver, construct a new
-mapping, change weights, write history, or affect the estimator.
+all accounting deltas were zero.
+
+After source replay succeeds, the same age pass directly projects the immutable capture-time
+receiver root through `curViewProj`. Camera-relative projection subtracts the accumulated capture-to-
+current camera delta; comparison with the current guide buffers adds `current camOffset - cumulative
+camera delta`. A 3x3 search tolerates pixel quantization, but position, normal, roughness and the full
+24-bit material identity still use the strict replay predicates. Motion vectors are not read. The
+runtime line `RT path guide branch receiver admission` must have exact `terminal=eligible`,
+`delta=0`, `mappingDelta=0`, and nonzero admitted counts for ages 1–3. The proven static run covered
+22 readbacks: 110106 eligible, 109946 admitted (36917/36489/36540 by age), 160 explicit surface
+rejects, and zero clip/bounds rejects. Mapping ownership also balanced exactly as 10319 identity +
+99627 mapped. This gate only classifies current receiver roots; it does not construct a new mapping,
+change weights, write history, or affect the estimator.
 
 For a fresh runtime check, use debug view 20 and inspect `run/logs/latest.log`. Normal operation
 requires `RT bring-up OK`, Vulkan, the intended NVIDIA device, exact zero-delta counter partitions,

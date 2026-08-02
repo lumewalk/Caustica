@@ -1186,6 +1186,70 @@ final class RtPathSpatialReuseReference {
                 : BranchCandidateAgeReplayOutcome.IDENTITY_REJECT;
     }
 
+    record BranchReceiverPosition(double x, double y, double z) {
+        BranchReceiverPosition {
+            if (!Double.isFinite(x) || !Double.isFinite(y) || !Double.isFinite(z)) {
+                throw new IllegalArgumentException("branch receiver position must be finite");
+            }
+        }
+    }
+
+    /** Reconstructs a capture-time camera-relative receiver in the current guide-buffer frame. */
+    static BranchReceiverPosition branchReceiverCurrentGuidePosition(
+            BranchReceiverPosition capturedCameraRelative,
+            BranchReceiverPosition currentCameraOffset,
+            BranchReplayCameraProvenance replayCamera) {
+        if (capturedCameraRelative == null || currentCameraOffset == null
+                || replayCamera == null) {
+            throw new IllegalArgumentException(
+                    "branch receiver reprojection requires position and camera provenance");
+        }
+        return new BranchReceiverPosition(
+                capturedCameraRelative.x() + currentCameraOffset.x() - replayCamera.deltaX(),
+                capturedCameraRelative.y() + currentCameraOffset.y() - replayCamera.deltaY(),
+                capturedCameraRelative.z() + currentCameraOffset.z() - replayCamera.deltaZ());
+    }
+
+    enum BranchReceiverAdmissionOutcome {
+        SOURCE_REPLAY_REJECT,
+        CLIP_REJECT,
+        BOUNDS_REJECT,
+        SURFACE_REJECT,
+        AGE_ONE_ADMITTED,
+        AGE_TWO_ADMITTED,
+        AGE_THREE_ADMITTED
+    }
+
+    /** Ordered CPU mirror for direct world-space receiver-root admission. */
+    static BranchReceiverAdmissionOutcome branchReceiverAdmissionOutcome(
+            BranchCandidateRetentionOutcome retention, boolean originalRootReplayMatches,
+            boolean clipVisible, boolean candidateInBounds, boolean strictSurfaceMatch) {
+        if (!originalRootReplayMatches) {
+            return BranchReceiverAdmissionOutcome.SOURCE_REPLAY_REJECT;
+        }
+        if (retention != BranchCandidateRetentionOutcome.AGE_ONE
+                && retention != BranchCandidateRetentionOutcome.AGE_TWO
+                && retention != BranchCandidateRetentionOutcome.AGE_THREE) {
+            throw new IllegalArgumentException(
+                    "receiver admission requires a live aged branch candidate");
+        }
+        if (!clipVisible) {
+            return BranchReceiverAdmissionOutcome.CLIP_REJECT;
+        }
+        if (!candidateInBounds) {
+            return BranchReceiverAdmissionOutcome.BOUNDS_REJECT;
+        }
+        if (!strictSurfaceMatch) {
+            return BranchReceiverAdmissionOutcome.SURFACE_REJECT;
+        }
+        return switch (retention) {
+            case AGE_ONE -> BranchReceiverAdmissionOutcome.AGE_ONE_ADMITTED;
+            case AGE_TWO -> BranchReceiverAdmissionOutcome.AGE_TWO_ADMITTED;
+            case AGE_THREE -> BranchReceiverAdmissionOutcome.AGE_THREE_ADMITTED;
+            default -> throw new IllegalStateException("unreachable branch receiver age");
+        };
+    }
+
     /**
      * Ordered CPU mirror for the post-barrier exact-lane validation sample. Reservoir and root
      * equality are bitwise requirements; acceptance remains diagnostic-only.

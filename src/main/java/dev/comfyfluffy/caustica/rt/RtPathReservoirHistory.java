@@ -324,7 +324,17 @@ final class RtPathReservoirHistory {
     static final int GUIDE_BRANCH_AGE_REPLAY_AGE_TWO_ACCEPTED_INDEX = 289;
     static final int GUIDE_BRANCH_AGE_REPLAY_AGE_THREE_ACCEPTED_INDEX = 290;
     static final int GUIDE_BRANCH_AGE_REPLAY_AGE_DELTA_INDEX = 291;
-    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 292;
+    static final int GUIDE_BRANCH_RECEIVER_ELIGIBLE_INDEX = 292;
+    static final int GUIDE_BRANCH_RECEIVER_CLIP_REJECT_INDEX = 293;
+    static final int GUIDE_BRANCH_RECEIVER_BOUNDS_REJECT_INDEX = 294;
+    static final int GUIDE_BRANCH_RECEIVER_SURFACE_REJECT_INDEX = 295;
+    static final int GUIDE_BRANCH_RECEIVER_AGE_ONE_ADMITTED_INDEX = 296;
+    static final int GUIDE_BRANCH_RECEIVER_AGE_TWO_ADMITTED_INDEX = 297;
+    static final int GUIDE_BRANCH_RECEIVER_AGE_THREE_ADMITTED_INDEX = 298;
+    static final int GUIDE_BRANCH_RECEIVER_IDENTITY_ADMITTED_INDEX = 299;
+    static final int GUIDE_BRANCH_RECEIVER_MAPPED_ADMITTED_INDEX = 300;
+    static final int GUIDE_BRANCH_RECEIVER_DELTA_INDEX = 301;
+    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 302;
     static final int SHIFTED_RECEIVER_GUIDE_STRIDE = 8 * Float.BYTES;
     static final int BRANCH_CANDIDATE_TAG_STRIDE = 2 * Integer.BYTES;
     static final int SPATIAL_DIAGNOSTIC_COUNTER_BYTES =
@@ -1275,6 +1285,24 @@ final class RtPathReservoirHistory {
                     counters.get(GUIDE_BRANCH_AGE_REPLAY_AGE_TWO_ACCEPTED_INDEX));
             long guideBranchAgeReplayAgeThreeAccepted = Integer.toUnsignedLong(
                     counters.get(GUIDE_BRANCH_AGE_REPLAY_AGE_THREE_ACCEPTED_INDEX));
+            long guideBranchReceiverEligible = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_RECEIVER_ELIGIBLE_INDEX));
+            long guideBranchReceiverClipReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_RECEIVER_CLIP_REJECT_INDEX));
+            long guideBranchReceiverBoundsReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_RECEIVER_BOUNDS_REJECT_INDEX));
+            long guideBranchReceiverSurfaceReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_RECEIVER_SURFACE_REJECT_INDEX));
+            long guideBranchReceiverAgeOneAdmitted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_RECEIVER_AGE_ONE_ADMITTED_INDEX));
+            long guideBranchReceiverAgeTwoAdmitted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_RECEIVER_AGE_TWO_ADMITTED_INDEX));
+            long guideBranchReceiverAgeThreeAdmitted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_RECEIVER_AGE_THREE_ADMITTED_INDEX));
+            long guideBranchReceiverIdentityAdmitted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_RECEIVER_IDENTITY_ADMITTED_INDEX));
+            long guideBranchReceiverMappedAdmitted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_RECEIVER_MAPPED_ADMITTED_INDEX));
             long crossFrameReceiverReject = crossFrameReceiverSurfaceReject
                     + crossFrameReceiverSampleReject + crossFrameReceiverEdgeReject
                     + crossFrameReceiverTopologyReject + crossFrameReceiverDepthReject
@@ -1982,6 +2010,33 @@ final class RtPathReservoirHistory {
                             - guideBranchAgeReplayAgeOneAccepted
                             - guideBranchAgeReplayAgeTwoAccepted
                             - guideBranchAgeReplayAgeThreeAccepted);
+            long guideBranchReceiverAdmitted = guideBranchReceiverAgeOneAdmitted
+                    + guideBranchReceiverAgeTwoAdmitted
+                    + guideBranchReceiverAgeThreeAdmitted;
+            long guideBranchReceiverTerminal = guideBranchReceiverClipReject
+                    + guideBranchReceiverBoundsReject
+                    + guideBranchReceiverSurfaceReject
+                    + guideBranchReceiverAdmitted;
+            long guideBranchReceiverMappingAdmitted = guideBranchReceiverIdentityAdmitted
+                    + guideBranchReceiverMappedAdmitted;
+            CausticaMod.LOGGER.info(
+                    "RT path guide branch receiver admission: eligible={}, clip={}, bounds={}, "
+                            + "surface={}, age[one={},two={},three={}], admitted={}, "
+                            + "mapping[identity={},mapped={}], terminal={}, delta={}, "
+                            + "mappingDelta={}",
+                    guideBranchReceiverEligible,
+                    guideBranchReceiverClipReject,
+                    guideBranchReceiverBoundsReject,
+                    guideBranchReceiverSurfaceReject,
+                    guideBranchReceiverAgeOneAdmitted,
+                    guideBranchReceiverAgeTwoAdmitted,
+                    guideBranchReceiverAgeThreeAdmitted,
+                    guideBranchReceiverAdmitted,
+                    guideBranchReceiverIdentityAdmitted,
+                    guideBranchReceiverMappedAdmitted,
+                    guideBranchReceiverTerminal,
+                    guideBranchReceiverEligible - guideBranchReceiverTerminal,
+                    guideBranchReceiverAdmitted - guideBranchReceiverMappingAdmitted);
             spatialDiagnosticViewPending = 0;
             return;
         }

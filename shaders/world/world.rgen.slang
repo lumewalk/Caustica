@@ -2018,6 +2018,69 @@ static void pathBranchAgeReplayValidate() {
             : replayMatches
                     ? PATH_GUIDE_BRANCH_AGE_REPLAY_IDENTITY_ACCEPTED
                     : PATH_GUIDE_BRANCH_AGE_REPLAY_IDENTITY_REJECT], 1u);
+    if (!replayMatches) return;
+
+    // Reproject the immutable capture-time receiver root directly into this frame. The
+    // accumulated camera delta converts its camera-relative capture position to current camera
+    // space; no chain of per-frame motion vectors is consulted. A 3x3 footprint tolerates pixel
+    // quantization only: position, normal, roughness and the full material identity remain exact
+    // replay-contract comparisons. This gate is diagnostic-only and never creates another map.
+    InterlockedAdd(counters[PATH_GUIDE_BRANCH_RECEIVER_ELIGIBLE], 1u);
+    float3 currentReceiverCamRelative = root.receiverPositionMaterial.xyz
+            - capture.replayCameraDelta;
+    float4 receiverClip = mul(worldPush.curViewProj,
+            float4(currentReceiverCamRelative, 1.0));
+    if (!(receiverClip.w > 0.0) || !all(isfinite(receiverClip))) {
+        InterlockedAdd(counters[PATH_GUIDE_BRANCH_RECEIVER_CLIP_REJECT], 1u);
+        return;
+    }
+
+    uint guideWidth;
+    uint guideHeight;
+    gRestirPositionMaterial.GetDimensions(guideWidth, guideHeight);
+    uint2 guideDimensions = uint2(guideWidth, guideHeight);
+    float2 receiverNdc = receiverClip.xy / receiverClip.w;
+    int2 projectedReceiverTexel = int2(floor(
+            (receiverNdc * 0.5 + 0.5) * float2(guideDimensions)));
+    float4 retainedReceiverPositionMaterial = root.receiverPositionMaterial;
+    retainedReceiverPositionMaterial.xyz += replayRebase;
+    bool receiverCandidateInBounds = false;
+    bool receiverMatched = false;
+    for (int oy = -1; oy <= 1 && !receiverMatched; ++oy) {
+        for (int ox = -1; ox <= 1 && !receiverMatched; ++ox) {
+            int2 candidateTexel = projectedReceiverTexel + int2(ox, oy);
+            if (any(candidateTexel < int2(0, 0))
+                    || any(candidateTexel >= int2(guideDimensions))) continue;
+            receiverCandidateInBounds = true;
+            float4 candidatePositionMaterial = gRestirPositionMaterial[candidateTexel];
+            float4 candidateNormalRoughness = gRestirNormalRoughness[candidateTexel];
+            receiverMatched = pathReplayPositionMatches(
+                            retainedReceiverPositionMaterial.xyz,
+                            candidatePositionMaterial.xyz)
+                    && pathReplayColorMatches(root.receiverNormalRoughness.xyz,
+                            candidateNormalRoughness.xyz)
+                    && pathReplayFloatMatches(root.receiverNormalRoughness.w,
+                            candidateNormalRoughness.w)
+                    && uint(max(retainedReceiverPositionMaterial.w, 0.0))
+                            == uint(max(candidatePositionMaterial.w, 0.0));
+        }
+    }
+    if (!receiverCandidateInBounds) {
+        InterlockedAdd(counters[PATH_GUIDE_BRANCH_RECEIVER_BOUNDS_REJECT], 1u);
+        return;
+    }
+    if (!receiverMatched) {
+        InterlockedAdd(counters[PATH_GUIDE_BRANCH_RECEIVER_SURFACE_REJECT], 1u);
+        return;
+    }
+    InterlockedAdd(counters[age == 1u
+            ? PATH_GUIDE_BRANCH_RECEIVER_AGE_ONE_ADMITTED
+            : age == 2u
+                    ? PATH_GUIDE_BRANCH_RECEIVER_AGE_TWO_ADMITTED
+                    : PATH_GUIDE_BRANCH_RECEIVER_AGE_THREE_ADMITTED], 1u);
+    InterlockedAdd(counters[mappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION
+            ? PATH_GUIDE_BRANCH_RECEIVER_MAPPED_ADMITTED
+            : PATH_GUIDE_BRANCH_RECEIVER_IDENTITY_ADMITTED], 1u);
 }
 
 static void pathBranchScratchReplayValidate() {
