@@ -212,7 +212,12 @@ final class RtPathReservoirHistory {
     static final int GUIDE_PREVIOUS_SELECTION_CURRENT_DENOMINATOR_INVALID_INDEX = 181;
     static final int GUIDE_PREVIOUS_SELECTION_SOURCE_DENOMINATOR_VALID_INDEX = 182;
     static final int GUIDE_PREVIOUS_SELECTION_SOURCE_DENOMINATOR_INVALID_INDEX = 183;
-    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 184;
+    static final int GUIDE_PREVIOUS_SELECTION_PROBABILITY_HIGH_REJECT_INDEX = 184;
+    static final int GUIDE_PREVIOUS_STABLE_SELECTION_ELIGIBLE_INDEX = 185;
+    static final int GUIDE_PREVIOUS_STABLE_SELECTION_POSITIVE_INDEX = 186;
+    static final int GUIDE_PREVIOUS_STABLE_SELECTION_ZERO_INDEX = 187;
+    static final int GUIDE_PREVIOUS_STABLE_SELECTION_INVALID_INDEX = 188;
+    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 189;
     static final int SHIFTED_RECEIVER_GUIDE_STRIDE = 8 * Float.BYTES;
     static final int SPATIAL_DIAGNOSTIC_COUNTER_BYTES =
             SHIFTED_DIAGNOSTIC_COUNTER_COUNT * Integer.BYTES;
@@ -847,6 +852,16 @@ final class RtPathReservoirHistory {
                     counters.get(GUIDE_PREVIOUS_SELECTION_SOURCE_DENOMINATOR_VALID_INDEX));
             long guidePreviousSelectionSourceDenominatorInvalid = Integer.toUnsignedLong(
                     counters.get(GUIDE_PREVIOUS_SELECTION_SOURCE_DENOMINATOR_INVALID_INDEX));
+            long guidePreviousSelectionProbabilityHighReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_SELECTION_PROBABILITY_HIGH_REJECT_INDEX));
+            long guidePreviousStableSelectionEligible = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_STABLE_SELECTION_ELIGIBLE_INDEX));
+            long guidePreviousStableSelectionPositive = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_STABLE_SELECTION_POSITIVE_INDEX));
+            long guidePreviousStableSelectionZero = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_STABLE_SELECTION_ZERO_INDEX));
+            long guidePreviousStableSelectionInvalid = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_STABLE_SELECTION_INVALID_INDEX));
             long crossFrameReceiverReject = crossFrameReceiverSurfaceReject
                     + crossFrameReceiverSampleReject + crossFrameReceiverEdgeReject
                     + crossFrameReceiverTopologyReject + crossFrameReceiverDepthReject
@@ -1212,9 +1227,10 @@ final class RtPathReservoirHistory {
             CausticaMod.LOGGER.info(
                     "RT path guide previous selection denominator: eligible={}, "
                             + "next[valid={},invalid={},delta={}] "
-                            + "probability[valid={},invalid={},delta={}] "
+                            + "cappedProbability[valid={},high={},invalid={},delta={}] "
                             + "current[valid={},invalid={},delta={}] "
-                            + "source[valid={},invalid={},delta={}]",
+                            + "source[valid={},invalid={},delta={}] "
+                            + "stable[eligible={},positive={},zero={},invalid={},delta={}]",
                     guidePreviousSelectionProbabilityEligible,
                     guidePreviousSelectionDenominatorValid,
                     guidePreviousSelectionDenominatorInvalid,
@@ -1222,9 +1238,11 @@ final class RtPathReservoirHistory {
                             - guidePreviousSelectionDenominatorValid
                             - guidePreviousSelectionDenominatorInvalid,
                     guidePreviousSelectionProbabilityValid,
+                    guidePreviousSelectionProbabilityHighReject,
                     guidePreviousSelectionProbabilityInvalid,
                     guidePreviousSelectionProbabilityEligible
                             - guidePreviousSelectionProbabilityValid
+                            - guidePreviousSelectionProbabilityHighReject
                             - guidePreviousSelectionProbabilityInvalid,
                     guidePreviousSelectionCurrentDenominatorValid,
                     guidePreviousSelectionCurrentDenominatorInvalid,
@@ -1235,7 +1253,15 @@ final class RtPathReservoirHistory {
                     guidePreviousSelectionSourceDenominatorInvalid,
                     guidePreviousSelectionProbabilityEligible
                             - guidePreviousSelectionSourceDenominatorValid
-                            - guidePreviousSelectionSourceDenominatorInvalid);
+                            - guidePreviousSelectionSourceDenominatorInvalid,
+                    guidePreviousStableSelectionEligible,
+                    guidePreviousStableSelectionPositive,
+                    guidePreviousStableSelectionZero,
+                    guidePreviousStableSelectionInvalid,
+                    guidePreviousStableSelectionEligible
+                            - guidePreviousStableSelectionPositive
+                            - guidePreviousStableSelectionZero
+                            - guidePreviousStableSelectionInvalid);
             spatialDiagnosticViewPending = 0;
             return;
         }

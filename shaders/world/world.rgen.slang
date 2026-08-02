@@ -2168,19 +2168,43 @@ public void pathGuidePreviousReplayValidate() {
                                         && mergeWeight > 0.0 && nextWeightSum > 0.0
                                         ? mergeWeight / nextWeightSum
                                         : 0.0;
-                                bool selectionProbabilityValid = selectionDenominatorValid
+                                bool selectionProbabilityArithmeticValid =
+                                        selectionDenominatorValid
                                         && isfinite(selectionProbability)
-                                        && selectionProbability >= 0.0
-                                        && selectionProbability <= 1.0;
-                                InterlockedAdd(counters[selectionProbabilityValid
-                                        ? PATH_GUIDE_PREVIOUS_SELECTION_PROBABILITY_VALID
-                                        : PATH_GUIDE_PREVIOUS_SELECTION_PROBABILITY_INVALID], 1u);
+                                        && selectionProbability >= 0.0;
+                                uint selectionProbabilityCategory =
+                                        !selectionProbabilityArithmeticValid
+                                        ? PATH_GUIDE_PREVIOUS_SELECTION_PROBABILITY_INVALID
+                                        : selectionProbability > 1.0
+                                                ? PATH_GUIDE_PREVIOUS_SELECTION_PROBABILITY_HIGH_REJECT
+                                                : PATH_GUIDE_PREVIOUS_SELECTION_PROBABILITY_VALID;
+                                InterlockedAdd(counters[selectionProbabilityCategory], 1u);
                                 InterlockedAdd(counters[currentDenominatorValid
                                         ? PATH_GUIDE_PREVIOUS_SELECTION_CURRENT_DENOMINATOR_VALID
                                         : PATH_GUIDE_PREVIOUS_SELECTION_CURRENT_DENOMINATOR_INVALID], 1u);
                                 InterlockedAdd(counters[sourceDenominatorValid
                                         ? PATH_GUIDE_PREVIOUS_SELECTION_SOURCE_DENOMINATOR_VALID
                                         : PATH_GUIDE_PREVIOUS_SELECTION_SOURCE_DENOMINATOR_INVALID], 1u);
+
+                                // Overflow-stable A/B for the exact same weights. It deliberately
+                                // bypasses the stored weight-sum cap only for the relative selection
+                                // ratio and still performs no RNG draw or reservoir mutation.
+                                InterlockedAdd(counters[
+                                        PATH_GUIDE_PREVIOUS_STABLE_SELECTION_ELIGIBLE], 1u);
+                                float stableSelectionProbability = nextInputsValid
+                                        ? pathStableSelectionProbability(
+                                                current.weights.x, mergeWeight)
+                                        : 0.0;
+                                bool stableSelectionValid = nextInputsValid
+                                        && isfinite(stableSelectionProbability)
+                                        && stableSelectionProbability >= 0.0
+                                        && stableSelectionProbability <= 1.0;
+                                uint stableSelectionCategory = !stableSelectionValid
+                                        ? PATH_GUIDE_PREVIOUS_STABLE_SELECTION_INVALID
+                                        : stableSelectionProbability > 0.0
+                                                ? PATH_GUIDE_PREVIOUS_STABLE_SELECTION_POSITIVE
+                                                : PATH_GUIDE_PREVIOUS_STABLE_SELECTION_ZERO;
+                                InterlockedAdd(counters[stableSelectionCategory], 1u);
                             }
                         }
                     }
