@@ -402,6 +402,16 @@ fresh runtime gate covered 50857 eligible pairs across 28 readbacks: 45618 selec
 records were exact, with zero rejects and zero deltas. This is still a counter-only check; the next
 stage is the isolated device scratch write/read and one-frame replay of exactly the same pair.
 
+That isolated write/read gate is now active in view 20. Two ping-pong `PathReservoir` and
+`PathSourceRoot` slots are cleared before the previous replay pass; a branch pair is written only
+after register replay succeeds, and the next frame reads/reprojects/replays the previous slot. The
+latest 36 readbacks covered 6554880 attempts, with 24288 selected and 2587 retained accepts, zero
+metadata rejects and exact `attempted = terminal` accounting on every readback. Reprojection and
+source-replay rejects are expected strict categories, not repaired by tolerance loosening. The
+diagnostic allocation is 1130.43 MiB at 1280×673 and WorldPush is 672 bytes; all four branch BDA
+addresses are zero outside view 20. The next gate is explicit bit-for-bit equality between the
+register pair and its device-written payload/root.
+
 For a fresh runtime check, use debug view 20 and inspect `run/logs/latest.log`. Normal operation
 requires `RT bring-up OK`, Vulkan, the intended NVIDIA device, exact zero-delta counter partitions,
 and no `DEVICE_LOST`, `VK_ERROR`, GPU fault or shader compilation error. Debug colors and sparse

@@ -228,7 +228,18 @@ public static const uint PATH_GUIDE_PREVIOUS_PAIR_REPLAY_SELECTED_ACCEPTED = 225
 public static const uint PATH_GUIDE_PREVIOUS_PAIR_REPLAY_SELECTED_REJECT = 226u;
 public static const uint PATH_GUIDE_PREVIOUS_PAIR_REPLAY_RETAINED_ACCEPTED = 227u;
 public static const uint PATH_GUIDE_PREVIOUS_PAIR_REPLAY_RETAINED_REJECT = 228u;
-public static const uint PATH_SHIFT_DIAGNOSTIC_COUNTER_COUNT = 229u;
+public static const uint PATH_GUIDE_BRANCH_SCRATCH_REPLAY_ATTEMPTED = 229u;
+public static const uint PATH_GUIDE_BRANCH_SCRATCH_REPLAY_EMPTY = 230u;
+public static const uint PATH_GUIDE_BRANCH_SCRATCH_REPLAY_METADATA_REJECT = 231u;
+public static const uint PATH_GUIDE_BRANCH_SCRATCH_REPLAY_RECEIVER_REPROJECTION_REJECT = 232u;
+public static const uint PATH_GUIDE_BRANCH_SCRATCH_REPLAY_RECEIVER_SURFACE_REJECT = 233u;
+public static const uint PATH_GUIDE_BRANCH_SCRATCH_REPLAY_SOURCE_REPROJECTION_REJECT = 234u;
+public static const uint PATH_GUIDE_BRANCH_SCRATCH_REPLAY_SOURCE_SURFACE_REJECT = 235u;
+public static const uint PATH_GUIDE_BRANCH_SCRATCH_REPLAY_SOURCE_REPLAY_REJECT = 236u;
+public static const uint PATH_GUIDE_BRANCH_SCRATCH_REPLAY_SELECTED_ACCEPTED = 237u;
+public static const uint PATH_GUIDE_BRANCH_SCRATCH_REPLAY_RETAINED_ACCEPTED = 238u;
+public static const uint PATH_GUIDE_BRANCH_SCRATCH_REPLAY_DELTA = 239u;
+public static const uint PATH_SHIFT_DIAGNOSTIC_COUNTER_COUNT = 240u;
 public static const uint PATH_SHIFT_DIAGNOSTIC_PAIR_MASK = 3u;
 public static const uint PATH_SHIFT_DIAGNOSTIC_MERGE_PAIR_OFFSET =
         PATH_SPATIAL_DIAGNOSTIC_PAIR_CAPACITY * 2u;
@@ -335,6 +346,7 @@ public static const uint PATH_CROSS_FRAME_MAPPING_REPLAY_PASS_FLAG = 64u;
 public static const uint PATH_GUIDE_SCRATCH_VALIDATE_PASS_FLAG = 128u;
 public static const uint PATH_GUIDE_PREVIOUS_REPLAY_PASS_FLAG = 256u;
 public static const uint PATH_GUIDE_PREVIOUS_AVAILABLE_FLAG = 512u;
+public static const uint PATH_GUIDE_BRANCH_PREVIOUS_AVAILABLE_FLAG = 1024u;
 // replayControl.y == 0 keeps a terminal sentinel outside the valid replay-segment domain. The
 // magic prevents a cleared or partially written record from being mistaken for an intentional
 // sample-copy terminal state.

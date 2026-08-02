@@ -938,6 +938,7 @@ public final class RtComposite {
         int debugView = debugView();
         boolean previousShiftedSnapshot = false;
         boolean previousGuideScratch = false;
+        RtPathReservoirHistory.BranchScratchFrame branchScratchFrame = null;
         if (restirPt) {
             pathReservoirs.pollSpatialDiagnosticCounters(ctx, frameCounter);
             if (debugView == RtPathReservoirHistory.SHIFTED_RADIANCE_DEBUG_VIEW) {
@@ -945,6 +946,8 @@ public final class RtComposite {
                 previousShiftedSnapshot = pathReservoirs.previousShiftedSnapshotAvailable(
                         pathReservoirFrame, frameCounter);
                 previousGuideScratch = pathReservoirs.previousGuideScratchAvailable(
+                        pathReservoirFrame, frameCounter);
+                branchScratchFrame = pathReservoirs.beginBranchScratch(
                         pathReservoirFrame, frameCounter);
             }
         }
@@ -1095,7 +1098,15 @@ public final class RtComposite {
                     restirPt && debugView == RtPathReservoirHistory.SHIFTED_RADIANCE_DEBUG_VIEW
                             ? pathReservoirs.shiftedGuideScratchAddress() : 0L,
                     restirPt && debugView == RtPathReservoirHistory.SHIFTED_RADIANCE_DEBUG_VIEW
-                            ? pathReservoirs.shiftedGuideRootScratchAddress() : 0L
+                            ? pathReservoirs.shiftedGuideRootScratchAddress() : 0L,
+                    restirPt && debugView == RtPathReservoirHistory.SHIFTED_RADIANCE_DEBUG_VIEW
+                            ? pathReservoirs.branchScratchReservoirAddress(branchScratchFrame) : 0L,
+                    restirPt && debugView == RtPathReservoirHistory.SHIFTED_RADIANCE_DEBUG_VIEW
+                            ? pathReservoirs.branchScratchRootAddress(branchScratchFrame) : 0L,
+                    restirPt && debugView == RtPathReservoirHistory.SHIFTED_RADIANCE_DEBUG_VIEW
+                            ? pathReservoirs.previousBranchScratchReservoirAddress(branchScratchFrame) : 0L,
+                    restirPt && debugView == RtPathReservoirHistory.SHIFTED_RADIANCE_DEBUG_VIEW
+                            ? pathReservoirs.previousBranchScratchRootAddress(branchScratchFrame) : 0L
             ).write(push);
             pushBuf.flush(0L, WORLD_PUSH_SIZE);
             // Upload any entity textures registered this frame into the bindless set before the trace.
@@ -1150,6 +1161,10 @@ public final class RtComposite {
                             | (restirPt && (debugView == 13 || debugView == 15 || debugView == 16
                                     || debugView == 17 || debugView == 18 || debugView == 19
                                     || debugView == 20) ? 16 : 0);
+            if (restirPt && debugView == RtPathReservoirHistory.SHIFTED_RADIANCE_DEBUG_VIEW
+                    && branchScratchFrame != null && branchScratchFrame.previousAvailable()) {
+                pathHistoryFlags |= RtPathReservoirHistory.GUIDE_BRANCH_PREVIOUS_AVAILABLE_FLAG;
+            }
             WorldPushConstantsData worldConstants = new WorldPushConstantsData(
                     pushBuf.deviceAddress, terrain.tableAddress(), fe.geomTableAddr(),
                     RtMaterialRegistry.INSTANCE.tableAddress(),
@@ -1296,6 +1311,7 @@ public final class RtComposite {
                 VulkanCommandEncoder.memoryBarrier(cmd, stack);
                 if (debugView == RtPathReservoirHistory.SHIFTED_RADIANCE_DEBUG_VIEW) {
                     pathReservoirs.beginShiftedRadianceDiagnostics(cmd);
+                    pathReservoirs.beginCurrentBranchScratch(cmd, branchScratchFrame);
                     try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd,
                                  "path guide previous replay");
                          RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage(
@@ -1304,6 +1320,8 @@ public final class RtComposite {
                                 guidePreviousReplayPushConstants, 1);
                     }
                     VulkanCommandEncoder.memoryBarrier(cmd, stack);
+                    pathReservoirs.commitBranchScratch(
+                            branchScratchFrame, pathReservoirFrame, frameCounter);
                     // Previous guide records and roots have now been consumed. Reuse the same
                     // isolated buffers for the current frame instead of allocating a second pair.
                     pathReservoirs.beginCurrentGuideScratch(cmd);

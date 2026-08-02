@@ -1164,8 +1164,29 @@ final class RtPathSpatialReuseReferenceTest {
                 RtPathReservoirHistory.GUIDE_PREVIOUS_PAIR_REPLAY_RETAINED_ACCEPTED_INDEX);
         assertEquals(228,
                 RtPathReservoirHistory.GUIDE_PREVIOUS_PAIR_REPLAY_RETAINED_REJECT_INDEX);
-        assertEquals(229, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
-        assertEquals(229 * Integer.BYTES,
+        assertEquals(229,
+                RtPathReservoirHistory.GUIDE_BRANCH_SCRATCH_REPLAY_ATTEMPTED_INDEX);
+        assertEquals(230,
+                RtPathReservoirHistory.GUIDE_BRANCH_SCRATCH_REPLAY_EMPTY_INDEX);
+        assertEquals(231,
+                RtPathReservoirHistory.GUIDE_BRANCH_SCRATCH_REPLAY_METADATA_REJECT_INDEX);
+        assertEquals(232,
+                RtPathReservoirHistory.GUIDE_BRANCH_SCRATCH_REPLAY_RECEIVER_REPROJECTION_REJECT_INDEX);
+        assertEquals(233,
+                RtPathReservoirHistory.GUIDE_BRANCH_SCRATCH_REPLAY_RECEIVER_SURFACE_REJECT_INDEX);
+        assertEquals(234,
+                RtPathReservoirHistory.GUIDE_BRANCH_SCRATCH_REPLAY_SOURCE_REPROJECTION_REJECT_INDEX);
+        assertEquals(235,
+                RtPathReservoirHistory.GUIDE_BRANCH_SCRATCH_REPLAY_SOURCE_SURFACE_REJECT_INDEX);
+        assertEquals(236,
+                RtPathReservoirHistory.GUIDE_BRANCH_SCRATCH_REPLAY_SOURCE_REPLAY_REJECT_INDEX);
+        assertEquals(237,
+                RtPathReservoirHistory.GUIDE_BRANCH_SCRATCH_REPLAY_SELECTED_ACCEPTED_INDEX);
+        assertEquals(238,
+                RtPathReservoirHistory.GUIDE_BRANCH_SCRATCH_REPLAY_RETAINED_ACCEPTED_INDEX);
+        assertEquals(239, RtPathReservoirHistory.GUIDE_BRANCH_SCRATCH_REPLAY_DELTA_INDEX);
+        assertEquals(240, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
+        assertEquals(240 * Integer.BYTES,
                 RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_COUNTER_BYTES);
         assertEquals(32, RtPathReservoirHistory.SHIFTED_RECEIVER_GUIDE_STRIDE);
         assertEquals(27_566_080L,

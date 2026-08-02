@@ -703,6 +703,16 @@ total), no ABI lane and no full-resolution storage. The next bounded gate may wr
 validated pair to isolated view-20 scratch and read/replay it one frame later. It still may not enter
 committed history, become a spatial source, compose a mapping/Jacobian, or affect the estimator.
 
+The next isolated device scratch gate is now implemented and runtime-proven. Two ping-pong slots hold
+the complete branch reservoir/root pair; the shader writes only after register replay succeeds, then
+the following frame independently reprojects the receiver and source and replays the stored seeds.
+Thirty-six fresh Vulkan readbacks covered 6554880 attempts: 24288 selected and 2587 retained pairs
+were accepted, metadata rejects stayed zero, and every terminal partition had `delta = 0`. Strict
+receiver/source reprojection and source-replay tails remain explicit fail-closed categories. This
+diagnostic adds 32 B/pixel of ping-pong storage (1130.43 MiB total at 1280×673) and expands WorldPush
+to 672 bytes; ordinary rendering still receives zero addresses. Before history integration, the next
+bounded gate must compare the device-written payload/root against the register pair bit-for-bit.
+
 ## Delivery Phases
 
 ### Phase 0 — Wavefront Integration Baseline

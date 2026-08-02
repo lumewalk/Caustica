@@ -14,11 +14,12 @@ final class RtPathReservoirHistoryTest {
     void reflectedAbiIncludesReplayAndReconnectionGeometryLanes() {
         assertEquals(176, PathReservoirData.BYTE_SIZE);
         assertEquals(176, RtPathReservoirHistory.BYTES_PER_RESERVOIR);
-        assertEquals(640, WorldPushData.BYTE_SIZE);
-        assertEquals(229, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
-        assertEquals(916, RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_COUNTER_BYTES);
+        assertEquals(672, WorldPushData.BYTE_SIZE);
+        assertEquals(240, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
+        assertEquals(960, RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_COUNTER_BYTES);
         assertEquals(1 << 8, RtPathReservoirHistory.GUIDE_PREVIOUS_REPLAY_PASS_FLAG);
         assertEquals(1 << 9, RtPathReservoirHistory.GUIDE_PREVIOUS_AVAILABLE_FLAG);
+        assertEquals(1 << 10, RtPathReservoirHistory.GUIDE_BRANCH_PREVIOUS_AVAILABLE_FLAG);
     }
 
     @Test
@@ -53,6 +54,30 @@ final class RtPathReservoirHistoryTest {
         assertEquals(1, reset.writeSlot());
         assertEquals(-1, reset.previousSlot());
         assertFalse(reset.previousAvailable());
+    }
+
+    @Test
+    void branchScratchStateAlternatesOnlyAcrossAdjacentCompatibleFrames() {
+        RtPathReservoirHistory.BranchScratchState state =
+                new RtPathReservoirHistory.BranchScratchState();
+        RtPathReservoirHistory.Frame first = new RtPathReservoirHistory.Frame(
+                7L, 0, -1, false);
+        RtPathReservoirHistory.BranchScratchFrame firstScratch = state.begin(first, 10L);
+        assertEquals(0, firstScratch.writeSlot());
+        assertFalse(firstScratch.previousAvailable());
+        state.commit(firstScratch, 10L, first.generation());
+
+        RtPathReservoirHistory.Frame second = new RtPathReservoirHistory.Frame(
+                7L, 1, 0, true);
+        RtPathReservoirHistory.BranchScratchFrame secondScratch = state.begin(second, 11L);
+        assertEquals(1, secondScratch.writeSlot());
+        assertEquals(0, secondScratch.previousSlot());
+        assertTrue(secondScratch.previousAvailable());
+
+        RtPathReservoirHistory.Frame afterGap = new RtPathReservoirHistory.Frame(
+                7L, 0, 1, true);
+        RtPathReservoirHistory.BranchScratchFrame gapScratch = state.begin(afterGap, 13L);
+        assertFalse(gapScratch.previousAvailable());
     }
 
     @Test
