@@ -196,7 +196,14 @@ final class RtPathReservoirHistory {
     static final int GUIDE_PREVIOUS_WEIGHT_ZERO_INDEX = 165;
     static final int GUIDE_PREVIOUS_WEIGHT_POSITIVE_INDEX = 166;
     static final int GUIDE_PREVIOUS_WEIGHT_INVALID_INDEX = 167;
-    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 168;
+    static final int GUIDE_PREVIOUS_POST_WEIGHT_ELIGIBLE_INDEX = 168;
+    static final int GUIDE_PREVIOUS_POST_WEIGHT_NEXT_VALID_INDEX = 169;
+    static final int GUIDE_PREVIOUS_POST_WEIGHT_NEXT_INVALID_INDEX = 170;
+    static final int GUIDE_PREVIOUS_POST_WEIGHT_CURRENT_VALID_INDEX = 171;
+    static final int GUIDE_PREVIOUS_POST_WEIGHT_CURRENT_INVALID_INDEX = 172;
+    static final int GUIDE_PREVIOUS_POST_WEIGHT_SOURCE_VALID_INDEX = 173;
+    static final int GUIDE_PREVIOUS_POST_WEIGHT_SOURCE_INVALID_INDEX = 174;
+    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 175;
     static final int SHIFTED_RECEIVER_GUIDE_STRIDE = 8 * Float.BYTES;
     static final int SPATIAL_DIAGNOSTIC_COUNTER_BYTES =
             SHIFTED_DIAGNOSTIC_COUNTER_COUNT * Integer.BYTES;
@@ -799,6 +806,20 @@ final class RtPathReservoirHistory {
                     counters.get(GUIDE_PREVIOUS_WEIGHT_POSITIVE_INDEX));
             long guidePreviousWeightInvalid = Integer.toUnsignedLong(
                     counters.get(GUIDE_PREVIOUS_WEIGHT_INVALID_INDEX));
+            long guidePreviousPostWeightEligible = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_POST_WEIGHT_ELIGIBLE_INDEX));
+            long guidePreviousPostWeightNextValid = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_POST_WEIGHT_NEXT_VALID_INDEX));
+            long guidePreviousPostWeightNextInvalid = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_POST_WEIGHT_NEXT_INVALID_INDEX));
+            long guidePreviousPostWeightCurrentValid = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_POST_WEIGHT_CURRENT_VALID_INDEX));
+            long guidePreviousPostWeightCurrentInvalid = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_POST_WEIGHT_CURRENT_INVALID_INDEX));
+            long guidePreviousPostWeightSourceValid = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_POST_WEIGHT_SOURCE_VALID_INDEX));
+            long guidePreviousPostWeightSourceInvalid = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PREVIOUS_POST_WEIGHT_SOURCE_INVALID_INDEX));
             long crossFrameReceiverReject = crossFrameReceiverSurfaceReject
                     + crossFrameReceiverSampleReject + crossFrameReceiverEdgeReject
                     + crossFrameReceiverTopologyReject + crossFrameReceiverDepthReject
@@ -1141,6 +1162,26 @@ final class RtPathReservoirHistory {
                     guidePreviousWeightPositive, guidePreviousWeightInvalid,
                     guidePreviousWeightTerminal,
                     guidePreviousWeightEligible - guidePreviousWeightTerminal);
+            CausticaMod.LOGGER.info(
+                    "RT path guide previous post-weight: eligible={}, "
+                            + "next[valid={},invalid={},delta={}] "
+                            + "current[valid={},invalid={},delta={}] "
+                            + "source[valid={},invalid={},delta={}]",
+                    guidePreviousPostWeightEligible,
+                    guidePreviousPostWeightNextValid, guidePreviousPostWeightNextInvalid,
+                    guidePreviousPostWeightEligible
+                            - guidePreviousPostWeightNextValid
+                            - guidePreviousPostWeightNextInvalid,
+                    guidePreviousPostWeightCurrentValid,
+                    guidePreviousPostWeightCurrentInvalid,
+                    guidePreviousPostWeightEligible
+                            - guidePreviousPostWeightCurrentValid
+                            - guidePreviousPostWeightCurrentInvalid,
+                    guidePreviousPostWeightSourceValid,
+                    guidePreviousPostWeightSourceInvalid,
+                    guidePreviousPostWeightEligible
+                            - guidePreviousPostWeightSourceValid
+                            - guidePreviousPostWeightSourceInvalid);
             spatialDiagnosticViewPending = 0;
             return;
         }

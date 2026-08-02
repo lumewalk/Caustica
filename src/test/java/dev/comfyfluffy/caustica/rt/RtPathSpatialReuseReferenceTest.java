@@ -1046,8 +1046,22 @@ final class RtPathSpatialReuseReferenceTest {
         assertEquals(165, RtPathReservoirHistory.GUIDE_PREVIOUS_WEIGHT_ZERO_INDEX);
         assertEquals(166, RtPathReservoirHistory.GUIDE_PREVIOUS_WEIGHT_POSITIVE_INDEX);
         assertEquals(167, RtPathReservoirHistory.GUIDE_PREVIOUS_WEIGHT_INVALID_INDEX);
-        assertEquals(168, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
-        assertEquals(168 * Integer.BYTES,
+        assertEquals(168,
+                RtPathReservoirHistory.GUIDE_PREVIOUS_POST_WEIGHT_ELIGIBLE_INDEX);
+        assertEquals(169,
+                RtPathReservoirHistory.GUIDE_PREVIOUS_POST_WEIGHT_NEXT_VALID_INDEX);
+        assertEquals(170,
+                RtPathReservoirHistory.GUIDE_PREVIOUS_POST_WEIGHT_NEXT_INVALID_INDEX);
+        assertEquals(171,
+                RtPathReservoirHistory.GUIDE_PREVIOUS_POST_WEIGHT_CURRENT_VALID_INDEX);
+        assertEquals(172,
+                RtPathReservoirHistory.GUIDE_PREVIOUS_POST_WEIGHT_CURRENT_INVALID_INDEX);
+        assertEquals(173,
+                RtPathReservoirHistory.GUIDE_PREVIOUS_POST_WEIGHT_SOURCE_VALID_INDEX);
+        assertEquals(174,
+                RtPathReservoirHistory.GUIDE_PREVIOUS_POST_WEIGHT_SOURCE_INVALID_INDEX);
+        assertEquals(175, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
+        assertEquals(175 * Integer.BYTES,
                 RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_COUNTER_BYTES);
         assertEquals(32, RtPathReservoirHistory.SHIFTED_RECEIVER_GUIDE_STRIDE);
         assertEquals(27_566_080L,

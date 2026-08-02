@@ -1692,7 +1692,8 @@ public void pathGuidePreviousReplayValidate() {
             || (pc.historyFlags & PATH_GUIDE_PREVIOUS_REPLAY_PASS_FLAG) == 0u
             || worldPush.pathShiftDiagnosticCounterAddr == 0u
             || worldPush.pathShiftGuideScratchAddr == 0u
-            || worldPush.pathShiftGuideRootScratchAddr == 0u) {
+            || worldPush.pathShiftGuideRootScratchAddr == 0u
+            || pc.pathReservoirAddr == 0u) {
         return;
     }
 
@@ -2073,6 +2074,75 @@ public void pathGuidePreviousReplayValidate() {
                                                         ? PATH_GUIDE_PREVIOUS_WEIGHT_ZERO
                                                         : PATH_GUIDE_PREVIOUS_WEIGHT_INVALID;
                                 InterlockedAdd(counters[weightCategory], 1u);
+
+                                // Post-weight arithmetic audit for both possible reservoir
+                                // payloads. We intentionally evaluate current-retained and
+                                // previous-source final weights independently instead of selecting
+                                // one with RNG. No reservoir lane is written.
+                                InterlockedAdd(counters[
+                                        PATH_GUIDE_PREVIOUS_POST_WEIGHT_ELIGIBLE], 1u);
+                                PathReservoir current = ConstPtr<PathReservoir>(
+                                        pc.pathReservoirAddr)[pixelIndex];
+                                bool currentTermsValid = all(isfinite(current.weights))
+                                        && all(current.weights >= float4(0.0))
+                                        && isfinite(current.sampleRadianceTarget.w)
+                                        && current.sampleRadianceTarget.w >= 0.0;
+                                bool nextInputsValid = currentTermsValid && weightTermsValid
+                                        && isfinite(mergeWeight) && mergeWeight >= 0.0;
+                                float nextWeightSum = nextInputsValid
+                                        ? min(current.weights.x + mergeWeight, 1.0e30)
+                                        : 0.0;
+                                float nextEffectiveCount = nextInputsValid
+                                        ? min(current.weights.y + sourceEffectiveCount,
+                                                16777216.0)
+                                        : 0.0;
+                                bool nextValid = nextInputsValid
+                                        && isfinite(nextWeightSum) && nextWeightSum >= 0.0
+                                        && isfinite(nextEffectiveCount)
+                                        && nextEffectiveCount >= 0.0;
+                                InterlockedAdd(counters[nextValid
+                                        ? PATH_GUIDE_PREVIOUS_POST_WEIGHT_NEXT_VALID
+                                        : PATH_GUIDE_PREVIOUS_POST_WEIGHT_NEXT_INVALID], 1u);
+
+                                bool currentFinalValid = false;
+                                if (nextValid) {
+                                    if (nextWeightSum == 0.0) {
+                                        currentFinalValid = true;
+                                    } else if (nextEffectiveCount > 0.0
+                                            && current.sampleRadianceTarget.w > 0.0) {
+                                        float currentDenominator = nextEffectiveCount
+                                                * current.sampleRadianceTarget.w;
+                                        float currentFinalWeight = nextWeightSum
+                                                / currentDenominator;
+                                        currentFinalValid = isfinite(currentDenominator)
+                                                && currentDenominator > 0.0
+                                                && isfinite(currentFinalWeight)
+                                                && currentFinalWeight > 0.0;
+                                    }
+                                }
+                                InterlockedAdd(counters[currentFinalValid
+                                        ? PATH_GUIDE_PREVIOUS_POST_WEIGHT_CURRENT_VALID
+                                        : PATH_GUIDE_PREVIOUS_POST_WEIGHT_CURRENT_INVALID], 1u);
+
+                                bool sourceFinalValid = false;
+                                if (nextValid) {
+                                    if (nextWeightSum == 0.0) {
+                                        sourceFinalValid = true;
+                                    } else if (nextEffectiveCount > 0.0
+                                            && shiftedTarget > 0.0) {
+                                        float sourceDenominator = nextEffectiveCount
+                                                * shiftedTarget;
+                                        float sourceFinalWeightResult = nextWeightSum
+                                                / sourceDenominator;
+                                        sourceFinalValid = isfinite(sourceDenominator)
+                                                && sourceDenominator > 0.0
+                                                && isfinite(sourceFinalWeightResult)
+                                                && sourceFinalWeightResult > 0.0;
+                                    }
+                                }
+                                InterlockedAdd(counters[sourceFinalValid
+                                        ? PATH_GUIDE_PREVIOUS_POST_WEIGHT_SOURCE_VALID
+                                        : PATH_GUIDE_PREVIOUS_POST_WEIGHT_SOURCE_INVALID], 1u);
                             }
                         }
                     }

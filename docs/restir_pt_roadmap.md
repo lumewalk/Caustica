@@ -652,6 +652,15 @@ write, mapping composition, or estimator work. The next bounded gate may audit h
 `nextWeightSum`, effective-count cap, and final reservoir weight arithmetic, still without selecting
 or writing a sample.
 
+The post-weight arithmetic audit is now proven in view 20. Seventeen fresh readbacks covered 188935
+eligible records. `nextWeightSum` and capped effective count were valid for all records with zero
+deltas. The previous-source final-weight branch was valid for all 188935 records; the
+current-retained branch was valid for 45060 and rejected 143875 because the current reservoir had no
+positive target, matching the CPU reference's fail-closed selected-sample denominator rule. No RNG,
+selection, reservoir/history write, mapping composition, estimator contribution, or invalid GPU
+arithmetic was introduced. The next bounded gate may audit the two hypothetical final weights'
+selection-probability denominator without actually sampling either branch.
+
 ## Delivery Phases
 
 ### Phase 0 — Wavefront Integration Baseline
