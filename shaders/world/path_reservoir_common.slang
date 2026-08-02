@@ -125,7 +125,12 @@ public static const uint PATH_GUIDE_SCRATCH_STORAGE_EMPTY = 122u;
 public static const uint PATH_GUIDE_SCRATCH_STORAGE_METADATA_REJECT = 123u;
 public static const uint PATH_GUIDE_SCRATCH_STORAGE_ARITHMETIC_REJECT = 124u;
 public static const uint PATH_GUIDE_SCRATCH_STORAGE_INVALID = 125u;
-public static const uint PATH_SHIFT_DIAGNOSTIC_COUNTER_COUNT = 126u;
+public static const uint PATH_GUIDE_ROOT_STORAGE_ELIGIBLE = 126u;
+public static const uint PATH_GUIDE_ROOT_STORAGE_SELECTED_READY = 127u;
+public static const uint PATH_GUIDE_ROOT_STORAGE_RETAINED_READY = 128u;
+public static const uint PATH_GUIDE_ROOT_STORAGE_MISSING = 129u;
+public static const uint PATH_GUIDE_ROOT_STORAGE_METADATA_REJECT = 130u;
+public static const uint PATH_SHIFT_DIAGNOSTIC_COUNTER_COUNT = 131u;
 public static const uint PATH_SHIFT_DIAGNOSTIC_PAIR_MASK = 3u;
 public static const uint PATH_SHIFT_DIAGNOSTIC_MERGE_PAIR_OFFSET =
         PATH_SPATIAL_DIAGNOSTIC_PAIR_CAPACITY * 2u;

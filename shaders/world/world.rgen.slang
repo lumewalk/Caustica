@@ -632,6 +632,58 @@ static float pathMappingThroughputRatio(float sourceThroughput,
     return receiverThroughput / sourceThroughput;
 }
 
+// Capture the exact current-frame replay root for an identity sample. Both guide positions and the
+// packed queue origins are stored camera-relative, matching the persistent source-root contract.
+static bool pathCaptureCurrentGuideRoot(PathReservoir sample, uint2 dimensions,
+                                        float4 receiverPositionMaterial,
+                                        float4 receiverNormalRoughness,
+                                        out PathSourceRoot root) {
+    root = {};
+    uint pixelCount = dimensions.x * dimensions.y;
+    uint sourceIndex = sample.identity.y;
+    uint segmentCount = sample.replayControl.y;
+    if (pc.pathQueueAddr == 0u || sourceIndex >= pixelCount
+            || sample.replayControl.x != PATH_REPLAY_VERSION
+            || segmentCount < 1u || segmentCount > MAX_PATH_SEGMENTS) {
+        return false;
+    }
+
+    ConstPtr<PackedPathSegment> queue =
+            ConstPtr<PackedPathSegment>(pc.pathQueueAddr);
+    PackedPathSegment segment0 = queue[sourceIndex];
+    PackedPathSegment segment1 = segment0;
+    bool chainComplete = false;
+    if (segmentCount == 1u) {
+        chainComplete = segment0.nextRecord == PATH_NO_NEXT;
+    } else if (segment0.nextRecord != PATH_NO_NEXT
+            && segment0.nextRecord < pixelCount * MAX_PATH_SEGMENTS) {
+        segment1 = queue[segment0.nextRecord];
+        chainComplete = segment1.nextRecord == PATH_NO_NEXT;
+    }
+    uint2 sourcePixel = uint2(sourceIndex % dimensions.x, sourceIndex / dimensions.x);
+    float4 sourcePositionMaterial = gRestirPositionMaterial[int2(sourcePixel)];
+    float4 sourceNormalRoughness = gRestirNormalRoughness[int2(sourcePixel)];
+    if (!chainComplete || !all(isfinite(segment0.ro)) || !all(isfinite(segment1.ro))
+            || !all(isfinite(sourcePositionMaterial))
+            || !all(isfinite(sourceNormalRoughness))
+            || !all(isfinite(receiverPositionMaterial))
+            || !all(isfinite(receiverNormalRoughness))) {
+        return false;
+    }
+
+    segment0.ro -= worldPush.camOffset;
+    segment1.ro -= worldPush.camOffset;
+    root.sourcePositionMaterial = sourcePositionMaterial;
+    root.sourcePositionMaterial.xyz -= worldPush.camOffset;
+    root.sourceNormalRoughness = sourceNormalRoughness;
+    root.receiverPositionMaterial = receiverPositionMaterial;
+    root.receiverPositionMaterial.xyz -= worldPush.camOffset;
+    root.receiverNormalRoughness = receiverNormalRoughness;
+    root.segment0 = segment0;
+    root.segment1 = segment1;
+    return true;
+}
+
 // Same-frame validation of the non-persistent ABI-10 scratch mapping. This dispatch runs only after
 // path_shifted_radiance has written the consumed slot. It replays the original source seeds through
 // the production path tracer, reconstructs receiver PDF/Jacobian/visibility/radiance, and records one
@@ -644,7 +696,8 @@ public void pathMappingReplayValidate() {
             || worldPush.pathShiftDiagnosticCounterAddr == 0u
             || worldPush.pathShiftSourceRootAddr == 0u
             || worldPush.pathShiftReceiverGuideAddr == 0u
-            || worldPush.pathShiftGuideScratchAddr == 0u) {
+            || worldPush.pathShiftGuideScratchAddr == 0u
+            || worldPush.pathShiftGuideRootScratchAddr == 0u) {
         return;
     }
 
@@ -1154,14 +1207,16 @@ public void pathMappingReplayValidate() {
                                         InterlockedAdd(
                                                 counters[guidePostSelectionResult], 1u);
 
-                                        // Build the complete future sample only in registers. A
+                                        // Build the complete future sample in registers before
+                                        // copying it to the isolated, cleared guide scratch. A
                                         // source selection receives the current receiver mapping;
-                                        // a retained selection must preserve every current sample
-                                        // bit. This value is never written to a reservoir slot.
+                                        // a retained selection preserves every current sample bit.
                                         InterlockedAdd(
                                                 counters[PATH_GUIDE_SAMPLE_COPY_ELIGIBLE], 1u);
                                         uint guideSampleCopyResult;
                                         PathReservoir guideStoredScratch = pathReservoirEmpty();
+                                        PathSourceRoot guideStoredRoot;
+                                        bool guideStoredRootValid = false;
                                         if (guidePostSelectionResult
                                                 == PATH_GUIDE_POST_SELECTION_EMPTY) {
                                             guideSampleCopyResult = PATH_GUIDE_SAMPLE_COPY_EMPTY;
@@ -1176,6 +1231,9 @@ public void pathMappingReplayValidate() {
                                         } else {
                                             PathReservoir guideScratch = current;
                                             if (guideSourceSelected) {
+                                                uint guideCurrentSourceIndex =
+                                                        uint(sourceTexel.y) * dimensions.x
+                                                        + uint(sourceTexel.x);
                                                 guideScratch.sampleRadianceTarget = float4(
                                                         guideVisibleRadiance,
                                                         guideShiftedTarget);
@@ -1191,7 +1249,7 @@ public void pathMappingReplayValidate() {
                                                         guideShiftedTarget);
                                                 guideScratch.identity = uint4(
                                                         mapped.identity.x,
-                                                        mapped.identity.y,
+                                                        guideCurrentSourceIndex,
                                                         replay.topologyKey,
                                                         pathPackMetadata(pc.historyGeneration,
                                                                 replay.depth,
@@ -1211,6 +1269,33 @@ public void pathMappingReplayValidate() {
                                                         guideReceiverThroughput,
                                                         asfloat(
                                                                 PATH_MAPPING_DIFFUSE_RECONNECTION));
+                                                // The original path remains the replay root, but its
+                                                // stable screen key and camera-relative positions
+                                                // advance to the independently reprojected source in
+                                                // this frame. Never overwrite the persistent root
+                                                // buffer that other cross-frame invocations read.
+                                                guideStoredRoot = sourceRoot;
+                                                guideStoredRoot.sourcePositionMaterial =
+                                                        currentSourcePositionMaterial;
+                                                guideStoredRoot.sourcePositionMaterial.xyz -=
+                                                        worldPush.camOffset;
+                                                guideStoredRoot.sourceNormalRoughness =
+                                                        currentSourceNormalRoughness;
+                                                guideStoredRoot.receiverPositionMaterial =
+                                                        receiverPositionMaterial;
+                                                guideStoredRoot.receiverPositionMaterial.xyz -=
+                                                        worldPush.camOffset;
+                                                guideStoredRoot.receiverNormalRoughness =
+                                                        receiverNormalRoughness;
+                                                guideStoredRoot.segment0.ro -= worldPush.camDelta;
+                                                guideStoredRoot.segment1.ro -= worldPush.camDelta;
+                                                guideStoredRootValid = true;
+                                            } else {
+                                                guideStoredRootValid = pathCaptureCurrentGuideRoot(
+                                                        current, dimensions,
+                                                        receiverPositionMaterial,
+                                                        receiverNormalRoughness,
+                                                        guideStoredRoot);
                                             }
                                             guideScratch.weights = float4(
                                                     guidePostWeightSum,
@@ -1242,7 +1327,9 @@ public void pathMappingReplayValidate() {
                                                                 == asuint(guideScratch
                                                                         .sampleRadianceTarget))
                                                         && guideScratch.identity.y
-                                                                == mapped.identity.y
+                                                                == uint(sourceTexel.y)
+                                                                        * dimensions.x
+                                                                        + uint(sourceTexel.x)
                                                         && guideScratch.replayControl.x
                                                                 == PATH_REPLAY_VERSION
                                                         && asuint(guideScratch.proposalShift.w)
@@ -1303,6 +1390,15 @@ public void pathMappingReplayValidate() {
                                         DevicePtr<PathReservoir>(
                                                 worldPush.pathShiftGuideScratchAddr)[pixelIndex] =
                                                 guideStoredScratch;
+                                        if ((guideSampleCopyResult
+                                                        == PATH_GUIDE_SAMPLE_COPY_SELECTED
+                                                    || guideSampleCopyResult
+                                                        == PATH_GUIDE_SAMPLE_COPY_RETAINED)
+                                                && guideStoredRootValid) {
+                                            DevicePtr<PathSourceRoot>(worldPush
+                                                    .pathShiftGuideRootScratchAddr)[pixelIndex] =
+                                                    guideStoredRoot;
+                                        }
                                     }
                                 }
                             }
@@ -1593,7 +1689,8 @@ public void pathGuideScratchValidate() {
     if (pc.debugView != PATH_SHIFTED_RADIANCE_DEBUG_VIEW
             || (pc.historyFlags & PATH_GUIDE_SCRATCH_VALIDATE_PASS_FLAG) == 0u
             || worldPush.pathShiftDiagnosticCounterAddr == 0u
-            || worldPush.pathShiftGuideScratchAddr == 0u) {
+            || worldPush.pathShiftGuideScratchAddr == 0u
+            || worldPush.pathShiftGuideRootScratchAddr == 0u) {
         return;
     }
 
@@ -1645,9 +1742,75 @@ public void pathGuideScratchValidate() {
         InterlockedAdd(counters[PATH_GUIDE_SCRATCH_STORAGE_INVALID], 1u);
         return;
     }
-    InterlockedAdd(counters[mappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION
+    bool sourceSelected = mappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION;
+    InterlockedAdd(counters[sourceSelected
             ? PATH_GUIDE_SCRATCH_STORAGE_SELECTED
             : PATH_GUIDE_SCRATCH_STORAGE_RETAINED], 1u);
+
+    InterlockedAdd(counters[PATH_GUIDE_ROOT_STORAGE_ELIGIBLE], 1u);
+    PathSourceRoot root = ConstPtr<PathSourceRoot>(
+            worldPush.pathShiftGuideRootScratchAddr)[pixelIndex];
+    bool rootMissing = all(root.sourcePositionMaterial == float4(0.0))
+            && all(root.sourceNormalRoughness == float4(0.0))
+            && all(root.receiverPositionMaterial == float4(0.0))
+            && all(root.receiverNormalRoughness == float4(0.0))
+            && all(root.segment0.ro == float3(0.0))
+            && all(root.segment1.ro == float3(0.0));
+    if (rootMissing) {
+        InterlockedAdd(counters[PATH_GUIDE_ROOT_STORAGE_MISSING], 1u);
+        return;
+    }
+
+    uint sourceIndex = stored.identity.y;
+    uint pixelCount = dimensions.x * dimensions.y;
+    bool rootFinite = all(isfinite(root.sourcePositionMaterial))
+            && all(isfinite(root.sourceNormalRoughness))
+            && all(isfinite(root.receiverPositionMaterial))
+            && all(isfinite(root.receiverNormalRoughness))
+            && all(isfinite(root.segment0.ro))
+            && all(isfinite(root.segment1.ro));
+    bool rootChainValid = stored.replayControl.y == 1u
+            ? root.segment0.nextRecord == PATH_NO_NEXT
+            : root.segment0.nextRecord != PATH_NO_NEXT
+                    && root.segment1.nextRecord == PATH_NO_NEXT;
+    bool rootMetadataValid = rootFinite && rootChainValid && sourceIndex < pixelCount;
+    if (rootMetadataValid) {
+        uint2 sourcePixel = uint2(sourceIndex % dimensions.x,
+                sourceIndex / dimensions.x);
+        float4 sourcePositionMaterial = root.sourcePositionMaterial;
+        sourcePositionMaterial.xyz += worldPush.camOffset;
+        float4 receiverPositionMaterial = root.receiverPositionMaterial;
+        receiverPositionMaterial.xyz += worldPush.camOffset;
+        float4 currentSourcePositionMaterial =
+                gRestirPositionMaterial[int2(sourcePixel)];
+        float4 currentSourceNormalRoughness =
+                gRestirNormalRoughness[int2(sourcePixel)];
+        float4 currentReceiverPositionMaterial =
+                gRestirPositionMaterial[int2(pixel)];
+        float4 currentReceiverNormalRoughness =
+                gRestirNormalRoughness[int2(pixel)];
+        rootMetadataValid = pathReplayPositionMatches(sourcePositionMaterial.xyz,
+                    currentSourcePositionMaterial.xyz)
+                && pathReplayColorMatches(root.sourceNormalRoughness.xyz,
+                    currentSourceNormalRoughness.xyz)
+                && pathReplayFloatMatches(root.sourceNormalRoughness.w,
+                    currentSourceNormalRoughness.w)
+                && uint(max(sourcePositionMaterial.w, 0.0))
+                        == uint(max(currentSourcePositionMaterial.w, 0.0))
+                && pathReplayPositionMatches(receiverPositionMaterial.xyz,
+                    currentReceiverPositionMaterial.xyz)
+                && pathReplayColorMatches(root.receiverNormalRoughness.xyz,
+                    currentReceiverNormalRoughness.xyz)
+                && pathReplayFloatMatches(root.receiverNormalRoughness.w,
+                    currentReceiverNormalRoughness.w)
+                && uint(max(receiverPositionMaterial.w, 0.0))
+                        == uint(max(currentReceiverPositionMaterial.w, 0.0));
+    }
+    InterlockedAdd(counters[rootMetadataValid
+            ? sourceSelected
+                    ? PATH_GUIDE_ROOT_STORAGE_SELECTED_READY
+                    : PATH_GUIDE_ROOT_STORAGE_RETAINED_READY
+            : PATH_GUIDE_ROOT_STORAGE_METADATA_REJECT], 1u);
 }
 
 [shader("raygeneration")]

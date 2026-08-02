@@ -1090,7 +1090,9 @@ public final class RtComposite {
                     restirPt && debugView == RtPathReservoirHistory.SHIFTED_RADIANCE_DEBUG_VIEW
                             ? pathReservoirs.shiftedReceiverGuideAddress() : 0L,
                     restirPt && debugView == RtPathReservoirHistory.SHIFTED_RADIANCE_DEBUG_VIEW
-                            ? pathReservoirs.shiftedGuideScratchAddress() : 0L
+                            ? pathReservoirs.shiftedGuideScratchAddress() : 0L,
+                    restirPt && debugView == RtPathReservoirHistory.SHIFTED_RADIANCE_DEBUG_VIEW
+                            ? pathReservoirs.shiftedGuideRootScratchAddress() : 0L
             ).write(push);
             pushBuf.flush(0L, WORLD_PUSH_SIZE);
             // Upload any entity textures registered this frame into the bindless set before the trace.

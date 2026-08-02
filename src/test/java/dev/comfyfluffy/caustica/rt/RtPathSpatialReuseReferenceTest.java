@@ -748,6 +748,27 @@ final class RtPathSpatialReuseReferenceTest {
     }
 
     @Test
+    void guideSourceRootProvenanceAdvancesSelectedAndCapturesRetainedRoots() {
+        var previous = new RtPathSpatialReuseReference.PersistentSourceRootOrigin(
+                5.0, 2.0, 3.0);
+        var selected = RtPathSpatialReuseReference.GuideSourceRootProvenance.selected(
+                23, previous, 3.0, 1.0, -2.0);
+        assertEquals(23, selected.sourcePixelIndex());
+        assertEquals(2.0, selected.origin().cameraRelativeX(), 1.0e-12);
+        assertEquals(1.0, selected.origin().cameraRelativeY(), 1.0e-12);
+        assertEquals(5.0, selected.origin().cameraRelativeZ(), 1.0e-12);
+
+        var retained = RtPathSpatialReuseReference.GuideSourceRootProvenance.retained(
+                31, 15.0, 4.0, -7.0, 10.0, 2.0, -10.0);
+        assertEquals(31, retained.sourcePixelIndex());
+        assertEquals(previous, retained.origin());
+
+        assertThrows(IllegalArgumentException.class,
+                () -> RtPathSpatialReuseReference.GuideSourceRootProvenance.selected(
+                        0, null, 0.0, 0.0, 0.0));
+    }
+
+    @Test
     void pairedMomentsExposeCovarianceAndCorrelationWithoutBatchStorage() {
         var moments = new RtPathSpatialReuseReference.PairMoments();
         moments.add(1.0, 2.0);
@@ -932,8 +953,13 @@ final class RtPathSpatialReuseReferenceTest {
         assertEquals(123, RtPathReservoirHistory.GUIDE_SCRATCH_STORAGE_METADATA_REJECT_INDEX);
         assertEquals(124, RtPathReservoirHistory.GUIDE_SCRATCH_STORAGE_ARITHMETIC_REJECT_INDEX);
         assertEquals(125, RtPathReservoirHistory.GUIDE_SCRATCH_STORAGE_INVALID_INDEX);
-        assertEquals(126, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
-        assertEquals(126 * Integer.BYTES,
+        assertEquals(126, RtPathReservoirHistory.GUIDE_ROOT_STORAGE_ELIGIBLE_INDEX);
+        assertEquals(127, RtPathReservoirHistory.GUIDE_ROOT_STORAGE_SELECTED_READY_INDEX);
+        assertEquals(128, RtPathReservoirHistory.GUIDE_ROOT_STORAGE_RETAINED_READY_INDEX);
+        assertEquals(129, RtPathReservoirHistory.GUIDE_ROOT_STORAGE_MISSING_INDEX);
+        assertEquals(130, RtPathReservoirHistory.GUIDE_ROOT_STORAGE_METADATA_REJECT_INDEX);
+        assertEquals(131, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
+        assertEquals(131 * Integer.BYTES,
                 RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_COUNTER_BYTES);
         assertEquals(32, RtPathReservoirHistory.SHIFTED_RECEIVER_GUIDE_STRIDE);
         assertEquals(27_566_080L,

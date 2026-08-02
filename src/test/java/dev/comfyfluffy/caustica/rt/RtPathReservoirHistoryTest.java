@@ -76,6 +76,8 @@ final class RtPathReservoirHistoryTest {
         // View 20 lazily adds one separate full-record scratch. It is not one of the two committed
         // history slots and cannot alias the persistent mapped snapshot that cross-frame replay reads.
         assertEquals(151_613_440L, RtPathReservoirHistory.bytesPerSlot(1280, 673));
+        assertEquals(137_830_400L, Math.multiplyExact(1280L * 673L,
+                dev.comfyfluffy.caustica.rt.gen.PathSourceRootData.BYTE_SIZE));
     }
 
     @Test

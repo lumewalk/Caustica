@@ -959,6 +959,46 @@ final class RtPathSpatialReuseReference {
                     cameraRelativeY + currentCameraOffsetY - cameraDeltaY,
                     cameraRelativeZ + currentCameraOffsetZ - cameraDeltaZ);
         }
+
+        PersistentSourceRootOrigin advance(double cameraDeltaX, double cameraDeltaY,
+                                           double cameraDeltaZ) {
+            return new PersistentSourceRootOrigin(
+                    cameraRelativeX - cameraDeltaX,
+                    cameraRelativeY - cameraDeltaY,
+                    cameraRelativeZ - cameraDeltaZ);
+        }
+    }
+
+    /**
+     * Same-frame provenance paired with a guide scratch record. A selected historical path keeps
+     * its original replay transcript but advances both its camera-relative root and screen key to
+     * the independently reprojected source. A retained current path captures both values fresh.
+     */
+    record GuideSourceRootProvenance(int sourcePixelIndex, PersistentSourceRootOrigin origin) {
+        GuideSourceRootProvenance {
+            if (sourcePixelIndex < 0 || origin == null) {
+                throw new IllegalArgumentException("guide source-root provenance is incomplete");
+            }
+        }
+
+        static GuideSourceRootProvenance selected(
+                int reprojectedSourcePixelIndex, PersistentSourceRootOrigin previousOrigin,
+                double cameraDeltaX, double cameraDeltaY, double cameraDeltaZ) {
+            if (previousOrigin == null) {
+                throw new IllegalArgumentException("selected guide source root is missing");
+            }
+            return new GuideSourceRootProvenance(reprojectedSourcePixelIndex,
+                    previousOrigin.advance(cameraDeltaX, cameraDeltaY, cameraDeltaZ));
+        }
+
+        static GuideSourceRootProvenance retained(
+                int currentSourcePixelIndex,
+                double rootX, double rootY, double rootZ,
+                double cameraOffsetX, double cameraOffsetY, double cameraOffsetZ) {
+            return new GuideSourceRootProvenance(currentSourcePixelIndex,
+                    PersistentSourceRootOrigin.capture(rootX, rootY, rootZ,
+                            cameraOffsetX, cameraOffsetY, cameraOffsetZ));
+        }
     }
 
     /**

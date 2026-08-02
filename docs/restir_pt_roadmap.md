@@ -559,6 +559,25 @@ introduced, the next gate must pair both selected and retained stored records wi
 source-root provenance required for future one-frame replay; mapping composition and estimator use
 remain prohibited.
 
+That source-root provenance companion is now proven in same-frame scratch. View 20 owns a separate
+cleared 160 B/pixel `PathSourceRoot` buffer paired by pixel with the 176 B/pixel guide reservoir
+scratch. A selected mapping replaces the old source-pixel key with its independently reprojected
+current texel, advances the retained camera-relative segment origins by the frame camera delta, and
+stores current source/receiver guides. A retained current sample instead captures its current
+wavefront queue root and current guides. The post-barrier storage validator reads both buffers and
+classifies the root as selected-ready, retained-ready, missing, or malformed without replaying it or
+making it persistent.
+
+Fresh Vulkan/RTX 5060 Ti validation produced 18 readbacks and 245291 root-eligible pairs: 237688
+selected-ready and 7603 retained-ready, with zero missing or metadata rejects. Every frame preserved
+`root eligible = root terminal = selected-ready + retained-ready`, all three reservoir/root deltas
+were zero, and the parent reservoir scratch independently classified 245409 eligible records with
+118 empty outcomes and zero rejects. The additional root scratch raises the complete lazy view-20
+allocation to 606453760 bytes (578.36 MiB) at 1280x673; ordinary rendering still receives zero scratch
+addresses. The next bounded gate is an isolated one-frame ping-pong/replay experiment for the paired
+reservoir and root. Neither buffer may enter committed history, become a spatial source, compose a
+mapping/Jacobian, or affect the estimator before that replay gate passes.
+
 ## Delivery Phases
 
 ### Phase 0 — Wavefront Integration Baseline

@@ -152,7 +152,12 @@ final class RtPathReservoirHistory {
     static final int GUIDE_SCRATCH_STORAGE_METADATA_REJECT_INDEX = 123;
     static final int GUIDE_SCRATCH_STORAGE_ARITHMETIC_REJECT_INDEX = 124;
     static final int GUIDE_SCRATCH_STORAGE_INVALID_INDEX = 125;
-    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 126;
+    static final int GUIDE_ROOT_STORAGE_ELIGIBLE_INDEX = 126;
+    static final int GUIDE_ROOT_STORAGE_SELECTED_READY_INDEX = 127;
+    static final int GUIDE_ROOT_STORAGE_RETAINED_READY_INDEX = 128;
+    static final int GUIDE_ROOT_STORAGE_MISSING_INDEX = 129;
+    static final int GUIDE_ROOT_STORAGE_METADATA_REJECT_INDEX = 130;
+    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 131;
     static final int SHIFTED_RECEIVER_GUIDE_STRIDE = 8 * Float.BYTES;
     static final int SPATIAL_DIAGNOSTIC_COUNTER_BYTES =
             SHIFTED_DIAGNOSTIC_COUNTER_COUNT * Integer.BYTES;
@@ -233,6 +238,7 @@ final class RtPathReservoirHistory {
     private RtBuffer shiftedMappedReservoirs;
     private RtBuffer shiftedReceiverGuides;
     private RtBuffer shiftedGuideScratchReservoirs;
+    private RtBuffer shiftedGuideScratchSourceRoots;
     private RtPathTemporalPipeline temporalPipeline;
     private int spatialDiagnosticViewPending;
     private int width = -1;
@@ -302,13 +308,16 @@ final class RtPathReservoirHistory {
     }
 
     void beginShiftedRadianceDiagnostics(VkCommandBuffer cmd) {
-        if (spatialDiagnosticCounters == null || shiftedGuideScratchReservoirs == null) {
+        if (spatialDiagnosticCounters == null || shiftedGuideScratchReservoirs == null
+                || shiftedGuideScratchSourceRoots == null) {
             throw new IllegalStateException("Shifted-radiance diagnostics used before allocation");
         }
         VK10.vkCmdFillBuffer(cmd, spatialDiagnosticCounters.handle, 0L,
                 spatialDiagnosticCounters.size, 0);
         VK10.vkCmdFillBuffer(cmd, shiftedGuideScratchReservoirs.handle, 0L,
                 shiftedGuideScratchReservoirs.size, 0);
+        VK10.vkCmdFillBuffer(cmd, shiftedGuideScratchSourceRoots.handle, 0L,
+                shiftedGuideScratchSourceRoots.size, 0);
         try (var stack = org.lwjgl.system.MemoryStack.stackPush()) {
             VulkanCommandEncoder.memoryBarrier(cmd, stack);
         }
@@ -320,7 +329,8 @@ final class RtPathReservoirHistory {
             throw new IllegalStateException("Shifted source roots used before path allocation");
         }
         if (shiftedSourceRoots != null && shiftedMappedReservoirs != null
-                && shiftedReceiverGuides != null && shiftedGuideScratchReservoirs != null) {
+                && shiftedReceiverGuides != null && shiftedGuideScratchReservoirs != null
+                && shiftedGuideScratchSourceRoots != null) {
             return;
         }
         long rootBytes = Math.multiplyExact(Math.multiplyExact((long) width, height),
@@ -338,15 +348,21 @@ final class RtPathReservoirHistory {
         shiftedGuideScratchReservoirs = ctx.createBuffer(mappedBytes,
                 VK10.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK10.VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                 false, "path shifted guide scratch reservoirs " + width + "x" + height);
+        shiftedGuideScratchSourceRoots = ctx.createBuffer(rootBytes,
+                VK10.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK10.VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                false, "path shifted guide scratch source roots " + width + "x" + height);
         CausticaMod.LOGGER.info(
                 "RT path shifted snapshot: render={}x{}, rootStride={} B, mappedStride={} B, "
-                        + "receiverGuideStride={} B, guideScratchStride={} B, rootBytes={}, "
-                        + "mappedBytes={}, receiverGuideBytes={}, guideScratchBytes={}, gpuMiB={}",
+                        + "receiverGuideStride={} B, guideScratchStride={} B, "
+                        + "guideRootScratchStride={} B, rootBytes={}, mappedBytes={}, "
+                        + "receiverGuideBytes={}, guideScratchBytes={}, guideRootScratchBytes={}, "
+                        + "gpuMiB={}",
                 width, height, PathSourceRootData.BYTE_SIZE, BYTES_PER_RESERVOIR,
-                SHIFTED_RECEIVER_GUIDE_STRIDE, BYTES_PER_RESERVOIR, rootBytes, mappedBytes,
-                receiverGuideBytes, mappedBytes,
+                SHIFTED_RECEIVER_GUIDE_STRIDE, BYTES_PER_RESERVOIR,
+                PathSourceRootData.BYTE_SIZE, rootBytes, mappedBytes,
+                receiverGuideBytes, mappedBytes, rootBytes,
                 String.format(Locale.ROOT, "%.2f",
-                        (rootBytes + mappedBytes + receiverGuideBytes + mappedBytes)
+                        (rootBytes + mappedBytes + receiverGuideBytes + mappedBytes + rootBytes)
                                 / (1024.0 * 1024.0)));
         shiftedSnapshotState.reset();
     }
@@ -374,6 +390,11 @@ final class RtPathReservoirHistory {
     long shiftedGuideScratchAddress() {
         return shiftedGuideScratchReservoirs == null
                 ? 0L : shiftedGuideScratchReservoirs.deviceAddress;
+    }
+
+    long shiftedGuideRootScratchAddress() {
+        return shiftedGuideScratchSourceRoots == null
+                ? 0L : shiftedGuideScratchSourceRoots.deviceAddress;
     }
 
     boolean previousShiftedSnapshotAvailable(Frame frame, long frameIndex) {
@@ -634,6 +655,16 @@ final class RtPathReservoirHistory {
                     counters.get(GUIDE_SCRATCH_STORAGE_ARITHMETIC_REJECT_INDEX));
             long guideScratchStorageInvalid = Integer.toUnsignedLong(
                     counters.get(GUIDE_SCRATCH_STORAGE_INVALID_INDEX));
+            long guideRootStorageEligible = Integer.toUnsignedLong(
+                    counters.get(GUIDE_ROOT_STORAGE_ELIGIBLE_INDEX));
+            long guideRootStorageSelectedReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_ROOT_STORAGE_SELECTED_READY_INDEX));
+            long guideRootStorageRetainedReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_ROOT_STORAGE_RETAINED_READY_INDEX));
+            long guideRootStorageMissing = Integer.toUnsignedLong(
+                    counters.get(GUIDE_ROOT_STORAGE_MISSING_INDEX));
+            long guideRootStorageMetadataReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_ROOT_STORAGE_METADATA_REJECT_INDEX));
             long crossFrameReceiverReject = crossFrameReceiverSurfaceReject
                     + crossFrameReceiverSampleReject + crossFrameReceiverEdgeReject
                     + crossFrameReceiverTopologyReject + crossFrameReceiverDepthReject
@@ -887,6 +918,20 @@ final class RtPathReservoirHistory {
                     guideScratchStorageEmpty - guideSampleCopyEmpty,
                     guideScratchStorageMetadataReject - guideSampleCopyMetadataReject,
                     guideScratchStorageArithmeticReject - guideSampleCopyArithmeticReject);
+            long guideRootStorageTerminal = guideRootStorageSelectedReady
+                    + guideRootStorageRetainedReady + guideRootStorageMissing
+                    + guideRootStorageMetadataReject;
+            CausticaMod.LOGGER.info(
+                    "RT path guide root storage: eligible={}, selectedReady={}, retainedReady={}, "
+                            + "missing={}, metadata={}, terminal={}, "
+                            + "scratchDelta[eligible={},selected={},retained={}]",
+                    guideRootStorageEligible, guideRootStorageSelectedReady,
+                    guideRootStorageRetainedReady, guideRootStorageMissing,
+                    guideRootStorageMetadataReject, guideRootStorageTerminal,
+                    guideRootStorageEligible
+                            - guideScratchStorageSelected - guideScratchStorageRetained,
+                    guideRootStorageSelectedReady - guideScratchStorageSelected,
+                    guideRootStorageRetainedReady - guideScratchStorageRetained);
             spatialDiagnosticViewPending = 0;
             return;
         }
@@ -1031,6 +1076,10 @@ final class RtPathReservoirHistory {
         if (shiftedGuideScratchReservoirs != null) {
             shiftedGuideScratchReservoirs.destroy();
             shiftedGuideScratchReservoirs = null;
+        }
+        if (shiftedGuideScratchSourceRoots != null) {
+            shiftedGuideScratchSourceRoots.destroy();
+            shiftedGuideScratchSourceRoots = null;
         }
         for (int slot = 0; slot < SLOT_COUNT; slot++) {
             if (slots[slot] != null) {
