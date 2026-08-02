@@ -19,6 +19,9 @@ final class RtPathSpatialReuseReference {
     static final int RECEIVER_MATERIAL_KEY_MASK = 0x003F_FFFF;
     static final int MAPPING_KIND_MASK = 0xF;
     static final int MAPPING_RESERVED_MASK = 0xFFFF_FFF0;
+    static final int BRANCH_CANDIDATE_TAG_VALID_BIT = 0x8000_0000;
+    static final int BRANCH_CANDIDATE_TAG_MAPPING_SHIFT = 24;
+    static final int BRANCH_CANDIDATE_TAG_GENERATION_MASK = 0x00FF_FFFF;
 
     enum ReconnectionEvent {
         NONE(0),
@@ -1088,6 +1091,26 @@ final class RtPathSpatialReuseReference {
         return mappingKind == MappingKind.DIFFUSE_RECONNECTION
                 ? BranchScratchStorageOutcome.SELECTED_ACCEPTED
                 : BranchScratchStorageOutcome.RETAINED_ACCEPTED;
+    }
+
+    record BranchCandidateTag(int frameIndex, int control) {
+        static BranchCandidateTag capture(
+                int frameIndex, int generation, MappingKind mappingKind) {
+            if (mappingKind == null) {
+                throw new IllegalArgumentException(
+                        "branch candidate tag requires a mapping kind");
+            }
+            int control = BRANCH_CANDIDATE_TAG_VALID_BIT
+                    | ((mappingKind.code() & MAPPING_KIND_MASK)
+                            << BRANCH_CANDIDATE_TAG_MAPPING_SHIFT)
+                    | (generation & BRANCH_CANDIDATE_TAG_GENERATION_MASK);
+            return new BranchCandidateTag(frameIndex, control);
+        }
+
+        boolean validFor(int currentFrameIndex, int currentGeneration,
+                         MappingKind mappingKind) {
+            return equals(capture(currentFrameIndex - 1, currentGeneration, mappingKind));
+        }
     }
 
     /**

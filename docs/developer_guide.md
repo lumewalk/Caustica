@@ -415,16 +415,25 @@ between the register pair and its device-written payload/root.
 The post-barrier storage audit now follows that write pass. It captures at most 4096 complete
 expected register pairs into a 352-byte record (metadata + 176-byte `PathReservoir` + 160-byte
 `PathSourceRoot`), then a separate ray-generation dispatch compares every stored float/uint lane by
-its raw 32-bit representation. The diagnostic counter buffer is 253 uints / 1012 bytes. The capture
-tail adds 1.375 MiB to the existing diagnostic sample buffer; full-resolution branch scratch remains
-1130.43 MiB at 1280×673, WorldPush remains 672 bytes and replay ABI remains 10. The runtime log line
+its raw 32-bit representation. The diagnostic counter buffer is now 261 uints / 1044 bytes. The
+capture tail adds 1.375 MiB to the existing diagnostic sample buffer. WorldPush remains 672 bytes
+and replay ABI remains 10. The runtime log line
 `RT path guide branch scratch storage` must show `eligible == completed`, `attempted == captured`,
 zero metadata/reservoir/root/pair rejects, and zero write/validation deltas. The proven run covered
 57 readbacks and 142835 exact pairs (128416 selected, 14419 retained), with no capture overflow.
 
-This validation does not promote the pair. Before persistent reuse, define a separate isolated
-candidate-history owner with the same reset/generation rules as path history and retain the bans on
-mapped-as-source recursion, Jacobian composition and estimator contribution.
+Exact samples now receive a device-side candidate tag after validation. The tag area is appended to
+each root ping-pong slot (8 B/pixel), is cleared together with the current slot and records the source
+frame, 24-bit history generation and mapping kind. Previous-frame replay first checks this tag; an
+untagged pair or any frame/generation/mapping mismatch fails closed before source replay. The two tag
+areas add 13.14 MiB at 1280×673, taking full lazy view-20 storage to 1143.57 MiB.
+
+The runtime line `RT path guide branch candidate promotion` must have exact write and replay
+partitions and zero metadata rejects. The proven run used 47 readbacks: 68454 writes split into
+61146 selected and 7308 retained; 8557592 reprojected checks split into 8489576 empty, 60802
+selected-admitted and 7214 retained-admitted, with both deltas zero. Admission remains diagnostic:
+the tagged pair is not committed to ordinary history, cannot be reused as a spatial source, and does
+not contribute to the estimator.
 
 For a fresh runtime check, use debug view 20 and inspect `run/logs/latest.log`. Normal operation
 requires `RT bring-up OK`, Vulkan, the intended NVIDIA device, exact zero-delta counter partitions,

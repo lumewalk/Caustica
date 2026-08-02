@@ -15,8 +15,8 @@ final class RtPathReservoirHistoryTest {
         assertEquals(176, PathReservoirData.BYTE_SIZE);
         assertEquals(176, RtPathReservoirHistory.BYTES_PER_RESERVOIR);
         assertEquals(672, WorldPushData.BYTE_SIZE);
-        assertEquals(253, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
-        assertEquals(1012, RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_COUNTER_BYTES);
+        assertEquals(261, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
+        assertEquals(1044, RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_COUNTER_BYTES);
         assertEquals(1 << 8, RtPathReservoirHistory.GUIDE_PREVIOUS_REPLAY_PASS_FLAG);
         assertEquals(1 << 9, RtPathReservoirHistory.GUIDE_PREVIOUS_AVAILABLE_FLAG);
         assertEquals(1 << 10, RtPathReservoirHistory.GUIDE_BRANCH_PREVIOUS_AVAILABLE_FLAG);
@@ -109,6 +109,9 @@ final class RtPathReservoirHistoryTest {
         assertEquals(151_613_440L, RtPathReservoirHistory.bytesPerSlot(1280, 673));
         assertEquals(137_830_400L, Math.multiplyExact(1280L * 673L,
                 dev.comfyfluffy.caustica.rt.gen.PathSourceRootData.BYTE_SIZE));
+        assertEquals(6_891_520L,
+                RtPathReservoirHistory.branchCandidateTagBytes(1280, 673));
+        assertEquals(8, RtPathReservoirHistory.BRANCH_CANDIDATE_TAG_STRIDE);
     }
 
     @Test

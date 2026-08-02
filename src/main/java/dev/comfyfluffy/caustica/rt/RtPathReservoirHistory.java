@@ -283,8 +283,17 @@ final class RtPathReservoirHistory {
     static final int GUIDE_BRANCH_SCRATCH_VALIDATE_RETAINED_ACCEPTED_INDEX = 250;
     static final int GUIDE_BRANCH_SCRATCH_VALIDATE_PAIR_REJECT_INDEX = 251;
     static final int GUIDE_BRANCH_SCRATCH_VALIDATE_DELTA_INDEX = 252;
-    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 253;
+    static final int GUIDE_BRANCH_CANDIDATE_TAG_WRITE_ELIGIBLE_INDEX = 253;
+    static final int GUIDE_BRANCH_CANDIDATE_TAG_SELECTED_WRITTEN_INDEX = 254;
+    static final int GUIDE_BRANCH_CANDIDATE_TAG_RETAINED_WRITTEN_INDEX = 255;
+    static final int GUIDE_BRANCH_CANDIDATE_TAG_REPLAY_EMPTY_INDEX = 256;
+    static final int GUIDE_BRANCH_CANDIDATE_TAG_REPLAY_METADATA_REJECT_INDEX = 257;
+    static final int GUIDE_BRANCH_CANDIDATE_TAG_REPLAY_SELECTED_ADMITTED_INDEX = 258;
+    static final int GUIDE_BRANCH_CANDIDATE_TAG_REPLAY_RETAINED_ADMITTED_INDEX = 259;
+    static final int GUIDE_BRANCH_CANDIDATE_TAG_REPLAY_DELTA_INDEX = 260;
+    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 261;
     static final int SHIFTED_RECEIVER_GUIDE_STRIDE = 8 * Float.BYTES;
+    static final int BRANCH_CANDIDATE_TAG_STRIDE = 2 * Integer.BYTES;
     static final int SPATIAL_DIAGNOSTIC_COUNTER_BYTES =
             SHIFTED_DIAGNOSTIC_COUNTER_COUNT * Integer.BYTES;
     static final int SPATIAL_DIAGNOSTIC_PAIR_CAPACITY = 4096;
@@ -517,6 +526,8 @@ final class RtPathReservoirHistory {
         }
         long rootBytes = Math.multiplyExact(Math.multiplyExact((long) width, height),
                 PathSourceRootData.BYTE_SIZE);
+        long candidateTagBytes = branchCandidateTagBytes(width, height);
+        long branchRootBytes = Math.addExact(rootBytes, candidateTagBytes);
         long mappedBytes = bytesPerSlot(width, height);
         long receiverGuideBytes = shiftedReceiverGuideBytes(width, height);
         shiftedSourceRoots = ctx.createBuffer(rootBytes, VK10.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
@@ -537,23 +548,25 @@ final class RtPathReservoirHistory {
             branchScratchReservoirs[slot] = ctx.createBuffer(mappedBytes,
                     VK10.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK10.VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                     false, "path branch scratch reservoirs " + slot + " " + width + "x" + height);
-            branchScratchSourceRoots[slot] = ctx.createBuffer(rootBytes,
+            branchScratchSourceRoots[slot] = ctx.createBuffer(branchRootBytes,
                     VK10.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK10.VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                     false, "path branch scratch source roots " + slot + " " + width + "x" + height);
         }
         CausticaMod.LOGGER.info(
                 "RT path shifted snapshot: render={}x{}, rootStride={} B, mappedStride={} B, "
                         + "receiverGuideStride={} B, guideScratchStride={} B, "
-                        + "guideRootScratchStride={} B, rootBytes={}, mappedBytes={}, "
+                        + "guideRootScratchStride={} B, candidateTagStride={} B, "
+                        + "rootBytes={}, branchRootBytes={}, mappedBytes={}, "
                         + "receiverGuideBytes={}, guideScratchBytes={}, guideRootScratchBytes={}, "
                         + "gpuMiB={}",
                 width, height, PathSourceRootData.BYTE_SIZE, BYTES_PER_RESERVOIR,
                 SHIFTED_RECEIVER_GUIDE_STRIDE, BYTES_PER_RESERVOIR,
-                PathSourceRootData.BYTE_SIZE, rootBytes, mappedBytes,
+                PathSourceRootData.BYTE_SIZE, BRANCH_CANDIDATE_TAG_STRIDE,
+                rootBytes, branchRootBytes, mappedBytes,
                 receiverGuideBytes, mappedBytes, rootBytes,
                 String.format(Locale.ROOT, "%.2f",
                         (rootBytes + mappedBytes + receiverGuideBytes + mappedBytes + rootBytes
-                                + (rootBytes + mappedBytes) * SLOT_COUNT)
+                                + (branchRootBytes + mappedBytes) * SLOT_COUNT)
                                 / (1024.0 * 1024.0)));
         shiftedSnapshotState.reset();
         guideScratchSnapshotState.reset();
@@ -1145,6 +1158,20 @@ final class RtPathReservoirHistory {
                     counters.get(GUIDE_BRANCH_SCRATCH_VALIDATE_RETAINED_ACCEPTED_INDEX));
             long guideBranchValidatePairReject = Integer.toUnsignedLong(
                     counters.get(GUIDE_BRANCH_SCRATCH_VALIDATE_PAIR_REJECT_INDEX));
+            long guideBranchTagWriteEligible = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_CANDIDATE_TAG_WRITE_ELIGIBLE_INDEX));
+            long guideBranchTagSelectedWritten = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_CANDIDATE_TAG_SELECTED_WRITTEN_INDEX));
+            long guideBranchTagRetainedWritten = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_CANDIDATE_TAG_RETAINED_WRITTEN_INDEX));
+            long guideBranchTagReplayEmpty = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_CANDIDATE_TAG_REPLAY_EMPTY_INDEX));
+            long guideBranchTagReplayMetadataReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_CANDIDATE_TAG_REPLAY_METADATA_REJECT_INDEX));
+            long guideBranchTagReplaySelectedAdmitted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_CANDIDATE_TAG_REPLAY_SELECTED_ADMITTED_INDEX));
+            long guideBranchTagReplayRetainedAdmitted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_CANDIDATE_TAG_REPLAY_RETAINED_ADMITTED_INDEX));
             long crossFrameReceiverReject = crossFrameReceiverSurfaceReject
                     + crossFrameReceiverSampleReject + crossFrameReceiverEdgeReject
                     + crossFrameReceiverTopologyReject + crossFrameReceiverDepthReject
@@ -1684,6 +1711,8 @@ final class RtPathReservoirHistory {
             long guideBranchReplayTerminal = guideBranchReplayEmpty
                     + guideBranchReplayMetadataReject
                     + guideBranchReplayReceiverReprojectionReject
+                    + guideBranchTagReplayEmpty
+                    + guideBranchTagReplayMetadataReject
                     + guideBranchReplayReceiverSurfaceReject
                     + guideBranchReplaySourceReprojectionReject
                     + guideBranchReplaySourceSurfaceReject
@@ -1691,11 +1720,14 @@ final class RtPathReservoirHistory {
                     + guideBranchReplaySelectedAccepted
                     + guideBranchReplayRetainedAccepted;
             CausticaMod.LOGGER.info(
-                    "RT path guide branch scratch replay: attempted={}, empty={}, metadata={}, "
+                    "RT path guide branch scratch replay: attempted={}, tagEmpty={}, "
+                            + "tagMetadata={}, empty={}, metadata={}, "
                             + "receiverReprojection={}, receiverSurface={}, sourceReprojection={}, "
                             + "sourceSurface={}, sourceReplay={}, selectedAccepted={}, "
                             + "retainedAccepted={}, terminal={}, delta={}",
                     guideBranchReplayAttempted,
+                    guideBranchTagReplayEmpty,
+                    guideBranchTagReplayMetadataReject,
                     guideBranchReplayEmpty,
                     guideBranchReplayMetadataReject,
                     guideBranchReplayReceiverReprojectionReject,
@@ -1737,6 +1769,31 @@ final class RtPathReservoirHistory {
                     guideBranchValidatePairReject,
                     guideBranchValidateTerminal,
                     guideBranchValidateAttempted - guideBranchValidateTerminal);
+            long guideBranchTagReplayChecked = guideBranchReplayAttempted
+                    - guideBranchReplayReceiverReprojectionReject;
+            long guideBranchTagReplayAdmitted = guideBranchTagReplaySelectedAdmitted
+                    + guideBranchTagReplayRetainedAdmitted;
+            CausticaMod.LOGGER.info(
+                    "RT path guide branch candidate promotion: "
+                            + "write[eligible={},selected={},retained={},delta={}] "
+                            + "replay[checked={},empty={},metadata={},selectedAdmitted={},"
+                            + "retainedAdmitted={},admitted={},delta={}]",
+                    guideBranchTagWriteEligible,
+                    guideBranchTagSelectedWritten,
+                    guideBranchTagRetainedWritten,
+                    guideBranchTagWriteEligible
+                            - guideBranchTagSelectedWritten
+                            - guideBranchTagRetainedWritten,
+                    guideBranchTagReplayChecked,
+                    guideBranchTagReplayEmpty,
+                    guideBranchTagReplayMetadataReject,
+                    guideBranchTagReplaySelectedAdmitted,
+                    guideBranchTagReplayRetainedAdmitted,
+                    guideBranchTagReplayAdmitted,
+                    guideBranchTagReplayChecked
+                            - guideBranchTagReplayEmpty
+                            - guideBranchTagReplayMetadataReject
+                            - guideBranchTagReplayAdmitted);
             spatialDiagnosticViewPending = 0;
             return;
         }
@@ -1847,6 +1904,14 @@ final class RtPathReservoirHistory {
         }
         return Math.multiplyExact(Math.multiplyExact((long) width, height),
                 SHIFTED_RECEIVER_GUIDE_STRIDE);
+    }
+
+    static long branchCandidateTagBytes(int width, int height) {
+        if (width <= 0 || height <= 0) {
+            throw new IllegalArgumentException("Branch candidate-tag extent must be positive");
+        }
+        return Math.multiplyExact(Math.multiplyExact((long) width, height),
+                BRANCH_CANDIDATE_TAG_STRIDE);
     }
 
     boolean ready() {

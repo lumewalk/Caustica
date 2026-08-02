@@ -725,6 +725,18 @@ diagnostic sample buffer, leaves WorldPush at 672 bytes and replay ABI at 10, an
 outside view 20. This authorizes design of an isolated candidate-history promotion gate, but does not
 yet authorize committed history, recursive spatial sourcing or ordinary-estimator use.
 
+The isolated promotion boundary is now device-enforced. Each branch-root slot appends an 8 B/pixel
+tag area that is cleared with the slot and written only by the post-barrier exact validator. A tag
+binds the source frame index, 24-bit history generation and mapping kind; next-frame replay requires
+the exact previous frame, current generation and stored identity/diffuse mapping kind before it may
+read and replay the pair. Untagged records fail closed, so capture overflow can reduce diagnostic
+coverage but can never silently promote an unvalidated pair. Forty-seven Vulkan readbacks wrote
+68454 tags (61146 selected, 7308 retained); 8557592 next-frame checks partitioned into 8489576 empty
+and 68016 admitted (60802 selected, 7214 retained), with zero tag-metadata rejects and exact write/
+replay accounting. Two tag areas add 13.14 MiB at 1280×673 (1143.57 MiB full lazy view-20 storage),
+while WorldPush stays 672 bytes and replay ABI stays 10. The pair remains diagnostic-only and still
+cannot become a spatial source, compose mappings/Jacobians or contribute to the estimator.
+
 ## Delivery Phases
 
 ### Phase 0 — Wavefront Integration Baseline

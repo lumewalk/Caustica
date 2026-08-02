@@ -1689,6 +1689,19 @@ public void pathMappingReplayValidate() {
 // mapping, changes a weight, writes history, or touches the output image.
 static const uint PATH_BRANCH_SCRATCH_CAPTURE_CAPACITY = 4096u;
 static const uint PATH_BRANCH_SCRATCH_CAPTURE_BYTE_OFFSET = 131072u;
+static const uint PATH_SOURCE_ROOT_STRIDE_BYTES = 160u;
+static const uint PATH_BRANCH_CANDIDATE_TAG_VALID_BIT = 0x80000000u;
+static const uint PATH_BRANCH_CANDIDATE_TAG_MAPPING_SHIFT = 24u;
+
+static uint64_t pathBranchCandidateTagAddress(uint64_t rootAddress, uint pixelCount) {
+    return rootAddress + uint64_t(pixelCount) * uint64_t(PATH_SOURCE_ROOT_STRIDE_BYTES);
+}
+
+static uint pathBranchCandidateTagControl(uint generation, uint mappingKind) {
+    return PATH_BRANCH_CANDIDATE_TAG_VALID_BIT
+            | ((mappingKind & 0x0Fu) << PATH_BRANCH_CANDIDATE_TAG_MAPPING_SHIFT)
+            | (generation & PATH_GENERATION_MASK);
+}
 
 struct PathBranchScratchCapture {
     uint4 metadata; // pixel index, mapping kind, frame index, history generation
@@ -1784,9 +1797,17 @@ static void pathBranchScratchStorageValidate() {
         InterlockedAdd(counters[PATH_GUIDE_BRANCH_SCRATCH_VALIDATE_PAIR_REJECT], 1u);
         return;
     }
+    InterlockedAdd(counters[PATH_GUIDE_BRANCH_CANDIDATE_TAG_WRITE_ELIGIBLE], 1u);
+    DevicePtr<uint2> candidateTags = DevicePtr<uint2>(pathBranchCandidateTagAddress(
+            worldPush.pathShiftBranchRootCurrentAddr, pixelCount));
+    candidateTags[expected.metadata.x] = uint2(worldPush.frameIndex,
+            pathBranchCandidateTagControl(currentGeneration, expected.metadata.y));
     InterlockedAdd(counters[expected.metadata.y == PATH_MAPPING_DIFFUSE_RECONNECTION
             ? PATH_GUIDE_BRANCH_SCRATCH_VALIDATE_SELECTED_ACCEPTED
             : PATH_GUIDE_BRANCH_SCRATCH_VALIDATE_RETAINED_ACCEPTED], 1u);
+    InterlockedAdd(counters[expected.metadata.y == PATH_MAPPING_DIFFUSE_RECONNECTION
+            ? PATH_GUIDE_BRANCH_CANDIDATE_TAG_SELECTED_WRITTEN
+            : PATH_GUIDE_BRANCH_CANDIDATE_TAG_RETAINED_WRITTEN], 1u);
 }
 
 static void pathBranchScratchReplayValidate() {
@@ -1815,6 +1836,14 @@ static void pathBranchScratchReplayValidate() {
     }
     uint previousPixelIndex = uint(previousTexel.y) * dimensions.x
             + uint(previousTexel.x);
+    uint pixelCount = dimensions.x * dimensions.y;
+    uint currentGeneration = pc.historyGeneration & PATH_GENERATION_MASK;
+    uint2 candidateTag = ConstPtr<uint2>(pathBranchCandidateTagAddress(
+            worldPush.pathShiftBranchRootPreviousAddr, pixelCount))[previousPixelIndex];
+    if ((candidateTag.y & PATH_BRANCH_CANDIDATE_TAG_VALID_BIT) == 0u) {
+        InterlockedAdd(counters[PATH_GUIDE_BRANCH_CANDIDATE_TAG_REPLAY_EMPTY], 1u);
+        return;
+    }
     PathReservoir stored = ConstPtr<PathReservoir>(
             worldPush.pathShiftBranchReservoirPreviousAddr)[previousPixelIndex];
     PathSourceRoot root = ConstPtr<PathSourceRoot>(
@@ -1823,10 +1852,19 @@ static void pathBranchScratchReplayValidate() {
         InterlockedAdd(counters[PATH_GUIDE_BRANCH_SCRATCH_REPLAY_EMPTY], 1u);
         return;
     }
-    uint pixelCount = dimensions.x * dimensions.y;
-    uint currentGeneration = pc.historyGeneration & PATH_GENERATION_MASK;
     uint sourceIndex = stored.identity.y;
     uint mappingKind = pathMappingKind(stored);
+    bool candidateTagValid = candidateTag.x == worldPush.frameIndex - 1u
+            && candidateTag.y == pathBranchCandidateTagControl(
+                    currentGeneration, mappingKind);
+    if (!candidateTagValid) {
+        InterlockedAdd(counters[
+                PATH_GUIDE_BRANCH_CANDIDATE_TAG_REPLAY_METADATA_REJECT], 1u);
+        return;
+    }
+    InterlockedAdd(counters[mappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION
+            ? PATH_GUIDE_BRANCH_CANDIDATE_TAG_REPLAY_SELECTED_ADMITTED
+            : PATH_GUIDE_BRANCH_CANDIDATE_TAG_REPLAY_RETAINED_ADMITTED], 1u);
     bool metadataValid = all(isfinite(stored.weights))
             && all(stored.weights > float4(0.0))
             && pathReservoirSampleMetadataReady(stored)
