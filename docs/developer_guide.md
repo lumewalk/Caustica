@@ -594,6 +594,27 @@ Ages 1/2/3 were 64760/65104/64196; source identity/mapped ownership was 15838/17
 zero and no Vulkan/GPU/shader error occurred. Counter storage is 411 uints / 1644 B. No local record
 is written; direct source-key/root reprojection remains the next provenance gate.
 
+`RT path guide branch register pair` proves that provenance gate without a device write. Selected
+records directly reproject the immutable capture-time source root with cumulative camera provenance,
+require an exact current 3x3 guide match, replace only the source screen key, and advance packed
+queue origins once into current camera-relative coordinates. Retained records capture the current
+queue root. The required identities are:
+
+- `recordReady == eligible == selected.ready + selected.reject + retained.ready
+  + retained.reject + empty`;
+- selected record population closes across `sourceReady + clipReject + boundsReject
+  + surfaceReject`; source-ready closes across key ready/reject; key-ready closes across selected
+  root ready/reject;
+- retained record population closes across retained root ready/reject;
+- `ready == age.one + age.two + age.three == source.identity + source.mapped`;
+- root chain/identity rejects stay explicit and every printed delta is zero.
+
+Twenty-seven Vulkan readbacks covered 178331 pairs: 161268 selected, 17063 retained, and no empty
+records in this run. Every pair was ready; all source/key/root/chain/identity rejects and all deltas
+were zero. Ages 1/2/3 were 59322/59432/59577; original identity/mapped ownership was
+14276/164055. Counter storage is 435 uints / 1740 B. This still does not write scratch or history;
+the next diagnostic must retrace the assembled pair from its own root before storage is considered.
+
 For a fresh runtime check, use debug view 20 and inspect `run/logs/latest.log`. Normal operation
 requires `RT bring-up OK`, Vulkan, the intended NVIDIA device, exact zero-delta counter partitions,
 and no `DEVICE_LOST`, `VK_ERROR`, GPU fault or shader compilation error. Debug colors and sparse

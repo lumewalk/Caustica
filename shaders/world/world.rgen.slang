@@ -2592,6 +2592,222 @@ static void pathBranchAgeReplayValidate() {
                 ? PATH_GUIDE_BRANCH_DIRECT_RECORD_MAPPED_SOURCE_READY
                 : PATH_GUIDE_BRANCH_DIRECT_RECORD_IDENTITY_SOURCE_READY], 1u);
     }
+
+    // Pair the validated aged record with source-root provenance in registers only. Selected
+    // history directly reprojects the immutable capture-time source root into the current guide,
+    // rewrites only the source screen key, and advances every camera-relative root lane by the
+    // accumulated capture-to-current delta exactly once. Retained current history captures its
+    // queue root fresh. No motion-vector chain, previous Jacobian, scratch/history write, or
+    // estimator contribution is used by this gate.
+    InterlockedAdd(counters[PATH_GUIDE_BRANCH_DIRECT_PAIR_ELIGIBLE],
+            recordReady ? 1u : 0u);
+    if (recordReady) {
+        if (recordEmptyReady) {
+            InterlockedAdd(counters[PATH_GUIDE_BRANCH_DIRECT_PAIR_EMPTY_READY], 1u);
+        } else {
+            PathReservoir pairedRecord = branchRecord;
+            PathSourceRoot pairedRoot = {};
+            uint pairedSourceIndex = pairedRecord.identity.y;
+            uint2 pairedSourcePixel = uint2(
+                    pairedSourceIndex % guideDimensions.x,
+                    pairedSourceIndex / guideDimensions.x);
+            float4 pairedSourcePositionMaterial = float4(0.0);
+            float4 pairedSourceNormalRoughness = float4(0.0);
+            bool selectedSourceReady = false;
+            bool selectedSourceClipReject = false;
+            bool selectedSourceBoundsReject = false;
+            bool selectedSourceSurfaceReject = false;
+
+            if (selectedRecordReady) {
+                float3 currentSourceCamRelative = root.sourcePositionMaterial.xyz
+                        - capture.replayCameraDelta;
+                float4 sourceClip = mul(worldPush.curViewProj,
+                        float4(currentSourceCamRelative, 1.0));
+                selectedSourceClipReject = !(sourceClip.w > 0.0)
+                        || !all(isfinite(sourceClip));
+                if (!selectedSourceClipReject) {
+                    float2 sourceNdc = sourceClip.xy / sourceClip.w;
+                    int2 projectedSourceTexel = int2(floor(
+                            (sourceNdc * 0.5 + 0.5) * float2(guideDimensions)));
+                    bool sourceCandidateInBounds = false;
+                    int2 selectedSourceTexel = projectedSourceTexel;
+                    for (int oy = -1; oy <= 1 && !selectedSourceReady; ++oy) {
+                        for (int ox = -1; ox <= 1 && !selectedSourceReady; ++ox) {
+                            int2 candidateTexel = projectedSourceTexel + int2(ox, oy);
+                            if (any(candidateTexel < int2(0, 0))
+                                    || any(candidateTexel >= int2(guideDimensions))) continue;
+                            sourceCandidateInBounds = true;
+                            float4 candidatePositionMaterial =
+                                    gRestirPositionMaterial[candidateTexel];
+                            float4 candidateNormalRoughness =
+                                    gRestirNormalRoughness[candidateTexel];
+                            bool candidateMatches = pathReplayPositionMatches(
+                                            currentSourcePositionMaterial.xyz,
+                                            candidatePositionMaterial.xyz)
+                                    && pathReplayColorMatches(root.sourceNormalRoughness.xyz,
+                                            candidateNormalRoughness.xyz)
+                                    && pathReplayFloatMatches(root.sourceNormalRoughness.w,
+                                            candidateNormalRoughness.w)
+                                    && uint(max(currentSourcePositionMaterial.w, 0.0))
+                                            == uint(max(candidatePositionMaterial.w, 0.0));
+                            if (candidateMatches) {
+                                selectedSourceTexel = candidateTexel;
+                                pairedSourcePositionMaterial = candidatePositionMaterial;
+                                pairedSourceNormalRoughness = candidateNormalRoughness;
+                                selectedSourceReady = true;
+                            }
+                        }
+                    }
+                    selectedSourceBoundsReject = !sourceCandidateInBounds;
+                    selectedSourceSurfaceReject = sourceCandidateInBounds
+                            && !selectedSourceReady;
+                    if (selectedSourceReady) {
+                        pairedSourcePixel = uint2(selectedSourceTexel);
+                        pairedSourceIndex = pairedSourcePixel.y * guideDimensions.x
+                                + pairedSourcePixel.x;
+                        pairedRecord.identity.y = pairedSourceIndex;
+                    }
+                }
+                InterlockedAdd(counters[selectedSourceReady
+                        ? PATH_GUIDE_BRANCH_DIRECT_PAIR_SOURCE_READY
+                        : selectedSourceClipReject
+                                ? PATH_GUIDE_BRANCH_DIRECT_PAIR_SOURCE_CLIP_REJECT
+                                : selectedSourceBoundsReject
+                                        ? PATH_GUIDE_BRANCH_DIRECT_PAIR_SOURCE_BOUNDS_REJECT
+                                        : PATH_GUIDE_BRANCH_DIRECT_PAIR_SOURCE_SURFACE_REJECT],
+                        1u);
+            } else {
+                pairedSourcePositionMaterial =
+                        gRestirPositionMaterial[int2(pairedSourcePixel)];
+                pairedSourceNormalRoughness =
+                        gRestirNormalRoughness[int2(pairedSourcePixel)];
+            }
+
+            bool selectedKeyReady = selectedRecordReady && selectedSourceReady
+                    && pairedRecord.identity.x == branchRecord.identity.x
+                    && pairedRecord.identity.y == pairedSourceIndex
+                    && pairedRecord.identity.z == branchRecord.identity.z
+                    && pairedRecord.identity.w == branchRecord.identity.w
+                    && pathReservoirSampleMetadataReady(pairedRecord)
+                    && pathMappingSourceReplayMatches(pairedRecord, replay)
+                    && pathMappingKind(pairedRecord)
+                            == PATH_MAPPING_DIFFUSE_RECONNECTION;
+            InterlockedAdd(counters[selectedKeyReady
+                    ? PATH_GUIDE_BRANCH_DIRECT_PAIR_SELECTED_KEY_READY
+                    : PATH_GUIDE_BRANCH_DIRECT_PAIR_SELECTED_KEY_REJECT],
+                    selectedSourceReady ? 1u : 0u);
+
+            bool selectedRootReady = false;
+            bool retainedRootReady = false;
+            if (selectedKeyReady) {
+                pairedRoot = root;
+                pairedRoot.sourcePositionMaterial = pairedSourcePositionMaterial;
+                pairedRoot.sourcePositionMaterial.xyz -= worldPush.camOffset;
+                pairedRoot.sourceNormalRoughness = pairedSourceNormalRoughness;
+                pairedRoot.receiverPositionMaterial = currentReceiverPositionMaterial;
+                pairedRoot.receiverPositionMaterial.xyz -= worldPush.camOffset;
+                pairedRoot.receiverNormalRoughness = currentReceiverNormalRoughness;
+                pairedRoot.segment0.ro -= capture.replayCameraDelta;
+                pairedRoot.segment1.ro -= capture.replayCameraDelta;
+
+                float4 expectedSourceRoot = pairedSourcePositionMaterial;
+                expectedSourceRoot.xyz -= worldPush.camOffset;
+                float4 expectedReceiverRoot = currentReceiverPositionMaterial;
+                expectedReceiverRoot.xyz -= worldPush.camOffset;
+                selectedRootReady = all(asuint(pairedRoot.sourcePositionMaterial)
+                                == asuint(expectedSourceRoot))
+                        && all(asuint(pairedRoot.sourceNormalRoughness)
+                                == asuint(pairedSourceNormalRoughness))
+                        && all(asuint(pairedRoot.receiverPositionMaterial)
+                                == asuint(expectedReceiverRoot))
+                        && all(asuint(pairedRoot.receiverNormalRoughness)
+                                == asuint(currentReceiverNormalRoughness))
+                        && all(asuint(pairedRoot.segment0.ro)
+                                == asuint(root.segment0.ro - capture.replayCameraDelta))
+                        && all(asuint(pairedRoot.segment1.ro)
+                                == asuint(root.segment1.ro - capture.replayCameraDelta));
+                InterlockedAdd(counters[selectedRootReady
+                        ? PATH_GUIDE_BRANCH_DIRECT_PAIR_SELECTED_ROOT_READY
+                        : PATH_GUIDE_BRANCH_DIRECT_PAIR_SELECTED_ROOT_REJECT], 1u);
+            } else if (retainedRecordReady) {
+                retainedRootReady = pathCaptureCurrentGuideRoot(
+                        pairedRecord, guideDimensions,
+                        currentReceiverPositionMaterial,
+                        currentReceiverNormalRoughness,
+                        pairedRoot);
+                InterlockedAdd(counters[retainedRootReady
+                        ? PATH_GUIDE_BRANCH_DIRECT_PAIR_RETAINED_ROOT_READY
+                        : PATH_GUIDE_BRANCH_DIRECT_PAIR_RETAINED_ROOT_REJECT], 1u);
+            }
+
+            bool pairedRootReady = selectedRecordReady
+                    ? selectedRootReady : retainedRootReady;
+            uint pairedSegments = pairedRecord.replayControl.y;
+            bool pairedRootFinite = pairedRootReady
+                    && all(isfinite(pairedRoot.sourcePositionMaterial))
+                    && all(isfinite(pairedRoot.sourceNormalRoughness))
+                    && all(isfinite(pairedRoot.receiverPositionMaterial))
+                    && all(isfinite(pairedRoot.receiverNormalRoughness))
+                    && all(isfinite(pairedRoot.segment0.ro))
+                    && all(isfinite(pairedRoot.segment1.ro));
+            bool pairedRootChainValid = pairedRootFinite
+                    && (pairedSegments == 1u
+                            ? pairedRoot.segment0.nextRecord == PATH_NO_NEXT
+                            : pairedSegments == MAX_PATH_SEGMENTS
+                                    && pairedRoot.segment0.nextRecord != PATH_NO_NEXT
+                                    && pairedRoot.segment1.nextRecord == PATH_NO_NEXT);
+            bool pairedRootIdentityValid = pairedRootChainValid
+                    && pairedRecord.identity.y == pairedSourceIndex
+                    && pathReplayPositionMatches(
+                            pairedRoot.sourcePositionMaterial.xyz + worldPush.camOffset,
+                            pairedSourcePositionMaterial.xyz)
+                    && pathReplayColorMatches(pairedRoot.sourceNormalRoughness.xyz,
+                            pairedSourceNormalRoughness.xyz)
+                    && pathReplayFloatMatches(pairedRoot.sourceNormalRoughness.w,
+                            pairedSourceNormalRoughness.w)
+                    && uint(max(pairedRoot.sourcePositionMaterial.w, 0.0))
+                            == uint(max(pairedSourcePositionMaterial.w, 0.0))
+                    && pathReplayPositionMatches(
+                            pairedRoot.receiverPositionMaterial.xyz + worldPush.camOffset,
+                            currentReceiverPositionMaterial.xyz)
+                    && pathReplayColorMatches(pairedRoot.receiverNormalRoughness.xyz,
+                            currentReceiverNormalRoughness.xyz)
+                    && pathReplayFloatMatches(pairedRoot.receiverNormalRoughness.w,
+                            currentReceiverNormalRoughness.w)
+                    && uint(max(pairedRoot.receiverPositionMaterial.w, 0.0))
+                            == uint(max(currentReceiverPositionMaterial.w, 0.0));
+            InterlockedAdd(counters[PATH_GUIDE_BRANCH_DIRECT_PAIR_ROOT_CHAIN_REJECT],
+                    pairedRootReady && !pairedRootChainValid ? 1u : 0u);
+            InterlockedAdd(counters[PATH_GUIDE_BRANCH_DIRECT_PAIR_ROOT_IDENTITY_REJECT],
+                    pairedRootChainValid && !pairedRootIdentityValid ? 1u : 0u);
+
+            bool selectedPairReady = selectedRecordReady
+                    && selectedSourceReady && selectedKeyReady
+                    && selectedRootReady && pairedRootIdentityValid;
+            bool retainedPairReady = retainedRecordReady
+                    && retainedRootReady && pairedRootIdentityValid;
+            InterlockedAdd(counters[selectedPairReady
+                    ? PATH_GUIDE_BRANCH_DIRECT_PAIR_SELECTED_READY
+                    : PATH_GUIDE_BRANCH_DIRECT_PAIR_SELECTED_REJECT],
+                    selectedRecordReady ? 1u : 0u);
+            InterlockedAdd(counters[retainedPairReady
+                    ? PATH_GUIDE_BRANCH_DIRECT_PAIR_RETAINED_READY
+                    : PATH_GUIDE_BRANCH_DIRECT_PAIR_RETAINED_REJECT],
+                    retainedRecordReady ? 1u : 0u);
+
+            bool pairReady = selectedPairReady || retainedPairReady;
+            if (pairReady) {
+                InterlockedAdd(counters[age == 1u
+                        ? PATH_GUIDE_BRANCH_DIRECT_PAIR_AGE_ONE_READY
+                        : age == 2u
+                                ? PATH_GUIDE_BRANCH_DIRECT_PAIR_AGE_TWO_READY
+                                : PATH_GUIDE_BRANCH_DIRECT_PAIR_AGE_THREE_READY], 1u);
+                InterlockedAdd(counters[mappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION
+                        ? PATH_GUIDE_BRANCH_DIRECT_PAIR_MAPPED_SOURCE_READY
+                        : PATH_GUIDE_BRANCH_DIRECT_PAIR_IDENTITY_SOURCE_READY], 1u);
+            }
+        }
+    }
 }
 
 static void pathBranchScratchReplayValidate() {

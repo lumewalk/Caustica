@@ -851,6 +851,20 @@ every terminal/lane/age/source/gate delta was zero. Counter storage is 411 uints
 is still register-only and preserves the old source key deliberately; the next isolated gate must
 pair it with directly reprojected original `PathSourceRoot` provenance before any scratch write.
 
+That aged register-only provenance pair is now proven. Selected records project the immutable
+capture-time source position directly through the current view projection using the accumulated
+capture-to-current camera delta, search only a strict 3x3 guide footprint, and replace the stored
+source screen key with the matched current texel. Their paired `PathSourceRoot` keeps the original
+queue transcript but advances both packed segment origins by that accumulated delta exactly once;
+source and receiver guide lanes are refreshed in current camera-relative coordinates. Retained
+records keep the current sample and capture its current queue root fresh. No motion-vector chain or
+previous Jacobian is read. Across 27 Vulkan readbacks, all 178331 record-ready outcomes paired:
+161268 selected and 17063 retained. Ages 1/2/3 were 59322/59432/59577 and original source ownership
+was 14276 identity plus 164055 mapped. Source clip/bounds/surface, key, root, chain and identity
+rejects were all zero, as were every terminal/lane/age/source/gate delta. Counter storage is 435
+uints / 1740 B. The pair remains register-only; the next isolated gate must seeded-replay this exact
+pair from its newly current-relative root before any scratch/history write or estimator use.
+
 ## Delivery Phases
 
 ### Phase 0 — Wavefront Integration Baseline

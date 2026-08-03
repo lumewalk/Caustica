@@ -443,7 +443,31 @@ final class RtPathReservoirHistory {
     static final int GUIDE_BRANCH_DIRECT_RECORD_IDENTITY_SOURCE_READY_INDEX = 408;
     static final int GUIDE_BRANCH_DIRECT_RECORD_MAPPED_SOURCE_READY_INDEX = 409;
     static final int GUIDE_BRANCH_DIRECT_RECORD_DELTA_INDEX = 410;
-    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 411;
+    static final int GUIDE_BRANCH_DIRECT_PAIR_ELIGIBLE_INDEX = 411;
+    static final int GUIDE_BRANCH_DIRECT_PAIR_SELECTED_READY_INDEX = 412;
+    static final int GUIDE_BRANCH_DIRECT_PAIR_SELECTED_REJECT_INDEX = 413;
+    static final int GUIDE_BRANCH_DIRECT_PAIR_RETAINED_READY_INDEX = 414;
+    static final int GUIDE_BRANCH_DIRECT_PAIR_RETAINED_REJECT_INDEX = 415;
+    static final int GUIDE_BRANCH_DIRECT_PAIR_EMPTY_READY_INDEX = 416;
+    static final int GUIDE_BRANCH_DIRECT_PAIR_SOURCE_READY_INDEX = 417;
+    static final int GUIDE_BRANCH_DIRECT_PAIR_SOURCE_CLIP_REJECT_INDEX = 418;
+    static final int GUIDE_BRANCH_DIRECT_PAIR_SOURCE_BOUNDS_REJECT_INDEX = 419;
+    static final int GUIDE_BRANCH_DIRECT_PAIR_SOURCE_SURFACE_REJECT_INDEX = 420;
+    static final int GUIDE_BRANCH_DIRECT_PAIR_SELECTED_KEY_READY_INDEX = 421;
+    static final int GUIDE_BRANCH_DIRECT_PAIR_SELECTED_KEY_REJECT_INDEX = 422;
+    static final int GUIDE_BRANCH_DIRECT_PAIR_SELECTED_ROOT_READY_INDEX = 423;
+    static final int GUIDE_BRANCH_DIRECT_PAIR_SELECTED_ROOT_REJECT_INDEX = 424;
+    static final int GUIDE_BRANCH_DIRECT_PAIR_RETAINED_ROOT_READY_INDEX = 425;
+    static final int GUIDE_BRANCH_DIRECT_PAIR_RETAINED_ROOT_REJECT_INDEX = 426;
+    static final int GUIDE_BRANCH_DIRECT_PAIR_ROOT_CHAIN_REJECT_INDEX = 427;
+    static final int GUIDE_BRANCH_DIRECT_PAIR_ROOT_IDENTITY_REJECT_INDEX = 428;
+    static final int GUIDE_BRANCH_DIRECT_PAIR_AGE_ONE_READY_INDEX = 429;
+    static final int GUIDE_BRANCH_DIRECT_PAIR_AGE_TWO_READY_INDEX = 430;
+    static final int GUIDE_BRANCH_DIRECT_PAIR_AGE_THREE_READY_INDEX = 431;
+    static final int GUIDE_BRANCH_DIRECT_PAIR_IDENTITY_SOURCE_READY_INDEX = 432;
+    static final int GUIDE_BRANCH_DIRECT_PAIR_MAPPED_SOURCE_READY_INDEX = 433;
+    static final int GUIDE_BRANCH_DIRECT_PAIR_DELTA_INDEX = 434;
+    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 435;
     static final int SHIFTED_RECEIVER_GUIDE_STRIDE = 8 * Float.BYTES;
     static final int BRANCH_CANDIDATE_TAG_STRIDE = 2 * Integer.BYTES;
     static final int SPATIAL_DIAGNOSTIC_COUNTER_BYTES =
@@ -1614,6 +1638,52 @@ final class RtPathReservoirHistory {
                     counters.get(GUIDE_BRANCH_DIRECT_RECORD_IDENTITY_SOURCE_READY_INDEX));
             long guideBranchDirectRecordMappedSourceReady = Integer.toUnsignedLong(
                     counters.get(GUIDE_BRANCH_DIRECT_RECORD_MAPPED_SOURCE_READY_INDEX));
+            long guideBranchDirectPairEligible = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_PAIR_ELIGIBLE_INDEX));
+            long guideBranchDirectPairSelectedReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_PAIR_SELECTED_READY_INDEX));
+            long guideBranchDirectPairSelectedReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_PAIR_SELECTED_REJECT_INDEX));
+            long guideBranchDirectPairRetainedReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_PAIR_RETAINED_READY_INDEX));
+            long guideBranchDirectPairRetainedReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_PAIR_RETAINED_REJECT_INDEX));
+            long guideBranchDirectPairEmptyReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_PAIR_EMPTY_READY_INDEX));
+            long guideBranchDirectPairSourceReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_PAIR_SOURCE_READY_INDEX));
+            long guideBranchDirectPairSourceClipReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_PAIR_SOURCE_CLIP_REJECT_INDEX));
+            long guideBranchDirectPairSourceBoundsReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_PAIR_SOURCE_BOUNDS_REJECT_INDEX));
+            long guideBranchDirectPairSourceSurfaceReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_PAIR_SOURCE_SURFACE_REJECT_INDEX));
+            long guideBranchDirectPairSelectedKeyReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_PAIR_SELECTED_KEY_READY_INDEX));
+            long guideBranchDirectPairSelectedKeyReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_PAIR_SELECTED_KEY_REJECT_INDEX));
+            long guideBranchDirectPairSelectedRootReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_PAIR_SELECTED_ROOT_READY_INDEX));
+            long guideBranchDirectPairSelectedRootReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_PAIR_SELECTED_ROOT_REJECT_INDEX));
+            long guideBranchDirectPairRetainedRootReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_PAIR_RETAINED_ROOT_READY_INDEX));
+            long guideBranchDirectPairRetainedRootReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_PAIR_RETAINED_ROOT_REJECT_INDEX));
+            long guideBranchDirectPairRootChainReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_PAIR_ROOT_CHAIN_REJECT_INDEX));
+            long guideBranchDirectPairRootIdentityReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_PAIR_ROOT_IDENTITY_REJECT_INDEX));
+            long guideBranchDirectPairAgeOneReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_PAIR_AGE_ONE_READY_INDEX));
+            long guideBranchDirectPairAgeTwoReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_PAIR_AGE_TWO_READY_INDEX));
+            long guideBranchDirectPairAgeThreeReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_PAIR_AGE_THREE_READY_INDEX));
+            long guideBranchDirectPairIdentitySourceReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_PAIR_IDENTITY_SOURCE_READY_INDEX));
+            long guideBranchDirectPairMappedSourceReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_PAIR_MAPPED_SOURCE_READY_INDEX));
             long crossFrameReceiverReject = crossFrameReceiverSurfaceReject
                     + crossFrameReceiverSampleReject + crossFrameReceiverEdgeReject
                     + crossFrameReceiverTopologyReject + crossFrameReceiverDepthReject
@@ -2687,6 +2757,80 @@ final class RtPathReservoirHistory {
                     guideBranchDirectRecordMappedSourceReady,
                     guideBranchDirectRecordReady - guideBranchDirectRecordMappingReady,
                     guideBranchDirectPostSelectionReady - guideBranchDirectRecordEligible);
+            long guideBranchDirectPairTerminal = guideBranchDirectPairSelectedReady
+                    + guideBranchDirectPairSelectedReject
+                    + guideBranchDirectPairRetainedReady
+                    + guideBranchDirectPairRetainedReject
+                    + guideBranchDirectPairEmptyReady;
+            long guideBranchDirectPairReady = guideBranchDirectPairSelectedReady
+                    + guideBranchDirectPairRetainedReady
+                    + guideBranchDirectPairEmptyReady;
+            long guideBranchDirectPairSourceTerminal = guideBranchDirectPairSourceReady
+                    + guideBranchDirectPairSourceClipReject
+                    + guideBranchDirectPairSourceBoundsReject
+                    + guideBranchDirectPairSourceSurfaceReject;
+            long guideBranchDirectPairSelectedKeyTerminal =
+                    guideBranchDirectPairSelectedKeyReady
+                            + guideBranchDirectPairSelectedKeyReject;
+            long guideBranchDirectPairSelectedRootTerminal =
+                    guideBranchDirectPairSelectedRootReady
+                            + guideBranchDirectPairSelectedRootReject;
+            long guideBranchDirectPairRetainedRootTerminal =
+                    guideBranchDirectPairRetainedRootReady
+                            + guideBranchDirectPairRetainedRootReject;
+            long guideBranchDirectPairAgeReady = guideBranchDirectPairAgeOneReady
+                    + guideBranchDirectPairAgeTwoReady
+                    + guideBranchDirectPairAgeThreeReady;
+            long guideBranchDirectPairMappingReady =
+                    guideBranchDirectPairIdentitySourceReady
+                            + guideBranchDirectPairMappedSourceReady;
+            CausticaMod.LOGGER.info(
+                    "RT path guide branch register pair: recordReady={}, eligible={}, "
+                            + "selected[ready={},reject={},sourceReady={},clipReject={},"
+                            + "boundsReject={},surfaceReject={},sourceDelta={},keyReady={},"
+                            + "keyReject={},keyDelta={},rootReady={},rootReject={},rootDelta={}], "
+                            + "retained[ready={},reject={},rootReady={},rootReject={},rootDelta={}], "
+                            + "root[chainReject={},identityReject={}], empty={}, terminal={},"
+                            + "delta={}, ready={}, age[one={},two={},three={},delta={}], "
+                            + "source[identity={},mapped={},delta={}], gateDelta={}",
+                    guideBranchDirectRecordReady,
+                    guideBranchDirectPairEligible,
+                    guideBranchDirectPairSelectedReady,
+                    guideBranchDirectPairSelectedReject,
+                    guideBranchDirectPairSourceReady,
+                    guideBranchDirectPairSourceClipReject,
+                    guideBranchDirectPairSourceBoundsReject,
+                    guideBranchDirectPairSourceSurfaceReject,
+                    guideBranchDirectRecordSelectedReady
+                            - guideBranchDirectPairSourceTerminal,
+                    guideBranchDirectPairSelectedKeyReady,
+                    guideBranchDirectPairSelectedKeyReject,
+                    guideBranchDirectPairSourceReady
+                            - guideBranchDirectPairSelectedKeyTerminal,
+                    guideBranchDirectPairSelectedRootReady,
+                    guideBranchDirectPairSelectedRootReject,
+                    guideBranchDirectPairSelectedKeyReady
+                            - guideBranchDirectPairSelectedRootTerminal,
+                    guideBranchDirectPairRetainedReady,
+                    guideBranchDirectPairRetainedReject,
+                    guideBranchDirectPairRetainedRootReady,
+                    guideBranchDirectPairRetainedRootReject,
+                    guideBranchDirectRecordRetainedReady
+                            - guideBranchDirectPairRetainedRootTerminal,
+                    guideBranchDirectPairRootChainReject,
+                    guideBranchDirectPairRootIdentityReject,
+                    guideBranchDirectPairEmptyReady,
+                    guideBranchDirectPairTerminal,
+                    guideBranchDirectPairEligible - guideBranchDirectPairTerminal,
+                    guideBranchDirectPairReady,
+                    guideBranchDirectPairAgeOneReady,
+                    guideBranchDirectPairAgeTwoReady,
+                    guideBranchDirectPairAgeThreeReady,
+                    guideBranchDirectPairReady - guideBranchDirectPairAgeReady,
+                    guideBranchDirectPairIdentitySourceReady,
+                    guideBranchDirectPairMappedSourceReady,
+                    guideBranchDirectPairReady - guideBranchDirectPairMappingReady,
+                    guideBranchDirectRecordReady - guideBranchDirectPairEligible);
             spatialDiagnosticViewPending = 0;
             return;
         }

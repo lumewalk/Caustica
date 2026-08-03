@@ -1794,6 +1794,105 @@ final class RtPathSpatialReuseReference {
                 retainedPreserve, weights, retention, sourceSelected);
     }
 
+    enum BranchDirectPairOutcome {
+        RECORD_REJECT,
+        EMPTY_READY,
+        SELECTED_SOURCE_REJECT,
+        SELECTED_KEY_REJECT,
+        SELECTED_ROOT_REJECT,
+        SELECTED_READY,
+        RETAINED_ROOT_REJECT,
+        RETAINED_READY
+    }
+
+    record BranchDirectPairAudit(
+            BranchDirectPairOutcome outcome,
+            BranchDirectLaneOutcome sourceProjection,
+            BranchDirectLaneOutcome selectedKey,
+            BranchDirectLaneOutcome root,
+            BranchCandidateRetentionOutcome retention) {
+    }
+
+    /**
+     * Ordered CPU mirror for pairing an aged register record with directly reprojected original
+     * source-root provenance. Empty records intentionally carry no root.
+     */
+    static BranchDirectPairAudit branchDirectPairAudit(
+            BranchCandidateRetentionOutcome retention,
+            BranchDirectRecordOutcome recordOutcome,
+            boolean selectedSourceReady,
+            boolean selectedKeyReady,
+            boolean rootReady,
+            boolean rootChainValid,
+            boolean rootIdentityValid) {
+        if (retention != BranchCandidateRetentionOutcome.AGE_ONE
+                && retention != BranchCandidateRetentionOutcome.AGE_TWO
+                && retention != BranchCandidateRetentionOutcome.AGE_THREE) {
+            throw new IllegalArgumentException(
+                    "direct pair audit requires a live aged branch candidate");
+        }
+        if (recordOutcome == null) {
+            throw new IllegalArgumentException("direct pair audit requires a record outcome");
+        }
+        if (recordOutcome == BranchDirectRecordOutcome.EMPTY_READY) {
+            return branchDirectPairAuditResult(BranchDirectPairOutcome.EMPTY_READY,
+                    retention, BranchDirectLaneOutcome.NOT_ELIGIBLE,
+                    BranchDirectLaneOutcome.NOT_ELIGIBLE,
+                    BranchDirectLaneOutcome.NOT_ELIGIBLE);
+        }
+        if (recordOutcome != BranchDirectRecordOutcome.SELECTED_READY
+                && recordOutcome != BranchDirectRecordOutcome.RETAINED_READY) {
+            return branchDirectPairAuditResult(BranchDirectPairOutcome.RECORD_REJECT,
+                    retention, BranchDirectLaneOutcome.NOT_ELIGIBLE,
+                    BranchDirectLaneOutcome.NOT_ELIGIBLE,
+                    BranchDirectLaneOutcome.NOT_ELIGIBLE);
+        }
+
+        if (recordOutcome == BranchDirectRecordOutcome.SELECTED_READY) {
+            if (!selectedSourceReady) {
+                return branchDirectPairAuditResult(
+                        BranchDirectPairOutcome.SELECTED_SOURCE_REJECT, retention,
+                        BranchDirectLaneOutcome.REJECT,
+                        BranchDirectLaneOutcome.NOT_ELIGIBLE,
+                        BranchDirectLaneOutcome.NOT_ELIGIBLE);
+            }
+            if (!selectedKeyReady) {
+                return branchDirectPairAuditResult(
+                        BranchDirectPairOutcome.SELECTED_KEY_REJECT, retention,
+                        BranchDirectLaneOutcome.READY,
+                        BranchDirectLaneOutcome.REJECT,
+                        BranchDirectLaneOutcome.NOT_ELIGIBLE);
+            }
+            boolean completeRoot = rootReady && rootChainValid && rootIdentityValid;
+            return branchDirectPairAuditResult(
+                    completeRoot ? BranchDirectPairOutcome.SELECTED_READY
+                            : BranchDirectPairOutcome.SELECTED_ROOT_REJECT,
+                    retention, BranchDirectLaneOutcome.READY,
+                    BranchDirectLaneOutcome.READY,
+                    completeRoot ? BranchDirectLaneOutcome.READY
+                            : BranchDirectLaneOutcome.REJECT);
+        }
+
+        boolean completeRoot = rootReady && rootChainValid && rootIdentityValid;
+        return branchDirectPairAuditResult(
+                completeRoot ? BranchDirectPairOutcome.RETAINED_READY
+                        : BranchDirectPairOutcome.RETAINED_ROOT_REJECT,
+                retention, BranchDirectLaneOutcome.NOT_ELIGIBLE,
+                BranchDirectLaneOutcome.NOT_ELIGIBLE,
+                completeRoot ? BranchDirectLaneOutcome.READY
+                        : BranchDirectLaneOutcome.REJECT);
+    }
+
+    private static BranchDirectPairAudit branchDirectPairAuditResult(
+            BranchDirectPairOutcome outcome,
+            BranchCandidateRetentionOutcome retention,
+            BranchDirectLaneOutcome sourceProjection,
+            BranchDirectLaneOutcome selectedKey,
+            BranchDirectLaneOutcome root) {
+        return new BranchDirectPairAudit(
+                outcome, sourceProjection, selectedKey, root, retention);
+    }
+
     /**
      * Ordered CPU mirror for the post-barrier exact-lane validation sample. Reservoir and root
      * equality are bitwise requirements; acceptance remains diagnostic-only.
