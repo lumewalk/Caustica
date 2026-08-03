@@ -484,8 +484,20 @@ show exact terminal and mapping accounting, nonzero ready counts for ages 1–3,
 guide/geometry/PDF/throughput rejects in a stable static scene. The proven run covered 24 readbacks:
 174142 eligible, 170695 ready (57450/56189/57056 by age), 3447 explicit unsupported/missing-edge
 rejects, 12602 identity-ready plus 158093 mapped-ready, and zero other rejects or deltas. Counter
-storage is 314 uints / 1256 B; replay ABI, record stride and WorldPush remain unchanged. No reservoir,
-history, weight, selection or estimator write occurs.
+storage at that checkpoint was 314 uints / 1256 B. No reservoir, history, weight, selection or
+estimator write occurs.
+
+Each ready aged direct remap now also performs the production shadow query from the exact current
+biased receiver origin to the replayed shared vertex, then multiplies the reconstructed shifted
+radiance by the returned RGB transmittance and evaluates its luminance target. Occlusion is valid
+visibility and must advance to a zero target; only non-finite/out-of-range visibility or target
+arithmetic rejects. `RT path guide branch direct target` must show exact visibility, target, age and
+mapping partitions plus `gateDelta=0`. The proven run covered 42 readbacks: all 284642 remap-ready
+records reached a valid target, with 284636 clear, 4 tinted and 2 occluded/zero; invalid categories
+and every delta were zero. Age 1/2/3 split as 95250/94636/94756 and mapping ownership as 22597
+identity + 262045 mapped. Current counter storage is 330 uints / 1320 B; replay ABI, 384 B capture
+record and 672 B WorldPush remain unchanged. This remains counter-only and does not authorize GRIS
+weighting, selection, history or estimator contribution.
 
 For a fresh runtime check, use debug view 20 and inspect `run/logs/latest.log`. Normal operation
 requires `RT bring-up OK`, Vulkan, the intended NVIDIA device, exact zero-delta counter partitions,

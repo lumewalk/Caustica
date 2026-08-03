@@ -780,8 +780,17 @@ Across 24 Vulkan readbacks, 170695 of 174142 eligible records were ready across 
 57450/56189/57056. The remaining 3447 were explicit missing/unsupported diffuse-edge rejects;
 guide, geometry, PDF and throughput rejects plus terminal/mapping deltas were zero. The next gate is
 a counter-only visibility and shifted-target reconstruction for these aged direct remaps using the
-exact current receiver ray origin and production shadow SBT. Selection, reservoir/history writes
-and estimator contribution remain forbidden.
+exact current receiver ray origin and production shadow SBT.
+
+That visibility/target gate is now proven as well. The production shadow query classifies clear,
+tinted, occluded and invalid transmittance; valid occlusion proceeds to a zero target instead of
+being treated as a reject. Across 42 Vulkan readbacks, all 284642 direct-remap-ready records reached
+valid targets: 284636 clear/positive, 4 tinted/positive and 2 occluded/zero. Invalid visibility and
+target arithmetic were zero. Ages 1/2/3 balanced as 95250/94636/94756, identity/mapped ownership as
+22597/262045, and every gate/terminal/age/mapping delta was zero. The next isolated gate may form the
+counter-only GRIS merge weight from the fresh shifted target, original source final weight,
+`min(sourceM, 8)` and the newly recomputed direct Jacobian. Selection, reservoir/history writes and
+estimator contribution remain forbidden.
 
 ## Delivery Phases
 

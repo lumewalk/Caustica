@@ -346,7 +346,23 @@ final class RtPathReservoirHistory {
     static final int GUIDE_BRANCH_DIRECT_REMAP_IDENTITY_READY_INDEX = 311;
     static final int GUIDE_BRANCH_DIRECT_REMAP_MAPPED_READY_INDEX = 312;
     static final int GUIDE_BRANCH_DIRECT_REMAP_DELTA_INDEX = 313;
-    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 314;
+    static final int GUIDE_BRANCH_DIRECT_VISIBILITY_ELIGIBLE_INDEX = 314;
+    static final int GUIDE_BRANCH_DIRECT_VISIBILITY_CLEAR_INDEX = 315;
+    static final int GUIDE_BRANCH_DIRECT_VISIBILITY_TINTED_INDEX = 316;
+    static final int GUIDE_BRANCH_DIRECT_VISIBILITY_OCCLUDED_INDEX = 317;
+    static final int GUIDE_BRANCH_DIRECT_VISIBILITY_INVALID_INDEX = 318;
+    static final int GUIDE_BRANCH_DIRECT_TARGET_ELIGIBLE_INDEX = 319;
+    static final int GUIDE_BRANCH_DIRECT_TARGET_POSITIVE_INDEX = 320;
+    static final int GUIDE_BRANCH_DIRECT_TARGET_ZERO_INDEX = 321;
+    static final int GUIDE_BRANCH_DIRECT_TARGET_INVALID_INDEX = 322;
+    static final int GUIDE_BRANCH_DIRECT_TARGET_AGE_ONE_READY_INDEX = 323;
+    static final int GUIDE_BRANCH_DIRECT_TARGET_AGE_TWO_READY_INDEX = 324;
+    static final int GUIDE_BRANCH_DIRECT_TARGET_AGE_THREE_READY_INDEX = 325;
+    static final int GUIDE_BRANCH_DIRECT_TARGET_IDENTITY_READY_INDEX = 326;
+    static final int GUIDE_BRANCH_DIRECT_TARGET_MAPPED_READY_INDEX = 327;
+    static final int GUIDE_BRANCH_DIRECT_VISIBILITY_DELTA_INDEX = 328;
+    static final int GUIDE_BRANCH_DIRECT_TARGET_DELTA_INDEX = 329;
+    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 330;
     static final int SHIFTED_RECEIVER_GUIDE_STRIDE = 8 * Float.BYTES;
     static final int BRANCH_CANDIDATE_TAG_STRIDE = 2 * Integer.BYTES;
     static final int SPATIAL_DIAGNOSTIC_COUNTER_BYTES =
@@ -1337,6 +1353,34 @@ final class RtPathReservoirHistory {
                     counters.get(GUIDE_BRANCH_DIRECT_REMAP_IDENTITY_READY_INDEX));
             long guideBranchDirectRemapMappedReady = Integer.toUnsignedLong(
                     counters.get(GUIDE_BRANCH_DIRECT_REMAP_MAPPED_READY_INDEX));
+            long guideBranchDirectVisibilityEligible = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_VISIBILITY_ELIGIBLE_INDEX));
+            long guideBranchDirectVisibilityClear = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_VISIBILITY_CLEAR_INDEX));
+            long guideBranchDirectVisibilityTinted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_VISIBILITY_TINTED_INDEX));
+            long guideBranchDirectVisibilityOccluded = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_VISIBILITY_OCCLUDED_INDEX));
+            long guideBranchDirectVisibilityInvalid = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_VISIBILITY_INVALID_INDEX));
+            long guideBranchDirectTargetEligible = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_TARGET_ELIGIBLE_INDEX));
+            long guideBranchDirectTargetPositive = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_TARGET_POSITIVE_INDEX));
+            long guideBranchDirectTargetZero = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_TARGET_ZERO_INDEX));
+            long guideBranchDirectTargetInvalid = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_TARGET_INVALID_INDEX));
+            long guideBranchDirectTargetAgeOneReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_TARGET_AGE_ONE_READY_INDEX));
+            long guideBranchDirectTargetAgeTwoReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_TARGET_AGE_TWO_READY_INDEX));
+            long guideBranchDirectTargetAgeThreeReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_TARGET_AGE_THREE_READY_INDEX));
+            long guideBranchDirectTargetIdentityReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_TARGET_IDENTITY_READY_INDEX));
+            long guideBranchDirectTargetMappedReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_TARGET_MAPPED_READY_INDEX));
             long crossFrameReceiverReject = crossFrameReceiverSurfaceReject
                     + crossFrameReceiverSampleReject + crossFrameReceiverEdgeReject
                     + crossFrameReceiverTopologyReject + crossFrameReceiverDepthReject
@@ -2102,6 +2146,48 @@ final class RtPathReservoirHistory {
                     guideBranchDirectRemapTerminal,
                     guideBranchDirectRemapEligible - guideBranchDirectRemapTerminal,
                     guideBranchDirectRemapReady - guideBranchDirectRemapMappingReady);
+            long guideBranchDirectVisibilityTerminal = guideBranchDirectVisibilityClear
+                    + guideBranchDirectVisibilityTinted + guideBranchDirectVisibilityOccluded
+                    + guideBranchDirectVisibilityInvalid;
+            long guideBranchDirectTargetTerminal = guideBranchDirectTargetPositive
+                    + guideBranchDirectTargetZero + guideBranchDirectTargetInvalid;
+            long guideBranchDirectTargetReady = guideBranchDirectTargetPositive
+                    + guideBranchDirectTargetZero;
+            long guideBranchDirectTargetAgeReady = guideBranchDirectTargetAgeOneReady
+                    + guideBranchDirectTargetAgeTwoReady
+                    + guideBranchDirectTargetAgeThreeReady;
+            long guideBranchDirectTargetMappingReady = guideBranchDirectTargetIdentityReady
+                    + guideBranchDirectTargetMappedReady;
+            CausticaMod.LOGGER.info(
+                    "RT path guide branch direct target: remapReady={}, "
+                            + "visibility[eligible={},clear={},tinted={},occluded={},invalid={},"
+                            + "terminal={},delta={}], target[eligible={},positive={},zero={},"
+                            + "invalid={},terminal={},delta={}], ready={}, "
+                            + "age[one={},two={},three={},delta={}], "
+                            + "mapping[identity={},mapped={},delta={}], gateDelta={}",
+                    guideBranchDirectRemapReady,
+                    guideBranchDirectVisibilityEligible,
+                    guideBranchDirectVisibilityClear,
+                    guideBranchDirectVisibilityTinted,
+                    guideBranchDirectVisibilityOccluded,
+                    guideBranchDirectVisibilityInvalid,
+                    guideBranchDirectVisibilityTerminal,
+                    guideBranchDirectVisibilityEligible - guideBranchDirectVisibilityTerminal,
+                    guideBranchDirectTargetEligible,
+                    guideBranchDirectTargetPositive,
+                    guideBranchDirectTargetZero,
+                    guideBranchDirectTargetInvalid,
+                    guideBranchDirectTargetTerminal,
+                    guideBranchDirectTargetEligible - guideBranchDirectTargetTerminal,
+                    guideBranchDirectTargetReady,
+                    guideBranchDirectTargetAgeOneReady,
+                    guideBranchDirectTargetAgeTwoReady,
+                    guideBranchDirectTargetAgeThreeReady,
+                    guideBranchDirectTargetReady - guideBranchDirectTargetAgeReady,
+                    guideBranchDirectTargetIdentityReady,
+                    guideBranchDirectTargetMappedReady,
+                    guideBranchDirectTargetReady - guideBranchDirectTargetMappingReady,
+                    guideBranchDirectRemapReady - guideBranchDirectVisibilityEligible);
             spatialDiagnosticViewPending = 0;
             return;
         }

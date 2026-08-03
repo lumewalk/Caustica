@@ -1298,6 +1298,60 @@ final class RtPathSpatialReuseReference {
         };
     }
 
+    enum BranchDirectVisibilityOutcome {
+        DIRECT_REMAP_REJECT,
+        CLEAR,
+        TINTED,
+        OCCLUDED,
+        INVALID
+    }
+
+    enum BranchDirectTargetOutcome {
+        NOT_ELIGIBLE,
+        POSITIVE,
+        ZERO,
+        INVALID
+    }
+
+    record BranchDirectTargetAudit(
+            BranchDirectVisibilityOutcome visibility,
+            BranchDirectTargetOutcome target,
+            BranchCandidateRetentionOutcome retention) {
+    }
+
+    /** Ordered CPU mirror for the production-shadow and shifted-target aged branch audit. */
+    static BranchDirectTargetAudit branchDirectTargetAudit(
+            BranchCandidateRetentionOutcome retention, boolean directRemapReady,
+            boolean visibilityArithmeticValid, boolean anyTransmission, boolean fullyClear,
+            boolean targetArithmeticValid, boolean positiveTarget) {
+        if (!directRemapReady) {
+            return new BranchDirectTargetAudit(
+                    BranchDirectVisibilityOutcome.DIRECT_REMAP_REJECT,
+                    BranchDirectTargetOutcome.NOT_ELIGIBLE, retention);
+        }
+        if (retention != BranchCandidateRetentionOutcome.AGE_ONE
+                && retention != BranchCandidateRetentionOutcome.AGE_TWO
+                && retention != BranchCandidateRetentionOutcome.AGE_THREE) {
+            throw new IllegalArgumentException(
+                    "direct target audit requires a live aged branch candidate");
+        }
+        if (!visibilityArithmeticValid) {
+            return new BranchDirectTargetAudit(BranchDirectVisibilityOutcome.INVALID,
+                    BranchDirectTargetOutcome.NOT_ELIGIBLE, retention);
+        }
+        BranchDirectVisibilityOutcome visibility = !anyTransmission
+                ? BranchDirectVisibilityOutcome.OCCLUDED
+                : fullyClear
+                        ? BranchDirectVisibilityOutcome.CLEAR
+                        : BranchDirectVisibilityOutcome.TINTED;
+        BranchDirectTargetOutcome target = !targetArithmeticValid
+                ? BranchDirectTargetOutcome.INVALID
+                : positiveTarget
+                        ? BranchDirectTargetOutcome.POSITIVE
+                        : BranchDirectTargetOutcome.ZERO;
+        return new BranchDirectTargetAudit(visibility, target, retention);
+    }
+
     /**
      * Ordered CPU mirror for the post-barrier exact-lane validation sample. Reservoir and root
      * equality are bitwise requirements; acceptance remains diagnostic-only.

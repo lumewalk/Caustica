@@ -2199,6 +2199,56 @@ static void pathBranchAgeReplayValidate() {
     InterlockedAdd(counters[mappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION
             ? PATH_GUIDE_BRANCH_DIRECT_REMAP_MAPPED_READY
             : PATH_GUIDE_BRANCH_DIRECT_REMAP_IDENTITY_READY], 1u);
+
+    // Counter-only aged visibility/target audit. This is the same production shadow query as the
+    // fresh guide remap, rooted at the exact current biased receiver origin. Occlusion is a valid
+    // visibility result and therefore advances to a zero shifted target; only invalid arithmetic
+    // terminates before target reconstruction. No selection or device/history write follows.
+    InterlockedAdd(counters[PATH_GUIDE_BRANCH_DIRECT_VISIBILITY_ELIGIBLE], 1u);
+    float3 toShared = sharedVertex - receiverRayOrigin.xyz;
+    float visibilityDistance = length(toShared);
+    if (!isfinite(visibilityDistance) || visibilityDistance <= 1.0e-4) {
+        InterlockedAdd(counters[PATH_GUIDE_BRANCH_DIRECT_VISIBILITY_INVALID], 1u);
+        return;
+    }
+
+    VisibilityResult directVisibility = visibility(receiverRayOrigin.xyz,
+            toShared / visibilityDistance, visibilityDistance * 0.999);
+    float3 transmittance = directVisibility.transmittance;
+    bool visibilityValid = all(isfinite(transmittance))
+            && all(transmittance >= float3(0.0))
+            && all(transmittance <= float3(1.0));
+    uint visibilityResult = !visibilityValid
+            ? PATH_GUIDE_BRANCH_DIRECT_VISIBILITY_INVALID
+            : max(transmittance.x, max(transmittance.y, transmittance.z)) <= 0.0
+                    ? PATH_GUIDE_BRANCH_DIRECT_VISIBILITY_OCCLUDED
+                    : all(transmittance == float3(1.0))
+                            ? PATH_GUIDE_BRANCH_DIRECT_VISIBILITY_CLEAR
+                            : PATH_GUIDE_BRANCH_DIRECT_VISIBILITY_TINTED;
+    InterlockedAdd(counters[visibilityResult], 1u);
+    if (!visibilityValid) return;
+
+    InterlockedAdd(counters[PATH_GUIDE_BRANCH_DIRECT_TARGET_ELIGIBLE], 1u);
+    float3 visibleRadiance = shiftedRadiance * transmittance;
+    float shiftedTarget = pathLuminance(visibleRadiance);
+    bool targetValid = all(isfinite(visibleRadiance))
+            && all(visibleRadiance >= float3(0.0))
+            && isfinite(shiftedTarget) && shiftedTarget >= 0.0;
+    InterlockedAdd(counters[!targetValid
+            ? PATH_GUIDE_BRANCH_DIRECT_TARGET_INVALID
+            : shiftedTarget > 0.0
+                    ? PATH_GUIDE_BRANCH_DIRECT_TARGET_POSITIVE
+                    : PATH_GUIDE_BRANCH_DIRECT_TARGET_ZERO], 1u);
+    if (!targetValid) return;
+
+    InterlockedAdd(counters[age == 1u
+            ? PATH_GUIDE_BRANCH_DIRECT_TARGET_AGE_ONE_READY
+            : age == 2u
+                    ? PATH_GUIDE_BRANCH_DIRECT_TARGET_AGE_TWO_READY
+                    : PATH_GUIDE_BRANCH_DIRECT_TARGET_AGE_THREE_READY], 1u);
+    InterlockedAdd(counters[mappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION
+            ? PATH_GUIDE_BRANCH_DIRECT_TARGET_MAPPED_READY
+            : PATH_GUIDE_BRANCH_DIRECT_TARGET_IDENTITY_READY], 1u);
 }
 
 static void pathBranchScratchReplayValidate() {
