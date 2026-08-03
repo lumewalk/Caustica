@@ -10,6 +10,7 @@ final class RtPathSpatialReuseReference {
     static final double NORMAL_COSINE_THRESHOLD = 0.85;
     static final double RELATIVE_DEPTH_THRESHOLD = 0.10;
     static final double MAX_FOOTPRINT_RATIO = 4.0;
+    static final double MAX_SPATIAL_SOURCE_COUNT = 8.0;
     static final int RECONNECTION_HIT_DEPTH = 1;
     static final int RECONNECTION_VALID = 1;
     static final int RECONNECTION_EVENT_SHIFT = 5;
@@ -1350,6 +1351,67 @@ final class RtPathSpatialReuseReference {
                         ? BranchDirectTargetOutcome.POSITIVE
                         : BranchDirectTargetOutcome.ZERO;
         return new BranchDirectTargetAudit(visibility, target, retention);
+    }
+
+    enum BranchDirectWeightOutcome {
+        TARGET_REJECT,
+        POSITIVE,
+        ZERO,
+        INVALID
+    }
+
+    enum BranchDirectSourceCountOutcome {
+        NOT_ELIGIBLE,
+        UNCAPPED,
+        CAPPED
+    }
+
+    record BranchDirectWeightAudit(
+            BranchDirectWeightOutcome weight,
+            BranchDirectSourceCountOutcome sourceCount,
+            BranchCandidateRetentionOutcome retention,
+            double mergeWeight) {
+    }
+
+    /** CPU mirror for the aged counter-only GRIS weight and source-M cap partition. */
+    static BranchDirectWeightAudit branchDirectWeightAudit(
+            BranchCandidateRetentionOutcome retention, boolean targetReady,
+            double shiftedTarget, double sourceFinalWeight, double sourceEffectiveCount,
+            double directPssJacobian) {
+        if (!targetReady) {
+            return new BranchDirectWeightAudit(BranchDirectWeightOutcome.TARGET_REJECT,
+                    BranchDirectSourceCountOutcome.NOT_ELIGIBLE, retention, 0.0);
+        }
+        if (retention != BranchCandidateRetentionOutcome.AGE_ONE
+                && retention != BranchCandidateRetentionOutcome.AGE_TWO
+                && retention != BranchCandidateRetentionOutcome.AGE_THREE) {
+            throw new IllegalArgumentException(
+                    "direct weight audit requires a live aged branch candidate");
+        }
+        boolean termsValid = nonNegativeFinite(shiftedTarget)
+                && nonNegativeFinite(sourceFinalWeight)
+                && nonNegativeFinite(sourceEffectiveCount)
+                && positiveFinite(directPssJacobian);
+        if (!termsValid) {
+            return new BranchDirectWeightAudit(BranchDirectWeightOutcome.INVALID,
+                    BranchDirectSourceCountOutcome.NOT_ELIGIBLE, retention, 0.0);
+        }
+        double sourceCount = Math.min(sourceEffectiveCount, MAX_SPATIAL_SOURCE_COUNT);
+        double mergeWeight = shiftedTarget * sourceFinalWeight;
+        mergeWeight *= sourceCount;
+        mergeWeight *= directPssJacobian;
+        if (!Double.isFinite(mergeWeight) || mergeWeight < 0.0) {
+            return new BranchDirectWeightAudit(BranchDirectWeightOutcome.INVALID,
+                    BranchDirectSourceCountOutcome.NOT_ELIGIBLE, retention, 0.0);
+        }
+        BranchDirectWeightOutcome weight = mergeWeight > 0.0
+                ? BranchDirectWeightOutcome.POSITIVE
+                : BranchDirectWeightOutcome.ZERO;
+        BranchDirectSourceCountOutcome count =
+                sourceEffectiveCount > MAX_SPATIAL_SOURCE_COUNT
+                        ? BranchDirectSourceCountOutcome.CAPPED
+                        : BranchDirectSourceCountOutcome.UNCAPPED;
+        return new BranchDirectWeightAudit(weight, count, retention, mergeWeight);
     }
 
     /**

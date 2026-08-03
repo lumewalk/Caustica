@@ -362,7 +362,19 @@ final class RtPathReservoirHistory {
     static final int GUIDE_BRANCH_DIRECT_TARGET_MAPPED_READY_INDEX = 327;
     static final int GUIDE_BRANCH_DIRECT_VISIBILITY_DELTA_INDEX = 328;
     static final int GUIDE_BRANCH_DIRECT_TARGET_DELTA_INDEX = 329;
-    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 330;
+    static final int GUIDE_BRANCH_DIRECT_WEIGHT_ELIGIBLE_INDEX = 330;
+    static final int GUIDE_BRANCH_DIRECT_WEIGHT_POSITIVE_INDEX = 331;
+    static final int GUIDE_BRANCH_DIRECT_WEIGHT_ZERO_INDEX = 332;
+    static final int GUIDE_BRANCH_DIRECT_WEIGHT_INVALID_INDEX = 333;
+    static final int GUIDE_BRANCH_DIRECT_WEIGHT_AGE_ONE_READY_INDEX = 334;
+    static final int GUIDE_BRANCH_DIRECT_WEIGHT_AGE_TWO_READY_INDEX = 335;
+    static final int GUIDE_BRANCH_DIRECT_WEIGHT_AGE_THREE_READY_INDEX = 336;
+    static final int GUIDE_BRANCH_DIRECT_WEIGHT_IDENTITY_READY_INDEX = 337;
+    static final int GUIDE_BRANCH_DIRECT_WEIGHT_MAPPED_READY_INDEX = 338;
+    static final int GUIDE_BRANCH_DIRECT_WEIGHT_COUNT_UNCAPPED_INDEX = 339;
+    static final int GUIDE_BRANCH_DIRECT_WEIGHT_COUNT_CAPPED_INDEX = 340;
+    static final int GUIDE_BRANCH_DIRECT_WEIGHT_DELTA_INDEX = 341;
+    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 342;
     static final int SHIFTED_RECEIVER_GUIDE_STRIDE = 8 * Float.BYTES;
     static final int BRANCH_CANDIDATE_TAG_STRIDE = 2 * Integer.BYTES;
     static final int SPATIAL_DIAGNOSTIC_COUNTER_BYTES =
@@ -1381,6 +1393,28 @@ final class RtPathReservoirHistory {
                     counters.get(GUIDE_BRANCH_DIRECT_TARGET_IDENTITY_READY_INDEX));
             long guideBranchDirectTargetMappedReady = Integer.toUnsignedLong(
                     counters.get(GUIDE_BRANCH_DIRECT_TARGET_MAPPED_READY_INDEX));
+            long guideBranchDirectWeightEligible = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_WEIGHT_ELIGIBLE_INDEX));
+            long guideBranchDirectWeightPositive = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_WEIGHT_POSITIVE_INDEX));
+            long guideBranchDirectWeightZero = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_WEIGHT_ZERO_INDEX));
+            long guideBranchDirectWeightInvalid = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_WEIGHT_INVALID_INDEX));
+            long guideBranchDirectWeightAgeOneReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_WEIGHT_AGE_ONE_READY_INDEX));
+            long guideBranchDirectWeightAgeTwoReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_WEIGHT_AGE_TWO_READY_INDEX));
+            long guideBranchDirectWeightAgeThreeReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_WEIGHT_AGE_THREE_READY_INDEX));
+            long guideBranchDirectWeightIdentityReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_WEIGHT_IDENTITY_READY_INDEX));
+            long guideBranchDirectWeightMappedReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_WEIGHT_MAPPED_READY_INDEX));
+            long guideBranchDirectWeightCountUncapped = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_WEIGHT_COUNT_UNCAPPED_INDEX));
+            long guideBranchDirectWeightCountCapped = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_WEIGHT_COUNT_CAPPED_INDEX));
             long crossFrameReceiverReject = crossFrameReceiverSurfaceReject
                     + crossFrameReceiverSampleReject + crossFrameReceiverEdgeReject
                     + crossFrameReceiverTopologyReject + crossFrameReceiverDepthReject
@@ -2188,6 +2222,42 @@ final class RtPathReservoirHistory {
                     guideBranchDirectTargetMappedReady,
                     guideBranchDirectTargetReady - guideBranchDirectTargetMappingReady,
                     guideBranchDirectRemapReady - guideBranchDirectVisibilityEligible);
+            long guideBranchDirectWeightTerminal = guideBranchDirectWeightPositive
+                    + guideBranchDirectWeightZero + guideBranchDirectWeightInvalid;
+            long guideBranchDirectWeightReady = guideBranchDirectWeightPositive
+                    + guideBranchDirectWeightZero;
+            long guideBranchDirectWeightAgeReady = guideBranchDirectWeightAgeOneReady
+                    + guideBranchDirectWeightAgeTwoReady
+                    + guideBranchDirectWeightAgeThreeReady;
+            long guideBranchDirectWeightMappingReady = guideBranchDirectWeightIdentityReady
+                    + guideBranchDirectWeightMappedReady;
+            long guideBranchDirectWeightCountReady = guideBranchDirectWeightCountUncapped
+                    + guideBranchDirectWeightCountCapped;
+            CausticaMod.LOGGER.info(
+                    "RT path guide branch direct weight: targetReady={}, eligible={}, "
+                            + "positive={}, zero={}, invalid={}, terminal={}, delta={}, ready={}, "
+                            + "count[uncapped={},capped={},delta={}], "
+                            + "age[one={},two={},three={},delta={}], "
+                            + "mapping[identity={},mapped={},delta={}], gateDelta={}",
+                    guideBranchDirectTargetReady,
+                    guideBranchDirectWeightEligible,
+                    guideBranchDirectWeightPositive,
+                    guideBranchDirectWeightZero,
+                    guideBranchDirectWeightInvalid,
+                    guideBranchDirectWeightTerminal,
+                    guideBranchDirectWeightEligible - guideBranchDirectWeightTerminal,
+                    guideBranchDirectWeightReady,
+                    guideBranchDirectWeightCountUncapped,
+                    guideBranchDirectWeightCountCapped,
+                    guideBranchDirectWeightReady - guideBranchDirectWeightCountReady,
+                    guideBranchDirectWeightAgeOneReady,
+                    guideBranchDirectWeightAgeTwoReady,
+                    guideBranchDirectWeightAgeThreeReady,
+                    guideBranchDirectWeightReady - guideBranchDirectWeightAgeReady,
+                    guideBranchDirectWeightIdentityReady,
+                    guideBranchDirectWeightMappedReady,
+                    guideBranchDirectWeightReady - guideBranchDirectWeightMappingReady,
+                    guideBranchDirectTargetReady - guideBranchDirectWeightEligible);
             spatialDiagnosticViewPending = 0;
             return;
         }

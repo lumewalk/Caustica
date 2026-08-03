@@ -792,6 +792,15 @@ counter-only GRIS merge weight from the fresh shifted target, original source fi
 `min(sourceM, 8)` and the newly recomputed direct Jacobian. Selection, reservoir/history writes and
 estimator contribution remain forbidden.
 
+That aged GRIS weight gate is now proven counter-only. Forty-two Vulkan readbacks classified all
+166943 target-ready records as finite positive weights, with zero invalid/zero categories and exact
+terminal, age, mapping and source-count accounting. Ages 1/2/3 were 56114/55285/55544 and mapping
+ownership was 13682 identity + 153261 mapped. The current non-persistent source population was
+entirely `M <= 8`; CPU reference tests separately prove that `M > 8` uses exactly 8 in the formula.
+No stored previous Jacobian is composed. The next isolated gate may evaluate the overflow-stable
+relative selection probability against the current receiver reservoir, but must not consume RNG or
+mutate reservoir/history/estimator state.
+
 ## Delivery Phases
 
 ### Phase 0 — Wavefront Integration Baseline

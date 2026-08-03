@@ -2249,6 +2249,42 @@ static void pathBranchAgeReplayValidate() {
     InterlockedAdd(counters[mappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION
             ? PATH_GUIDE_BRANCH_DIRECT_TARGET_MAPPED_READY
             : PATH_GUIDE_BRANCH_DIRECT_TARGET_IDENTITY_READY], 1u);
+
+    // Counter-only aged GRIS weight. The stored reservoir supplies its final weight and M, while
+    // the current receiver supplies the freshly reconstructed target and direct source->receiver
+    // Jacobian. The previous mapping Jacobian is never read or multiplied into this expression.
+    InterlockedAdd(counters[PATH_GUIDE_BRANCH_DIRECT_WEIGHT_ELIGIBLE], 1u);
+    float sourceFinalWeight = stored.weights.z;
+    float sourceEffectiveCount = stored.weights.y;
+    float sourceCount = min(sourceEffectiveCount, PATH_TEMPORAL_MAX_SOURCE_COUNT);
+    bool weightTermsValid = isfinite(shiftedTarget) && shiftedTarget >= 0.0
+            && isfinite(sourceFinalWeight) && sourceFinalWeight >= 0.0
+            && isfinite(sourceEffectiveCount) && sourceEffectiveCount >= 0.0
+            && isfinite(directPssJacobian) && directPssJacobian > 0.0;
+    float mergeWeight = 0.0;
+    if (weightTermsValid) {
+        mergeWeight = shiftedTarget * sourceFinalWeight * sourceCount * directPssJacobian;
+    }
+    bool weightValid = weightTermsValid
+            && isfinite(mergeWeight) && mergeWeight >= 0.0;
+    InterlockedAdd(counters[!weightValid
+            ? PATH_GUIDE_BRANCH_DIRECT_WEIGHT_INVALID
+            : mergeWeight > 0.0
+                    ? PATH_GUIDE_BRANCH_DIRECT_WEIGHT_POSITIVE
+                    : PATH_GUIDE_BRANCH_DIRECT_WEIGHT_ZERO], 1u);
+    if (!weightValid) return;
+
+    InterlockedAdd(counters[sourceEffectiveCount > PATH_TEMPORAL_MAX_SOURCE_COUNT
+            ? PATH_GUIDE_BRANCH_DIRECT_WEIGHT_COUNT_CAPPED
+            : PATH_GUIDE_BRANCH_DIRECT_WEIGHT_COUNT_UNCAPPED], 1u);
+    InterlockedAdd(counters[age == 1u
+            ? PATH_GUIDE_BRANCH_DIRECT_WEIGHT_AGE_ONE_READY
+            : age == 2u
+                    ? PATH_GUIDE_BRANCH_DIRECT_WEIGHT_AGE_TWO_READY
+                    : PATH_GUIDE_BRANCH_DIRECT_WEIGHT_AGE_THREE_READY], 1u);
+    InterlockedAdd(counters[mappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION
+            ? PATH_GUIDE_BRANCH_DIRECT_WEIGHT_MAPPED_READY
+            : PATH_GUIDE_BRANCH_DIRECT_WEIGHT_IDENTITY_READY], 1u);
 }
 
 static void pathBranchScratchReplayValidate() {

@@ -496,8 +496,20 @@ mapping partitions plus `gateDelta=0`. The proven run covered 42 readbacks: all 
 records reached a valid target, with 284636 clear, 4 tinted and 2 occluded/zero; invalid categories
 and every delta were zero. Age 1/2/3 split as 95250/94636/94756 and mapping ownership as 22597
 identity + 262045 mapped. Current counter storage is 330 uints / 1320 B; replay ABI, 384 B capture
-record and 672 B WorldPush remain unchanged. This remains counter-only and does not authorize GRIS
-weighting, selection, history or estimator contribution.
+record and 672 B WorldPush remain unchanged. At that checkpoint no GRIS weighting, selection,
+history or estimator contribution was authorized.
+
+The follow-on aged weight audit evaluates
+`shiftedTarget * storedFinalWeight * min(storedM, 8) * directPssJacobian` entirely in registers.
+`storedFinalWeight` and `storedM` belong to the retained source reservoir; the target and Jacobian
+are freshly reconstructed for the current receiver, and the previous mapping Jacobian is never
+read. `RT path guide branch direct weight` must close weight, source-count, age and mapping
+partitions exactly. Across 42 readbacks all 166943 target-ready records produced finite positive
+weights, split across ages 1/2/3 as 56114/55285/55544 and identity/mapped as 13682/153261. Invalid,
+zero and every delta were zero. All runtime source counts were already at or below 8, as expected
+for the current non-persistent producer; the `M > 8` capped branch is covered by the CPU reference
+contract. Counter storage is now 342 uints / 1368 B. Selection, RNG, reservoir/history writes and
+the estimator remain untouched.
 
 For a fresh runtime check, use debug view 20 and inspect `run/logs/latest.log`. Normal operation
 requires `RT bring-up OK`, Vulkan, the intended NVIDIA device, exact zero-delta counter partitions,
