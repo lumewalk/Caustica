@@ -23,6 +23,9 @@ final class RtPathSpatialReuseReference {
     static final int BRANCH_CANDIDATE_TAG_VALID_BIT = 0x8000_0000;
     static final int BRANCH_CANDIDATE_TAG_MAPPING_SHIFT = 24;
     static final int BRANCH_CANDIDATE_TAG_GENERATION_MASK = 0x00FF_FFFF;
+    static final int BRANCH_BERNOULLI_ENTRY_MULTIPLIER = 747_796_405;
+    static final int BRANCH_BERNOULLI_FRAME_MULTIPLIER = (int) 2_891_336_453L;
+    static final int BRANCH_BERNOULLI_SALT = (int) 0x94D0_49BBL;
 
     enum ReconnectionEvent {
         NONE(0),
@@ -1482,6 +1485,75 @@ final class RtPathSpatialReuseReference {
                 ? BranchDirectCurrentWeightOutcome.ZERO
                 : BranchDirectCurrentWeightOutcome.POSITIVE;
         return new BranchDirectSelectionAudit(selection, currentWeight, retention, probability);
+    }
+
+    enum BranchDirectBernoulliOutcome {
+        SELECTION_REJECT,
+        SELECTED,
+        RETAINED,
+        INVALID
+    }
+
+    enum BranchDirectBernoulliBoundary {
+        NOT_ELIGIBLE,
+        ZERO,
+        OPEN,
+        ONE
+    }
+
+    record BranchDirectBernoulliAudit(
+            BranchDirectBernoulliOutcome outcome,
+            BranchDirectBernoulliBoundary boundary,
+            BranchCandidateRetentionOutcome retention,
+            double random,
+            boolean zeroViolation,
+            boolean oneViolation) {
+    }
+
+    /** CPU mirror for the aged local-hash Bernoulli partition without payload mutation. */
+    static BranchDirectBernoulliAudit branchDirectBernoulliAudit(
+            BranchCandidateRetentionOutcome retention, boolean selectionReady,
+            double probability, int receiverPixelIndex, int candidateLinearIndex,
+            int frameIndex) {
+        if (!selectionReady) {
+            return new BranchDirectBernoulliAudit(
+                    BranchDirectBernoulliOutcome.SELECTION_REJECT,
+                    BranchDirectBernoulliBoundary.NOT_ELIGIBLE, retention, 0.0, false, false);
+        }
+        if (retention != BranchCandidateRetentionOutcome.AGE_ONE
+                && retention != BranchCandidateRetentionOutcome.AGE_TWO
+                && retention != BranchCandidateRetentionOutcome.AGE_THREE) {
+            throw new IllegalArgumentException(
+                    "direct Bernoulli audit requires a live aged branch candidate");
+        }
+        if (!Double.isFinite(probability) || probability < 0.0 || probability > 1.0) {
+            return new BranchDirectBernoulliAudit(BranchDirectBernoulliOutcome.INVALID,
+                    BranchDirectBernoulliBoundary.NOT_ELIGIBLE, retention, 0.0, false, false);
+        }
+
+        int mixedSeed = receiverPixelIndex
+                ^ candidateLinearIndex * BRANCH_BERNOULLI_ENTRY_MULTIPLIER
+                ^ frameIndex * BRANCH_BERNOULLI_FRAME_MULTIPLIER
+                ^ BRANCH_BERNOULLI_SALT;
+        int hashedSeed = RtPathReplayReference.pathHash(mixedSeed);
+        double random = (hashedSeed >>> 8) * (1.0 / 16_777_216.0);
+        if (!Double.isFinite(random) || random < 0.0 || random >= 1.0) {
+            return new BranchDirectBernoulliAudit(BranchDirectBernoulliOutcome.INVALID,
+                    BranchDirectBernoulliBoundary.NOT_ELIGIBLE, retention, 0.0, false, false);
+        }
+
+        boolean selected = random < probability;
+        BranchDirectBernoulliBoundary boundary = probability == 0.0
+                ? BranchDirectBernoulliBoundary.ZERO
+                : probability == 1.0
+                        ? BranchDirectBernoulliBoundary.ONE
+                        : BranchDirectBernoulliBoundary.OPEN;
+        return new BranchDirectBernoulliAudit(
+                selected ? BranchDirectBernoulliOutcome.SELECTED
+                        : BranchDirectBernoulliOutcome.RETAINED,
+                boundary, retention, random,
+                probability == 0.0 && selected,
+                probability == 1.0 && !selected);
     }
 
     /**

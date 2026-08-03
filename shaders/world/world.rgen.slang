@@ -2323,6 +2323,44 @@ static void pathBranchAgeReplayValidate() {
     InterlockedAdd(counters[mappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION
             ? PATH_GUIDE_BRANCH_DIRECT_SELECTION_MAPPED_READY
             : PATH_GUIDE_BRANCH_DIRECT_SELECTION_IDENTITY_READY], 1u);
+
+    // Diagnostic Bernoulli partition only. The hash seed binds the current receiver, exact aged
+    // ring entry and current frame, while remaining independent of both stored replay RNG streams.
+    // The draw selects only a counter category: no payload is copied and no reservoir, scratch,
+    // history, source-root provenance, or estimator state is written.
+    InterlockedAdd(counters[PATH_GUIDE_BRANCH_DIRECT_BERNOULLI_ELIGIBLE], 1u);
+    uint bernoulliSeed = pathHash(receiverPixelIndex
+            ^ linearIndex * 747796405u
+            ^ worldPush.frameIndex * 2891336453u
+            ^ 0x94D049BBu);
+    float bernoulliRandom = float(bernoulliSeed >> 8u) * (1.0 / 16777216.0);
+    bool bernoulliValid = isfinite(bernoulliRandom)
+            && bernoulliRandom >= 0.0 && bernoulliRandom < 1.0;
+    bool sourceSelected = bernoulliValid && bernoulliRandom < selectionProbability;
+    InterlockedAdd(counters[!bernoulliValid
+            ? PATH_GUIDE_BRANCH_DIRECT_BERNOULLI_INVALID
+            : sourceSelected
+                    ? PATH_GUIDE_BRANCH_DIRECT_BERNOULLI_SELECTED
+                    : PATH_GUIDE_BRANCH_DIRECT_BERNOULLI_RETAINED], 1u);
+    if (!bernoulliValid) return;
+
+    InterlockedAdd(counters[selectionProbability == 0.0
+            ? PATH_GUIDE_BRANCH_DIRECT_BERNOULLI_PROBABILITY_ZERO
+            : selectionProbability == 1.0
+                    ? PATH_GUIDE_BRANCH_DIRECT_BERNOULLI_PROBABILITY_ONE
+                    : PATH_GUIDE_BRANCH_DIRECT_BERNOULLI_PROBABILITY_OPEN], 1u);
+    InterlockedAdd(counters[PATH_GUIDE_BRANCH_DIRECT_BERNOULLI_ZERO_VIOLATION],
+            selectionProbability == 0.0 && sourceSelected ? 1u : 0u);
+    InterlockedAdd(counters[PATH_GUIDE_BRANCH_DIRECT_BERNOULLI_ONE_VIOLATION],
+            selectionProbability == 1.0 && !sourceSelected ? 1u : 0u);
+    InterlockedAdd(counters[age == 1u
+            ? PATH_GUIDE_BRANCH_DIRECT_BERNOULLI_AGE_ONE_READY
+            : age == 2u
+                    ? PATH_GUIDE_BRANCH_DIRECT_BERNOULLI_AGE_TWO_READY
+                    : PATH_GUIDE_BRANCH_DIRECT_BERNOULLI_AGE_THREE_READY], 1u);
+    InterlockedAdd(counters[mappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION
+            ? PATH_GUIDE_BRANCH_DIRECT_BERNOULLI_MAPPED_READY
+            : PATH_GUIDE_BRANCH_DIRECT_BERNOULLI_IDENTITY_READY], 1u);
 }
 
 static void pathBranchScratchReplayValidate() {

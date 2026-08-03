@@ -808,9 +808,19 @@ arithmetic. Of the exact-one results, 31 had a positive but float-negligible cur
 reference explicitly covers this valid rounding boundary as well as equal `Double.MAX_VALUE`
 operands. Ages 1/2/3 split as 63375/62492/62657 and mapping ownership as 15914 identity + 172610
 mapped, with every terminal/current/age/mapping/gate delta equal to zero. The counter-only pass does
-not consume RNG or mutate reservoir, scratch, history, or estimator state. The next isolated gate may
-audit a local-hash Bernoulli partition using this probability, still without copying a payload or
-writing history/estimator state.
+not consume RNG or mutate reservoir, scratch, history, or estimator state.
+
+The follow-on aged Bernoulli gate uses the proven probability with a diagnostic PCG hash seeded from
+the current receiver pixel, exact four-frame-ring entry and current frame. It remains independent of
+the stored path/proposal replay streams and changes only counters. Twenty-one Vulkan readbacks
+covered 245156 probability-ready candidates: 222682 selected, 22474 retained and zero invalid. The
+probability partition was 111 zero, 53202 open and 191843 one; all zero cases retained the current
+sample and all exact-one cases selected the aged source. Ages 1/2/3 split as 82442/81412/81302 and
+mapping ownership as 17233 identity + 227923 mapped. Both boundary-violation counters and every
+terminal/probability/age/mapping/gate delta were zero. No reservoir/root payload was copied and no
+scratch, history, or estimator state was written. The next isolated gate may evaluate selected and
+retained post-selection weight/M/final-weight arithmetic in registers, but still must not assemble or
+write a persistent payload.
 
 ## Delivery Phases
 

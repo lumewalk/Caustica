@@ -531,6 +531,23 @@ merge weight; CPU tests preserve this boundary. Counter storage is now 356 uints
 does not draw RNG, select or copy a sample, write any reservoir/history/scratch payload, or affect the
 ordinary estimator.
 
+The aged Bernoulli audit then derives a diagnostic draw from
+`pathHash(receiverPixel ^ ringEntry * 747796405 ^ frame * 2891336453 ^ 0x94D049BB)`.
+The ring-entry term prevents several aged candidates reprojected to one receiver from sharing the
+same draw, while the seed remains independent of both stored replay RNG streams. The line
+`RT path guide branch Bernoulli` must satisfy:
+
+- `probabilityReady == eligible == selected + retained + invalid`;
+- `ready == probability.zero + probability.open + probability.one`;
+- `ready == age.one + age.two + age.three == mapping.identity + mapping.mapped`;
+- `zeroViolation == oneViolation == invalid == 0`, and every printed delta is zero.
+
+Twenty-one fresh Vulkan readbacks covered 245156 candidates: selected/retained were
+222682/22474; probability zero/open/one were 111/53202/191843; ages 1/2/3 were
+82442/81412/81302; identity/mapped were 17233/227923. Boundary violations, invalid and all deltas
+were zero. Counter storage is now 371 uints / 1484 B. This audit performs no payload copy and writes
+no reservoir, source root, scratch history, committed history, or estimator contribution.
+
 For a fresh runtime check, use debug view 20 and inspect `run/logs/latest.log`. Normal operation
 requires `RT bring-up OK`, Vulkan, the intended NVIDIA device, exact zero-delta counter partitions,
 and no `DEVICE_LOST`, `VK_ERROR`, GPU fault or shader compilation error. Debug colors and sparse

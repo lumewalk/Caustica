@@ -388,7 +388,22 @@ final class RtPathReservoirHistory {
     static final int GUIDE_BRANCH_DIRECT_SELECTION_CURRENT_ZERO_INDEX = 353;
     static final int GUIDE_BRANCH_DIRECT_SELECTION_CURRENT_POSITIVE_INDEX = 354;
     static final int GUIDE_BRANCH_DIRECT_SELECTION_DELTA_INDEX = 355;
-    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 356;
+    static final int GUIDE_BRANCH_DIRECT_BERNOULLI_ELIGIBLE_INDEX = 356;
+    static final int GUIDE_BRANCH_DIRECT_BERNOULLI_SELECTED_INDEX = 357;
+    static final int GUIDE_BRANCH_DIRECT_BERNOULLI_RETAINED_INDEX = 358;
+    static final int GUIDE_BRANCH_DIRECT_BERNOULLI_INVALID_INDEX = 359;
+    static final int GUIDE_BRANCH_DIRECT_BERNOULLI_PROBABILITY_ZERO_INDEX = 360;
+    static final int GUIDE_BRANCH_DIRECT_BERNOULLI_PROBABILITY_OPEN_INDEX = 361;
+    static final int GUIDE_BRANCH_DIRECT_BERNOULLI_PROBABILITY_ONE_INDEX = 362;
+    static final int GUIDE_BRANCH_DIRECT_BERNOULLI_ZERO_VIOLATION_INDEX = 363;
+    static final int GUIDE_BRANCH_DIRECT_BERNOULLI_ONE_VIOLATION_INDEX = 364;
+    static final int GUIDE_BRANCH_DIRECT_BERNOULLI_AGE_ONE_READY_INDEX = 365;
+    static final int GUIDE_BRANCH_DIRECT_BERNOULLI_AGE_TWO_READY_INDEX = 366;
+    static final int GUIDE_BRANCH_DIRECT_BERNOULLI_AGE_THREE_READY_INDEX = 367;
+    static final int GUIDE_BRANCH_DIRECT_BERNOULLI_IDENTITY_READY_INDEX = 368;
+    static final int GUIDE_BRANCH_DIRECT_BERNOULLI_MAPPED_READY_INDEX = 369;
+    static final int GUIDE_BRANCH_DIRECT_BERNOULLI_DELTA_INDEX = 370;
+    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 371;
     static final int SHIFTED_RECEIVER_GUIDE_STRIDE = 8 * Float.BYTES;
     static final int BRANCH_CANDIDATE_TAG_STRIDE = 2 * Integer.BYTES;
     static final int SPATIAL_DIAGNOSTIC_COUNTER_BYTES =
@@ -1455,6 +1470,34 @@ final class RtPathReservoirHistory {
                     counters.get(GUIDE_BRANCH_DIRECT_SELECTION_CURRENT_ZERO_INDEX));
             long guideBranchDirectSelectionCurrentPositive = Integer.toUnsignedLong(
                     counters.get(GUIDE_BRANCH_DIRECT_SELECTION_CURRENT_POSITIVE_INDEX));
+            long guideBranchDirectBernoulliEligible = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_BERNOULLI_ELIGIBLE_INDEX));
+            long guideBranchDirectBernoulliSelected = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_BERNOULLI_SELECTED_INDEX));
+            long guideBranchDirectBernoulliRetained = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_BERNOULLI_RETAINED_INDEX));
+            long guideBranchDirectBernoulliInvalid = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_BERNOULLI_INVALID_INDEX));
+            long guideBranchDirectBernoulliProbabilityZero = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_BERNOULLI_PROBABILITY_ZERO_INDEX));
+            long guideBranchDirectBernoulliProbabilityOpen = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_BERNOULLI_PROBABILITY_OPEN_INDEX));
+            long guideBranchDirectBernoulliProbabilityOne = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_BERNOULLI_PROBABILITY_ONE_INDEX));
+            long guideBranchDirectBernoulliZeroViolation = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_BERNOULLI_ZERO_VIOLATION_INDEX));
+            long guideBranchDirectBernoulliOneViolation = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_BERNOULLI_ONE_VIOLATION_INDEX));
+            long guideBranchDirectBernoulliAgeOneReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_BERNOULLI_AGE_ONE_READY_INDEX));
+            long guideBranchDirectBernoulliAgeTwoReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_BERNOULLI_AGE_TWO_READY_INDEX));
+            long guideBranchDirectBernoulliAgeThreeReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_BERNOULLI_AGE_THREE_READY_INDEX));
+            long guideBranchDirectBernoulliIdentityReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_BERNOULLI_IDENTITY_READY_INDEX));
+            long guideBranchDirectBernoulliMappedReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_BERNOULLI_MAPPED_READY_INDEX));
             long crossFrameReceiverReject = crossFrameReceiverSurfaceReject
                     + crossFrameReceiverSampleReject + crossFrameReceiverEdgeReject
                     + crossFrameReceiverTopologyReject + crossFrameReceiverDepthReject
@@ -2341,6 +2384,48 @@ final class RtPathReservoirHistory {
                     guideBranchDirectSelectionMappedReady,
                     guideBranchDirectSelectionReady - guideBranchDirectSelectionMappingReady,
                     guideBranchDirectWeightReady - guideBranchDirectSelectionEligible);
+            long guideBranchDirectBernoulliTerminal = guideBranchDirectBernoulliSelected
+                    + guideBranchDirectBernoulliRetained + guideBranchDirectBernoulliInvalid;
+            long guideBranchDirectBernoulliReady = guideBranchDirectBernoulliSelected
+                    + guideBranchDirectBernoulliRetained;
+            long guideBranchDirectBernoulliProbabilityReady =
+                    guideBranchDirectBernoulliProbabilityZero
+                            + guideBranchDirectBernoulliProbabilityOpen
+                            + guideBranchDirectBernoulliProbabilityOne;
+            long guideBranchDirectBernoulliAgeReady = guideBranchDirectBernoulliAgeOneReady
+                    + guideBranchDirectBernoulliAgeTwoReady
+                    + guideBranchDirectBernoulliAgeThreeReady;
+            long guideBranchDirectBernoulliMappingReady = guideBranchDirectBernoulliIdentityReady
+                    + guideBranchDirectBernoulliMappedReady;
+            CausticaMod.LOGGER.info(
+                    "RT path guide branch Bernoulli: probabilityReady={}, eligible={}, "
+                            + "selected={}, retained={}, invalid={}, terminal={}, delta={}, ready={}, "
+                            + "probability[zero={},open={},one={},delta={}], "
+                            + "boundary[zeroViolation={},oneViolation={}], "
+                            + "age[one={},two={},three={},delta={}], "
+                            + "mapping[identity={},mapped={},delta={}], gateDelta={}",
+                    guideBranchDirectSelectionReady,
+                    guideBranchDirectBernoulliEligible,
+                    guideBranchDirectBernoulliSelected,
+                    guideBranchDirectBernoulliRetained,
+                    guideBranchDirectBernoulliInvalid,
+                    guideBranchDirectBernoulliTerminal,
+                    guideBranchDirectBernoulliEligible - guideBranchDirectBernoulliTerminal,
+                    guideBranchDirectBernoulliReady,
+                    guideBranchDirectBernoulliProbabilityZero,
+                    guideBranchDirectBernoulliProbabilityOpen,
+                    guideBranchDirectBernoulliProbabilityOne,
+                    guideBranchDirectBernoulliReady - guideBranchDirectBernoulliProbabilityReady,
+                    guideBranchDirectBernoulliZeroViolation,
+                    guideBranchDirectBernoulliOneViolation,
+                    guideBranchDirectBernoulliAgeOneReady,
+                    guideBranchDirectBernoulliAgeTwoReady,
+                    guideBranchDirectBernoulliAgeThreeReady,
+                    guideBranchDirectBernoulliReady - guideBranchDirectBernoulliAgeReady,
+                    guideBranchDirectBernoulliIdentityReady,
+                    guideBranchDirectBernoulliMappedReady,
+                    guideBranchDirectBernoulliReady - guideBranchDirectBernoulliMappingReady,
+                    guideBranchDirectSelectionReady - guideBranchDirectBernoulliEligible);
             spatialDiagnosticViewPending = 0;
             return;
         }

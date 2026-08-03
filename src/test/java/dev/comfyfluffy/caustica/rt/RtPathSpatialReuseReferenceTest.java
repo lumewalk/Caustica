@@ -1184,6 +1184,62 @@ final class RtPathSpatialReuseReferenceTest {
     }
 
     @Test
+    void branchDirectBernoulliAuditUsesIndependentDeterministicHashDraws() {
+        var ageOne = RtPathSpatialReuseReference.BranchCandidateRetentionOutcome.AGE_ONE;
+        var ageTwo = RtPathSpatialReuseReference.BranchCandidateRetentionOutcome.AGE_TWO;
+        var ageThree = RtPathSpatialReuseReference.BranchCandidateRetentionOutcome.AGE_THREE;
+        assertEquals(new RtPathSpatialReuseReference.BranchDirectBernoulliAudit(
+                        RtPathSpatialReuseReference.BranchDirectBernoulliOutcome.SELECTION_REJECT,
+                        RtPathSpatialReuseReference.BranchDirectBernoulliBoundary.NOT_ELIGIBLE,
+                        ageOne, 0.0, false, false),
+                RtPathSpatialReuseReference.branchDirectBernoulliAudit(
+                        ageOne, false, 0.5, 123, 7, 99));
+        assertEquals(new RtPathSpatialReuseReference.BranchDirectBernoulliAudit(
+                        RtPathSpatialReuseReference.BranchDirectBernoulliOutcome.INVALID,
+                        RtPathSpatialReuseReference.BranchDirectBernoulliBoundary.NOT_ELIGIBLE,
+                        ageTwo, 0.0, false, false),
+                RtPathSpatialReuseReference.branchDirectBernoulliAudit(
+                        ageTwo, true, Double.NaN, 123, 7, 99));
+
+        var retainedOpen = RtPathSpatialReuseReference.branchDirectBernoulliAudit(
+                ageOne, true, 0.5, 123, 7, 99);
+        assertEquals(RtPathSpatialReuseReference.BranchDirectBernoulliOutcome.RETAINED,
+                retainedOpen.outcome());
+        assertEquals(RtPathSpatialReuseReference.BranchDirectBernoulliBoundary.OPEN,
+                retainedOpen.boundary());
+        assertEquals(0.6640617847442627, retainedOpen.random());
+        assertFalse(retainedOpen.zeroViolation());
+        assertFalse(retainedOpen.oneViolation());
+
+        var selectedOpen = RtPathSpatialReuseReference.branchDirectBernoulliAudit(
+                ageTwo, true, 0.5, 123, 8, 99);
+        assertEquals(RtPathSpatialReuseReference.BranchDirectBernoulliOutcome.SELECTED,
+                selectedOpen.outcome());
+        assertEquals(RtPathSpatialReuseReference.BranchDirectBernoulliBoundary.OPEN,
+                selectedOpen.boundary());
+        assertEquals(0.24819517135620117, selectedOpen.random());
+
+        var retainedZero = RtPathSpatialReuseReference.branchDirectBernoulliAudit(
+                ageThree, true, 0.0, 0, 0, 0);
+        assertEquals(RtPathSpatialReuseReference.BranchDirectBernoulliOutcome.RETAINED,
+                retainedZero.outcome());
+        assertEquals(RtPathSpatialReuseReference.BranchDirectBernoulliBoundary.ZERO,
+                retainedZero.boundary());
+        assertFalse(retainedZero.zeroViolation());
+        var selectedOne = RtPathSpatialReuseReference.branchDirectBernoulliAudit(
+                ageThree, true, 1.0, 0, 0, 0);
+        assertEquals(RtPathSpatialReuseReference.BranchDirectBernoulliOutcome.SELECTED,
+                selectedOne.outcome());
+        assertEquals(RtPathSpatialReuseReference.BranchDirectBernoulliBoundary.ONE,
+                selectedOne.boundary());
+        assertFalse(selectedOne.oneViolation());
+        assertThrows(IllegalArgumentException.class,
+                () -> RtPathSpatialReuseReference.branchDirectBernoulliAudit(
+                        RtPathSpatialReuseReference.BranchCandidateRetentionOutcome.CURRENT,
+                        true, 0.5, 123, 7, 99));
+    }
+
+    @Test
     void pairedMomentsExposeCovarianceAndCorrelationWithoutBatchStorage() {
         var moments = new RtPathSpatialReuseReference.PairMoments();
         moments.add(1.0, 2.0);
@@ -1764,8 +1820,33 @@ final class RtPathSpatialReuseReferenceTest {
         assertEquals(354,
                 RtPathReservoirHistory.GUIDE_BRANCH_DIRECT_SELECTION_CURRENT_POSITIVE_INDEX);
         assertEquals(355, RtPathReservoirHistory.GUIDE_BRANCH_DIRECT_SELECTION_DELTA_INDEX);
-        assertEquals(356, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
-        assertEquals(356 * Integer.BYTES,
+        assertEquals(356, RtPathReservoirHistory.GUIDE_BRANCH_DIRECT_BERNOULLI_ELIGIBLE_INDEX);
+        assertEquals(357, RtPathReservoirHistory.GUIDE_BRANCH_DIRECT_BERNOULLI_SELECTED_INDEX);
+        assertEquals(358, RtPathReservoirHistory.GUIDE_BRANCH_DIRECT_BERNOULLI_RETAINED_INDEX);
+        assertEquals(359, RtPathReservoirHistory.GUIDE_BRANCH_DIRECT_BERNOULLI_INVALID_INDEX);
+        assertEquals(360,
+                RtPathReservoirHistory.GUIDE_BRANCH_DIRECT_BERNOULLI_PROBABILITY_ZERO_INDEX);
+        assertEquals(361,
+                RtPathReservoirHistory.GUIDE_BRANCH_DIRECT_BERNOULLI_PROBABILITY_OPEN_INDEX);
+        assertEquals(362,
+                RtPathReservoirHistory.GUIDE_BRANCH_DIRECT_BERNOULLI_PROBABILITY_ONE_INDEX);
+        assertEquals(363,
+                RtPathReservoirHistory.GUIDE_BRANCH_DIRECT_BERNOULLI_ZERO_VIOLATION_INDEX);
+        assertEquals(364,
+                RtPathReservoirHistory.GUIDE_BRANCH_DIRECT_BERNOULLI_ONE_VIOLATION_INDEX);
+        assertEquals(365,
+                RtPathReservoirHistory.GUIDE_BRANCH_DIRECT_BERNOULLI_AGE_ONE_READY_INDEX);
+        assertEquals(366,
+                RtPathReservoirHistory.GUIDE_BRANCH_DIRECT_BERNOULLI_AGE_TWO_READY_INDEX);
+        assertEquals(367,
+                RtPathReservoirHistory.GUIDE_BRANCH_DIRECT_BERNOULLI_AGE_THREE_READY_INDEX);
+        assertEquals(368,
+                RtPathReservoirHistory.GUIDE_BRANCH_DIRECT_BERNOULLI_IDENTITY_READY_INDEX);
+        assertEquals(369,
+                RtPathReservoirHistory.GUIDE_BRANCH_DIRECT_BERNOULLI_MAPPED_READY_INDEX);
+        assertEquals(370, RtPathReservoirHistory.GUIDE_BRANCH_DIRECT_BERNOULLI_DELTA_INDEX);
+        assertEquals(371, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
+        assertEquals(371 * Integer.BYTES,
                 RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_COUNTER_BYTES);
         assertEquals(32, RtPathReservoirHistory.SHIFTED_RECEIVER_GUIDE_STRIDE);
         assertEquals(27_566_080L,
