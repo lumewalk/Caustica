@@ -2446,6 +2446,152 @@ static void pathBranchAgeReplayValidate() {
     InterlockedAdd(counters[mappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION
             ? PATH_GUIDE_BRANCH_DIRECT_POST_SELECTION_MAPPED_READY
             : PATH_GUIDE_BRANCH_DIRECT_POST_SELECTION_IDENTITY_READY], 1u);
+
+    // Assemble the complete aged branch record in registers only. A selected source preserves the
+    // immutable original proposal/replay lanes and source key, while replacing every receiver-
+    // dependent radiance, Jacobian, PDF, throughput, reconnection and generation field with the
+    // direct current-receiver reconstruction. A retained sample preserves all current sample lanes
+    // bit-for-bit. Both branches install only the post-selection weight lane proven above. The local
+    // value is validated but never stored, paired with a root, exposed to history, or consumed by the
+    // estimator; source-key reprojection remains a later explicit provenance gate.
+    InterlockedAdd(counters[PATH_GUIDE_BRANCH_DIRECT_RECORD_ELIGIBLE], 1u);
+    bool recordEmptyReady = emptyReady && !sourceSelected;
+    bool selectedPopulation = sourceSelected && !emptyReady;
+    bool retainedPopulation = !sourceSelected && !emptyReady;
+    uint guidePixelCount = guideDimensions.x * guideDimensions.y;
+    bool selectedRewriteReady = selectedPopulation
+            && pathReservoirSampleMetadataReady(stored)
+            && all(isfinite(visibleRadiance)) && all(visibleRadiance >= float3(0.0))
+            && isfinite(shiftedTarget) && shiftedTarget > 0.0
+            && isfinite(stored.proposalShift.x) && stored.proposalShift.x > 0.0
+            && isfinite(replay.footprint) && replay.footprint > 0.0
+            && isfinite(directPssJacobian) && directPssJacobian > 0.0
+            && stored.identity.y < guidePixelCount
+            && replay.canonicalValid != 0u
+            && replay.reconnectionValid != 0u
+            && replay.reconnectionDepth == 1u
+            && replay.reconnectionEventKind == PATH_RECONNECTION_EVENT_DIFFUSE
+            && all(isfinite(replay.reconnectionVertex))
+            && all(isfinite(replay.reconnectionNormal))
+            && isfinite(receiverPdf) && receiverPdf > 0.0
+            && all(isfinite(receiverThroughput))
+            && all(receiverThroughput >= float3(0.0));
+    InterlockedAdd(counters[selectedRewriteReady
+            ? PATH_GUIDE_BRANCH_DIRECT_RECORD_SELECTED_REWRITE_READY
+            : PATH_GUIDE_BRANCH_DIRECT_RECORD_SELECTED_REWRITE_REJECT],
+            selectedPopulation ? 1u : 0u);
+
+    bool selectedPreserveReady = selectedPopulation
+            && replayMatches
+            && stored.replayControl.x == PATH_REPLAY_VERSION
+            && stored.replayControl.y == replay.replaySegmentCount
+            && stored.replayControl.z == replay.replayState
+            && stored.replayControl.w == replay.proposalReplayState
+            && stored.identity.z == replay.topologyKey
+            && pathReplayFloatMatches(stored.proposalShift.z, replay.footprint);
+    InterlockedAdd(counters[selectedPreserveReady
+            ? PATH_GUIDE_BRANCH_DIRECT_RECORD_SELECTED_PRESERVE_READY
+            : PATH_GUIDE_BRANCH_DIRECT_RECORD_SELECTED_PRESERVE_REJECT],
+            selectedPopulation ? 1u : 0u);
+
+    bool retainedPreserveReady = retainedPopulation
+            && pathReservoirSampleMetadataReady(current)
+            && pathMappingKind(current) == PATH_MAPPING_IDENTITY
+            && current.replayControl.x == PATH_REPLAY_VERSION
+            && current.replayControl.y >= 1u
+            && current.replayControl.y <= MAX_PATH_SEGMENTS
+            && current.identity.y < guidePixelCount
+            && (current.identity.w & PATH_GENERATION_MASK) == currentGeneration;
+    InterlockedAdd(counters[retainedPreserveReady
+            ? PATH_GUIDE_BRANCH_DIRECT_RECORD_RETAINED_PRESERVE_READY
+            : PATH_GUIDE_BRANCH_DIRECT_RECORD_RETAINED_PRESERVE_REJECT],
+            retainedPopulation ? 1u : 0u);
+
+    float recordConfidence = min(nextEffectiveCount * 0.25, 1.0);
+    bool recordWeightsReady = !emptyReady
+            && isfinite(nextWeightSum) && nextWeightSum > 0.0
+            && isfinite(nextEffectiveCount) && nextEffectiveCount > 0.0
+            && isfinite(finalWeight) && finalWeight > 0.0
+            && isfinite(recordConfidence) && recordConfidence > 0.0;
+    InterlockedAdd(counters[recordWeightsReady
+            ? PATH_GUIDE_BRANCH_DIRECT_RECORD_WEIGHTS_READY
+            : PATH_GUIDE_BRANCH_DIRECT_RECORD_WEIGHTS_REJECT],
+            !emptyReady ? 1u : 0u);
+
+    PathReservoir branchRecord = current;
+    if (sourceSelected && !emptyReady) {
+        branchRecord.sampleRadianceTarget = float4(visibleRadiance, shiftedTarget);
+        branchRecord.proposalShift = float4(
+                stored.proposalShift.x,
+                directPssJacobian,
+                stored.proposalShift.z,
+                stored.proposalShift.w);
+        branchRecord.proposalComponents = stored.proposalComponents;
+        branchRecord.canonicalRadianceTarget = float4(visibleRadiance, shiftedTarget);
+        branchRecord.identity = uint4(
+                stored.identity.x,
+                stored.identity.y,
+                replay.topologyKey,
+                pathPackMetadata(currentGeneration, replay.depth, replay.transportMask));
+        branchRecord.replay = stored.replay;
+        branchRecord.replayControl = stored.replayControl;
+        branchRecord.reconnectionVertex = float4(
+                replay.reconnectionVertex,
+                asfloat(pathPackReconnectionMetadata(
+                        replay.reconnectionDepth,
+                        replay.reconnectionEventKind,
+                        replay.reconnectionValid != 0u)));
+        branchRecord.reconnectionNormalPdf = float4(replay.reconnectionNormal, receiverPdf);
+        branchRecord.reconnectionThroughput = float4(
+                receiverThroughput, asfloat(PATH_MAPPING_DIFFUSE_RECONNECTION));
+    }
+    if (!emptyReady) {
+        branchRecord.weights = float4(
+                nextWeightSum, nextEffectiveCount, finalWeight, recordConfidence);
+    }
+
+    bool recordCommonMetadataReady = !emptyReady
+            && recordWeightsReady
+            && pathReservoirSampleMetadataReady(branchRecord)
+            && all(isfinite(branchRecord.weights))
+            && all(branchRecord.weights > float4(0.0));
+    bool selectedRecordReady = selectedPopulation
+            && selectedRewriteReady
+            && selectedPreserveReady
+            && recordCommonMetadataReady
+            && pathMappingSourceReplayMatches(branchRecord, replay)
+            && pathMappingKind(branchRecord) == PATH_MAPPING_DIFFUSE_RECONNECTION
+            && branchRecord.identity.y == stored.identity.y
+            && (branchRecord.identity.w & PATH_GENERATION_MASK) == currentGeneration
+            && all(asuint(branchRecord.sampleRadianceTarget)
+                    == asuint(branchRecord.canonicalRadianceTarget));
+    bool retainedRecordReady = retainedPopulation
+            && retainedPreserveReady
+            && recordCommonMetadataReady
+            && pathReservoirSampleMetadataMatches(branchRecord, current)
+            && pathMappingKind(branchRecord) == PATH_MAPPING_IDENTITY;
+    InterlockedAdd(counters[selectedRecordReady
+            ? PATH_GUIDE_BRANCH_DIRECT_RECORD_SELECTED_READY
+            : PATH_GUIDE_BRANCH_DIRECT_RECORD_SELECTED_REJECT],
+            sourceSelected && !recordEmptyReady ? 1u : 0u);
+    InterlockedAdd(counters[retainedRecordReady
+            ? PATH_GUIDE_BRANCH_DIRECT_RECORD_RETAINED_READY
+            : PATH_GUIDE_BRANCH_DIRECT_RECORD_RETAINED_REJECT],
+            retainedPopulation ? 1u : 0u);
+    InterlockedAdd(counters[PATH_GUIDE_BRANCH_DIRECT_RECORD_EMPTY_READY],
+            recordEmptyReady ? 1u : 0u);
+
+    bool recordReady = selectedRecordReady || retainedRecordReady || recordEmptyReady;
+    if (recordReady) {
+        InterlockedAdd(counters[age == 1u
+                ? PATH_GUIDE_BRANCH_DIRECT_RECORD_AGE_ONE_READY
+                : age == 2u
+                        ? PATH_GUIDE_BRANCH_DIRECT_RECORD_AGE_TWO_READY
+                        : PATH_GUIDE_BRANCH_DIRECT_RECORD_AGE_THREE_READY], 1u);
+        InterlockedAdd(counters[mappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION
+                ? PATH_GUIDE_BRANCH_DIRECT_RECORD_MAPPED_SOURCE_READY
+                : PATH_GUIDE_BRANCH_DIRECT_RECORD_IDENTITY_SOURCE_READY], 1u);
+    }
 }
 
 static void pathBranchScratchReplayValidate() {

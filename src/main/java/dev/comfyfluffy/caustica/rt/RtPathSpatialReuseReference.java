@@ -1691,6 +1691,109 @@ final class RtPathSpatialReuseReference {
                 retention, 0.0, 0.0, 0.0, 0.0, sourceSelected, false);
     }
 
+    enum BranchDirectRecordOutcome {
+        POST_SELECTION_REJECT,
+        SELECTED_READY,
+        SELECTED_REJECT,
+        RETAINED_READY,
+        RETAINED_REJECT,
+        EMPTY_READY
+    }
+
+    enum BranchDirectLaneOutcome {
+        NOT_ELIGIBLE,
+        READY,
+        REJECT
+    }
+
+    record BranchDirectRecordAudit(
+            BranchDirectRecordOutcome outcome,
+            BranchDirectLaneOutcome selectedRewrite,
+            BranchDirectLaneOutcome selectedPreserve,
+            BranchDirectLaneOutcome retainedPreserve,
+            BranchDirectLaneOutcome weights,
+            BranchCandidateRetentionOutcome retention,
+            boolean sourceSelected) {
+    }
+
+    /** CPU mirror for complete aged branch-record construction without a device write. */
+    static BranchDirectRecordAudit branchDirectRecordAudit(
+            BranchCandidateRetentionOutcome retention,
+            boolean postSelectionReady,
+            boolean sourceSelected,
+            boolean empty,
+            boolean selectedRewriteReady,
+            boolean selectedPreserveReady,
+            boolean retainedPreserveReady,
+            boolean weightsReady,
+            boolean metadataReady) {
+        if (!postSelectionReady) {
+            return branchDirectRecordAuditResult(
+                    BranchDirectRecordOutcome.POST_SELECTION_REJECT,
+                    retention, sourceSelected,
+                    BranchDirectLaneOutcome.NOT_ELIGIBLE,
+                    BranchDirectLaneOutcome.NOT_ELIGIBLE,
+                    BranchDirectLaneOutcome.NOT_ELIGIBLE,
+                    BranchDirectLaneOutcome.NOT_ELIGIBLE);
+        }
+        if (retention != BranchCandidateRetentionOutcome.AGE_ONE
+                && retention != BranchCandidateRetentionOutcome.AGE_TWO
+                && retention != BranchCandidateRetentionOutcome.AGE_THREE) {
+            throw new IllegalArgumentException(
+                    "direct record audit requires a live aged branch candidate");
+        }
+        if (empty) {
+            return branchDirectRecordAuditResult(
+                    sourceSelected
+                            ? BranchDirectRecordOutcome.SELECTED_REJECT
+                            : BranchDirectRecordOutcome.EMPTY_READY,
+                    retention, sourceSelected,
+                    BranchDirectLaneOutcome.NOT_ELIGIBLE,
+                    BranchDirectLaneOutcome.NOT_ELIGIBLE,
+                    BranchDirectLaneOutcome.NOT_ELIGIBLE,
+                    BranchDirectLaneOutcome.NOT_ELIGIBLE);
+        }
+
+        BranchDirectLaneOutcome weightLane = weightsReady
+                ? BranchDirectLaneOutcome.READY : BranchDirectLaneOutcome.REJECT;
+        if (sourceSelected) {
+            BranchDirectLaneOutcome rewriteLane = selectedRewriteReady
+                    ? BranchDirectLaneOutcome.READY : BranchDirectLaneOutcome.REJECT;
+            BranchDirectLaneOutcome preserveLane = selectedPreserveReady
+                    ? BranchDirectLaneOutcome.READY : BranchDirectLaneOutcome.REJECT;
+            boolean ready = selectedRewriteReady && selectedPreserveReady
+                    && weightsReady && metadataReady;
+            return branchDirectRecordAuditResult(
+                    ready ? BranchDirectRecordOutcome.SELECTED_READY
+                            : BranchDirectRecordOutcome.SELECTED_REJECT,
+                    retention, true, rewriteLane, preserveLane,
+                    BranchDirectLaneOutcome.NOT_ELIGIBLE, weightLane);
+        }
+
+        BranchDirectLaneOutcome retainedLane = retainedPreserveReady
+                ? BranchDirectLaneOutcome.READY : BranchDirectLaneOutcome.REJECT;
+        boolean ready = retainedPreserveReady && weightsReady && metadataReady;
+        return branchDirectRecordAuditResult(
+                ready ? BranchDirectRecordOutcome.RETAINED_READY
+                        : BranchDirectRecordOutcome.RETAINED_REJECT,
+                retention, false,
+                BranchDirectLaneOutcome.NOT_ELIGIBLE,
+                BranchDirectLaneOutcome.NOT_ELIGIBLE,
+                retainedLane, weightLane);
+    }
+
+    private static BranchDirectRecordAudit branchDirectRecordAuditResult(
+            BranchDirectRecordOutcome outcome,
+            BranchCandidateRetentionOutcome retention,
+            boolean sourceSelected,
+            BranchDirectLaneOutcome selectedRewrite,
+            BranchDirectLaneOutcome selectedPreserve,
+            BranchDirectLaneOutcome retainedPreserve,
+            BranchDirectLaneOutcome weights) {
+        return new BranchDirectRecordAudit(outcome, selectedRewrite, selectedPreserve,
+                retainedPreserve, weights, retention, sourceSelected);
+    }
+
     /**
      * Ordered CPU mirror for the post-barrier exact-lane validation sample. Reservoir and root
      * equality are bitwise requirements; acceptance remains diagnostic-only.

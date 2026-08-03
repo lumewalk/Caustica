@@ -836,6 +836,21 @@ stored cap, while CPU tests cover both caps and overflow/denominator rejection. 
 in registers and audit its receiver-dependent versus preserved replay lanes, but must not write
 scratch/history or feed the estimator.
 
+That complete aged register record is now proven with an explicit fail-closed tail. Selected records
+copy the original proposal components, replay seeds/control, sample identity and source key; they
+replace shifted radiance/target, direct Jacobian, current receiver PDF/throughput, reconnection
+geometry, mapping kind and current-generation metadata. Retained records preserve every current
+sample lane bit-for-bit. Both branches install only the already-proven post-selection weight lane and
+pass the common sample-metadata validator; empty results instantiate no sample record. Across 42
+Vulkan readbacks, 194062 post-selection outcomes split into 175134 selected-ready, 18919
+retained-ready, 7 empty and 2 selected preservation rejects. Both rejects were identity-source
+footprint tails that generic identity replay does not compare but the future mapped-source contract
+must compare, so they remain rejected rather than widening tolerance. Receiver rewrites had zero
+rejects, retained preservation had zero rejects, weights covered all 194055 non-empty outcomes, and
+every terminal/lane/age/source/gate delta was zero. Counter storage is 411 uints / 1644 B. The record
+is still register-only and preserves the old source key deliberately; the next isolated gate must
+pair it with directly reprojected original `PathSourceRoot` provenance before any scratch write.
+
 ## Delivery Phases
 
 ### Phase 0 — Wavefront Integration Baseline

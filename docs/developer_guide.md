@@ -570,6 +570,30 @@ choice, invalid inputs and non-finite final denominators. Counter storage is now
 This gate does not copy or construct a reservoir payload and cannot write scratch, history, source
 provenance or estimator state.
 
+`RT path guide branch register record` is the next register-only boundary. For selected samples it
+preserves the immutable source proposal/replay lanes and source key, while rewriting shifted
+radiance/target, direct Jacobian, current receiver PDF/throughput, reconnection data, mapping kind and
+generation. For retained samples, `pathReservoirSampleMetadataMatches(record, current)` must remain
+true after replacing only the weights. Non-empty records must pass `pathReservoirSampleMetadataReady`;
+empty results construct no sample. Required identities are:
+
+- `postReady == eligible == selected.ready + selected.reject + retained.ready
+  + retained.reject + empty`;
+- selected population closes independently for rewrite and preserved-source lanes;
+- retained non-empty population closes independently for preserved-current lanes;
+- `eligible - empty == weights.ready + weights.reject`;
+- `ready == age.one + age.two + age.three == source.identity + source.mapped`;
+- every printed delta is zero. Replay-tail rejects remain valid terminal outcomes and must not be
+  hidden by widening tolerance.
+
+Across 42 Vulkan readbacks, 194062 outcomes produced 175134 selected-ready, 18919 retained-ready,
+7 empty and 2 selected preservation rejects. All 175136 selected candidates passed receiver rewrite;
+the two rejects were identity-source footprint tails caught only when converting the source into the
+stricter mapped-record contract. Retained preservation and all 194055 non-empty weight lanes passed.
+Ages 1/2/3 were 64760/65104/64196; source identity/mapped ownership was 15838/178222. All deltas were
+zero and no Vulkan/GPU/shader error occurred. Counter storage is 411 uints / 1644 B. No local record
+is written; direct source-key/root reprojection remains the next provenance gate.
+
 For a fresh runtime check, use debug view 20 and inspect `run/logs/latest.log`. Normal operation
 requires `RT bring-up OK`, Vulkan, the intended NVIDIA device, exact zero-delta counter partitions,
 and no `DEVICE_LOST`, `VK_ERROR`, GPU fault or shader compilation error. Debug colors and sparse

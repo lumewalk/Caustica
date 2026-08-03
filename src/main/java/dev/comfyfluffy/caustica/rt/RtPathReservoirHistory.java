@@ -423,7 +423,27 @@ final class RtPathReservoirHistory {
     static final int GUIDE_BRANCH_DIRECT_POST_SELECTION_IDENTITY_READY_INDEX = 388;
     static final int GUIDE_BRANCH_DIRECT_POST_SELECTION_MAPPED_READY_INDEX = 389;
     static final int GUIDE_BRANCH_DIRECT_POST_SELECTION_DELTA_INDEX = 390;
-    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 391;
+    static final int GUIDE_BRANCH_DIRECT_RECORD_ELIGIBLE_INDEX = 391;
+    static final int GUIDE_BRANCH_DIRECT_RECORD_SELECTED_READY_INDEX = 392;
+    static final int GUIDE_BRANCH_DIRECT_RECORD_SELECTED_REJECT_INDEX = 393;
+    static final int GUIDE_BRANCH_DIRECT_RECORD_RETAINED_READY_INDEX = 394;
+    static final int GUIDE_BRANCH_DIRECT_RECORD_RETAINED_REJECT_INDEX = 395;
+    static final int GUIDE_BRANCH_DIRECT_RECORD_EMPTY_READY_INDEX = 396;
+    static final int GUIDE_BRANCH_DIRECT_RECORD_SELECTED_REWRITE_READY_INDEX = 397;
+    static final int GUIDE_BRANCH_DIRECT_RECORD_SELECTED_REWRITE_REJECT_INDEX = 398;
+    static final int GUIDE_BRANCH_DIRECT_RECORD_SELECTED_PRESERVE_READY_INDEX = 399;
+    static final int GUIDE_BRANCH_DIRECT_RECORD_SELECTED_PRESERVE_REJECT_INDEX = 400;
+    static final int GUIDE_BRANCH_DIRECT_RECORD_RETAINED_PRESERVE_READY_INDEX = 401;
+    static final int GUIDE_BRANCH_DIRECT_RECORD_RETAINED_PRESERVE_REJECT_INDEX = 402;
+    static final int GUIDE_BRANCH_DIRECT_RECORD_WEIGHTS_READY_INDEX = 403;
+    static final int GUIDE_BRANCH_DIRECT_RECORD_WEIGHTS_REJECT_INDEX = 404;
+    static final int GUIDE_BRANCH_DIRECT_RECORD_AGE_ONE_READY_INDEX = 405;
+    static final int GUIDE_BRANCH_DIRECT_RECORD_AGE_TWO_READY_INDEX = 406;
+    static final int GUIDE_BRANCH_DIRECT_RECORD_AGE_THREE_READY_INDEX = 407;
+    static final int GUIDE_BRANCH_DIRECT_RECORD_IDENTITY_SOURCE_READY_INDEX = 408;
+    static final int GUIDE_BRANCH_DIRECT_RECORD_MAPPED_SOURCE_READY_INDEX = 409;
+    static final int GUIDE_BRANCH_DIRECT_RECORD_DELTA_INDEX = 410;
+    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 411;
     static final int SHIFTED_RECEIVER_GUIDE_STRIDE = 8 * Float.BYTES;
     static final int BRANCH_CANDIDATE_TAG_STRIDE = 2 * Integer.BYTES;
     static final int SPATIAL_DIAGNOSTIC_COUNTER_BYTES =
@@ -1556,6 +1576,44 @@ final class RtPathReservoirHistory {
                     counters.get(GUIDE_BRANCH_DIRECT_POST_SELECTION_IDENTITY_READY_INDEX));
             long guideBranchDirectPostSelectionMappedReady = Integer.toUnsignedLong(
                     counters.get(GUIDE_BRANCH_DIRECT_POST_SELECTION_MAPPED_READY_INDEX));
+            long guideBranchDirectRecordEligible = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_RECORD_ELIGIBLE_INDEX));
+            long guideBranchDirectRecordSelectedReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_RECORD_SELECTED_READY_INDEX));
+            long guideBranchDirectRecordSelectedReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_RECORD_SELECTED_REJECT_INDEX));
+            long guideBranchDirectRecordRetainedReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_RECORD_RETAINED_READY_INDEX));
+            long guideBranchDirectRecordRetainedReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_RECORD_RETAINED_REJECT_INDEX));
+            long guideBranchDirectRecordEmptyReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_RECORD_EMPTY_READY_INDEX));
+            long guideBranchDirectRecordSelectedRewriteReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_RECORD_SELECTED_REWRITE_READY_INDEX));
+            long guideBranchDirectRecordSelectedRewriteReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_RECORD_SELECTED_REWRITE_REJECT_INDEX));
+            long guideBranchDirectRecordSelectedPreserveReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_RECORD_SELECTED_PRESERVE_READY_INDEX));
+            long guideBranchDirectRecordSelectedPreserveReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_RECORD_SELECTED_PRESERVE_REJECT_INDEX));
+            long guideBranchDirectRecordRetainedPreserveReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_RECORD_RETAINED_PRESERVE_READY_INDEX));
+            long guideBranchDirectRecordRetainedPreserveReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_RECORD_RETAINED_PRESERVE_REJECT_INDEX));
+            long guideBranchDirectRecordWeightsReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_RECORD_WEIGHTS_READY_INDEX));
+            long guideBranchDirectRecordWeightsReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_RECORD_WEIGHTS_REJECT_INDEX));
+            long guideBranchDirectRecordAgeOneReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_RECORD_AGE_ONE_READY_INDEX));
+            long guideBranchDirectRecordAgeTwoReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_RECORD_AGE_TWO_READY_INDEX));
+            long guideBranchDirectRecordAgeThreeReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_RECORD_AGE_THREE_READY_INDEX));
+            long guideBranchDirectRecordIdentitySourceReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_RECORD_IDENTITY_SOURCE_READY_INDEX));
+            long guideBranchDirectRecordMappedSourceReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_RECORD_MAPPED_SOURCE_READY_INDEX));
             long crossFrameReceiverReject = crossFrameReceiverSurfaceReject
                     + crossFrameReceiverSampleReject + crossFrameReceiverEdgeReject
                     + crossFrameReceiverTopologyReject + crossFrameReceiverDepthReject
@@ -2557,6 +2615,78 @@ final class RtPathReservoirHistory {
                             - guideBranchDirectPostSelectionMappingReady,
                     guideBranchDirectBernoulliReady
                             - guideBranchDirectPostSelectionEligible);
+            long guideBranchDirectRecordTerminal = guideBranchDirectRecordSelectedReady
+                    + guideBranchDirectRecordSelectedReject
+                    + guideBranchDirectRecordRetainedReady
+                    + guideBranchDirectRecordRetainedReject
+                    + guideBranchDirectRecordEmptyReady;
+            long guideBranchDirectRecordReady = guideBranchDirectRecordSelectedReady
+                    + guideBranchDirectRecordRetainedReady
+                    + guideBranchDirectRecordEmptyReady;
+            long guideBranchDirectRecordSelectedRewrite =
+                    guideBranchDirectRecordSelectedRewriteReady
+                            + guideBranchDirectRecordSelectedRewriteReject;
+            long guideBranchDirectRecordSelectedPreserve =
+                    guideBranchDirectRecordSelectedPreserveReady
+                            + guideBranchDirectRecordSelectedPreserveReject;
+            long guideBranchDirectRecordRetainedPreserve =
+                    guideBranchDirectRecordRetainedPreserveReady
+                            + guideBranchDirectRecordRetainedPreserveReject;
+            long guideBranchDirectRecordWeights = guideBranchDirectRecordWeightsReady
+                    + guideBranchDirectRecordWeightsReject;
+            long guideBranchDirectRecordAgeReady = guideBranchDirectRecordAgeOneReady
+                    + guideBranchDirectRecordAgeTwoReady
+                    + guideBranchDirectRecordAgeThreeReady;
+            long guideBranchDirectRecordMappingReady =
+                    guideBranchDirectRecordIdentitySourceReady
+                            + guideBranchDirectRecordMappedSourceReady;
+            long guideBranchDirectRecordRetainedPopulation =
+                    guideBranchDirectPostSelectionRetainedReady
+                            - guideBranchDirectPostSelectionEmptyReady;
+            CausticaMod.LOGGER.info(
+                    "RT path guide branch register record: postReady={}, eligible={}, "
+                            + "selected[ready={},reject={},rewriteReady={},rewriteReject={},"
+                            + "rewriteDelta={},preserveReady={},preserveReject={},preserveDelta={}], "
+                            + "retained[ready={},reject={},preserveReady={},preserveReject={},"
+                            + "preserveDelta={}], empty={}, terminal={}, delta={}, ready={}, "
+                            + "weights[ready={},reject={},delta={}], "
+                            + "age[one={},two={},three={},delta={}], "
+                            + "source[identity={},mapped={},delta={}], gateDelta={}",
+                    guideBranchDirectPostSelectionReady,
+                    guideBranchDirectRecordEligible,
+                    guideBranchDirectRecordSelectedReady,
+                    guideBranchDirectRecordSelectedReject,
+                    guideBranchDirectRecordSelectedRewriteReady,
+                    guideBranchDirectRecordSelectedRewriteReject,
+                    guideBranchDirectPostSelectionSelectedReady
+                            - guideBranchDirectRecordSelectedRewrite,
+                    guideBranchDirectRecordSelectedPreserveReady,
+                    guideBranchDirectRecordSelectedPreserveReject,
+                    guideBranchDirectPostSelectionSelectedReady
+                            - guideBranchDirectRecordSelectedPreserve,
+                    guideBranchDirectRecordRetainedReady,
+                    guideBranchDirectRecordRetainedReject,
+                    guideBranchDirectRecordRetainedPreserveReady,
+                    guideBranchDirectRecordRetainedPreserveReject,
+                    guideBranchDirectRecordRetainedPopulation
+                            - guideBranchDirectRecordRetainedPreserve,
+                    guideBranchDirectRecordEmptyReady,
+                    guideBranchDirectRecordTerminal,
+                    guideBranchDirectRecordEligible - guideBranchDirectRecordTerminal,
+                    guideBranchDirectRecordReady,
+                    guideBranchDirectRecordWeightsReady,
+                    guideBranchDirectRecordWeightsReject,
+                    guideBranchDirectRecordEligible
+                            - guideBranchDirectPostSelectionEmptyReady
+                            - guideBranchDirectRecordWeights,
+                    guideBranchDirectRecordAgeOneReady,
+                    guideBranchDirectRecordAgeTwoReady,
+                    guideBranchDirectRecordAgeThreeReady,
+                    guideBranchDirectRecordReady - guideBranchDirectRecordAgeReady,
+                    guideBranchDirectRecordIdentitySourceReady,
+                    guideBranchDirectRecordMappedSourceReady,
+                    guideBranchDirectRecordReady - guideBranchDirectRecordMappingReady,
+                    guideBranchDirectPostSelectionReady - guideBranchDirectRecordEligible);
             spatialDiagnosticViewPending = 0;
             return;
         }
