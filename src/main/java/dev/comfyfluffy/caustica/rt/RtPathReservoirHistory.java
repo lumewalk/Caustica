@@ -403,7 +403,27 @@ final class RtPathReservoirHistory {
     static final int GUIDE_BRANCH_DIRECT_BERNOULLI_IDENTITY_READY_INDEX = 368;
     static final int GUIDE_BRANCH_DIRECT_BERNOULLI_MAPPED_READY_INDEX = 369;
     static final int GUIDE_BRANCH_DIRECT_BERNOULLI_DELTA_INDEX = 370;
-    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 371;
+    static final int GUIDE_BRANCH_DIRECT_POST_SELECTION_ELIGIBLE_INDEX = 371;
+    static final int GUIDE_BRANCH_DIRECT_POST_SELECTION_CURRENT_REJECT_INDEX = 372;
+    static final int GUIDE_BRANCH_DIRECT_POST_SELECTION_NEXT_INVALID_INDEX = 373;
+    static final int GUIDE_BRANCH_DIRECT_POST_SELECTION_SELECTED_READY_INDEX = 374;
+    static final int GUIDE_BRANCH_DIRECT_POST_SELECTION_SELECTED_TARGET_REJECT_INDEX = 375;
+    static final int GUIDE_BRANCH_DIRECT_POST_SELECTION_SELECTED_FINAL_REJECT_INDEX = 376;
+    static final int GUIDE_BRANCH_DIRECT_POST_SELECTION_RETAINED_READY_INDEX = 377;
+    static final int GUIDE_BRANCH_DIRECT_POST_SELECTION_RETAINED_TARGET_REJECT_INDEX = 378;
+    static final int GUIDE_BRANCH_DIRECT_POST_SELECTION_RETAINED_FINAL_REJECT_INDEX = 379;
+    static final int GUIDE_BRANCH_DIRECT_POST_SELECTION_EMPTY_READY_INDEX = 380;
+    static final int GUIDE_BRANCH_DIRECT_POST_SELECTION_WEIGHT_UNCAPPED_INDEX = 381;
+    static final int GUIDE_BRANCH_DIRECT_POST_SELECTION_WEIGHT_CAPPED_INDEX = 382;
+    static final int GUIDE_BRANCH_DIRECT_POST_SELECTION_COUNT_UNCAPPED_INDEX = 383;
+    static final int GUIDE_BRANCH_DIRECT_POST_SELECTION_COUNT_CAPPED_INDEX = 384;
+    static final int GUIDE_BRANCH_DIRECT_POST_SELECTION_AGE_ONE_READY_INDEX = 385;
+    static final int GUIDE_BRANCH_DIRECT_POST_SELECTION_AGE_TWO_READY_INDEX = 386;
+    static final int GUIDE_BRANCH_DIRECT_POST_SELECTION_AGE_THREE_READY_INDEX = 387;
+    static final int GUIDE_BRANCH_DIRECT_POST_SELECTION_IDENTITY_READY_INDEX = 388;
+    static final int GUIDE_BRANCH_DIRECT_POST_SELECTION_MAPPED_READY_INDEX = 389;
+    static final int GUIDE_BRANCH_DIRECT_POST_SELECTION_DELTA_INDEX = 390;
+    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 391;
     static final int SHIFTED_RECEIVER_GUIDE_STRIDE = 8 * Float.BYTES;
     static final int BRANCH_CANDIDATE_TAG_STRIDE = 2 * Integer.BYTES;
     static final int SPATIAL_DIAGNOSTIC_COUNTER_BYTES =
@@ -1498,6 +1518,44 @@ final class RtPathReservoirHistory {
                     counters.get(GUIDE_BRANCH_DIRECT_BERNOULLI_IDENTITY_READY_INDEX));
             long guideBranchDirectBernoulliMappedReady = Integer.toUnsignedLong(
                     counters.get(GUIDE_BRANCH_DIRECT_BERNOULLI_MAPPED_READY_INDEX));
+            long guideBranchDirectPostSelectionEligible = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_POST_SELECTION_ELIGIBLE_INDEX));
+            long guideBranchDirectPostSelectionCurrentReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_POST_SELECTION_CURRENT_REJECT_INDEX));
+            long guideBranchDirectPostSelectionNextInvalid = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_POST_SELECTION_NEXT_INVALID_INDEX));
+            long guideBranchDirectPostSelectionSelectedReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_POST_SELECTION_SELECTED_READY_INDEX));
+            long guideBranchDirectPostSelectionSelectedTargetReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_POST_SELECTION_SELECTED_TARGET_REJECT_INDEX));
+            long guideBranchDirectPostSelectionSelectedFinalReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_POST_SELECTION_SELECTED_FINAL_REJECT_INDEX));
+            long guideBranchDirectPostSelectionRetainedReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_POST_SELECTION_RETAINED_READY_INDEX));
+            long guideBranchDirectPostSelectionRetainedTargetReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_POST_SELECTION_RETAINED_TARGET_REJECT_INDEX));
+            long guideBranchDirectPostSelectionRetainedFinalReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_POST_SELECTION_RETAINED_FINAL_REJECT_INDEX));
+            long guideBranchDirectPostSelectionEmptyReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_POST_SELECTION_EMPTY_READY_INDEX));
+            long guideBranchDirectPostSelectionWeightUncapped = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_POST_SELECTION_WEIGHT_UNCAPPED_INDEX));
+            long guideBranchDirectPostSelectionWeightCapped = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_POST_SELECTION_WEIGHT_CAPPED_INDEX));
+            long guideBranchDirectPostSelectionCountUncapped = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_POST_SELECTION_COUNT_UNCAPPED_INDEX));
+            long guideBranchDirectPostSelectionCountCapped = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_POST_SELECTION_COUNT_CAPPED_INDEX));
+            long guideBranchDirectPostSelectionAgeOneReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_POST_SELECTION_AGE_ONE_READY_INDEX));
+            long guideBranchDirectPostSelectionAgeTwoReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_POST_SELECTION_AGE_TWO_READY_INDEX));
+            long guideBranchDirectPostSelectionAgeThreeReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_POST_SELECTION_AGE_THREE_READY_INDEX));
+            long guideBranchDirectPostSelectionIdentityReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_POST_SELECTION_IDENTITY_READY_INDEX));
+            long guideBranchDirectPostSelectionMappedReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_POST_SELECTION_MAPPED_READY_INDEX));
             long crossFrameReceiverReject = crossFrameReceiverSurfaceReject
                     + crossFrameReceiverSampleReject + crossFrameReceiverEdgeReject
                     + crossFrameReceiverTopologyReject + crossFrameReceiverDepthReject
@@ -2426,6 +2484,79 @@ final class RtPathReservoirHistory {
                     guideBranchDirectBernoulliMappedReady,
                     guideBranchDirectBernoulliReady - guideBranchDirectBernoulliMappingReady,
                     guideBranchDirectSelectionReady - guideBranchDirectBernoulliEligible);
+            long guideBranchDirectPostSelectionTerminal =
+                    guideBranchDirectPostSelectionCurrentReject
+                            + guideBranchDirectPostSelectionNextInvalid
+                            + guideBranchDirectPostSelectionSelectedReady
+                            + guideBranchDirectPostSelectionSelectedTargetReject
+                            + guideBranchDirectPostSelectionSelectedFinalReject
+                            + guideBranchDirectPostSelectionRetainedReady
+                            + guideBranchDirectPostSelectionRetainedTargetReject
+                            + guideBranchDirectPostSelectionRetainedFinalReject;
+            long guideBranchDirectPostSelectionReady =
+                    guideBranchDirectPostSelectionSelectedReady
+                            + guideBranchDirectPostSelectionRetainedReady;
+            long guideBranchDirectPostSelectionNextReady =
+                    guideBranchDirectPostSelectionEligible
+                            - guideBranchDirectPostSelectionCurrentReject
+                            - guideBranchDirectPostSelectionNextInvalid;
+            long guideBranchDirectPostSelectionWeightPartition =
+                    guideBranchDirectPostSelectionWeightUncapped
+                            + guideBranchDirectPostSelectionWeightCapped;
+            long guideBranchDirectPostSelectionCountPartition =
+                    guideBranchDirectPostSelectionCountUncapped
+                            + guideBranchDirectPostSelectionCountCapped;
+            long guideBranchDirectPostSelectionAgeReady =
+                    guideBranchDirectPostSelectionAgeOneReady
+                            + guideBranchDirectPostSelectionAgeTwoReady
+                            + guideBranchDirectPostSelectionAgeThreeReady;
+            long guideBranchDirectPostSelectionMappingReady =
+                    guideBranchDirectPostSelectionIdentityReady
+                            + guideBranchDirectPostSelectionMappedReady;
+            CausticaMod.LOGGER.info(
+                    "RT path guide branch post selection: BernoulliReady={}, eligible={}, "
+                            + "currentReject={}, nextInvalid={}, "
+                            + "selected[ready={},targetReject={},finalReject={}], "
+                            + "retained[ready={},targetReject={},finalReject={}], "
+                            + "terminal={}, delta={}, ready={}, empty={}, "
+                            + "weight[uncapped={},capped={},delta={}], "
+                            + "count[uncapped={},capped={},delta={}], "
+                            + "age[one={},two={},three={},delta={}], "
+                            + "mapping[identity={},mapped={},delta={}], gateDelta={}",
+                    guideBranchDirectBernoulliReady,
+                    guideBranchDirectPostSelectionEligible,
+                    guideBranchDirectPostSelectionCurrentReject,
+                    guideBranchDirectPostSelectionNextInvalid,
+                    guideBranchDirectPostSelectionSelectedReady,
+                    guideBranchDirectPostSelectionSelectedTargetReject,
+                    guideBranchDirectPostSelectionSelectedFinalReject,
+                    guideBranchDirectPostSelectionRetainedReady,
+                    guideBranchDirectPostSelectionRetainedTargetReject,
+                    guideBranchDirectPostSelectionRetainedFinalReject,
+                    guideBranchDirectPostSelectionTerminal,
+                    guideBranchDirectPostSelectionEligible
+                            - guideBranchDirectPostSelectionTerminal,
+                    guideBranchDirectPostSelectionReady,
+                    guideBranchDirectPostSelectionEmptyReady,
+                    guideBranchDirectPostSelectionWeightUncapped,
+                    guideBranchDirectPostSelectionWeightCapped,
+                    guideBranchDirectPostSelectionNextReady
+                            - guideBranchDirectPostSelectionWeightPartition,
+                    guideBranchDirectPostSelectionCountUncapped,
+                    guideBranchDirectPostSelectionCountCapped,
+                    guideBranchDirectPostSelectionNextReady
+                            - guideBranchDirectPostSelectionCountPartition,
+                    guideBranchDirectPostSelectionAgeOneReady,
+                    guideBranchDirectPostSelectionAgeTwoReady,
+                    guideBranchDirectPostSelectionAgeThreeReady,
+                    guideBranchDirectPostSelectionReady
+                            - guideBranchDirectPostSelectionAgeReady,
+                    guideBranchDirectPostSelectionIdentityReady,
+                    guideBranchDirectPostSelectionMappedReady,
+                    guideBranchDirectPostSelectionReady
+                            - guideBranchDirectPostSelectionMappingReady,
+                    guideBranchDirectBernoulliReady
+                            - guideBranchDirectPostSelectionEligible);
             spatialDiagnosticViewPending = 0;
             return;
         }

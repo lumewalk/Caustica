@@ -548,6 +548,28 @@ Twenty-one fresh Vulkan readbacks covered 245156 candidates: selected/retained w
 were zero. Counter storage is now 371 uints / 1484 B. This audit performs no payload copy and writes
 no reservoir, source root, scratch history, committed history, or estimator contribution.
 
+The follow-on line `RT path guide branch post selection` audits only scalar register arithmetic.
+It applies stored weight/M caps of `1e30` and `16777216` with pre-add saturation tests, adds
+`min(sourceM, 8)` to M, selects shifted versus current target from the Bernoulli outcome, and computes
+final `W = nextWeightSum / (nextM * selectedTarget)`. Zero weight sum is a valid empty result with
+`W=0`; any non-empty result requires finite positive M, target, denominator and W. Required runtime
+identities are:
+
+- `BernoulliReady == eligible == terminal`;
+- `terminal == currentReject + nextInvalid + selected.ready + selected.targetReject
+  + selected.finalReject + retained.ready + retained.targetReject + retained.finalReject`;
+- `eligible - currentReject - nextInvalid == weight.uncapped + weight.capped
+  == count.uncapped + count.capped`;
+- `ready == age.one + age.two + age.three == mapping.identity + mapping.mapped`;
+- every printed delta is zero; stable runs should also have all reject categories at zero.
+
+Sixty-one Vulkan readbacks covered 62392 candidates: selected/retained ready were 56362/6030,
+ages 1/2/3 were 20683/20983/20726, and identity/mapped were 5169/57223. Every reject, cap and delta
+was zero. CPU tests separately cover weight/M saturation, empty output, selected/retained target
+choice, invalid inputs and non-finite final denominators. Counter storage is now 391 uints / 1564 B.
+This gate does not copy or construct a reservoir payload and cannot write scratch, history, source
+provenance or estimator state.
+
 For a fresh runtime check, use debug view 20 and inspect `run/logs/latest.log`. Normal operation
 requires `RT bring-up OK`, Vulkan, the intended NVIDIA device, exact zero-delta counter partitions,
 and no `DEVICE_LOST`, `VK_ERROR`, GPU fault or shader compilation error. Debug colors and sparse

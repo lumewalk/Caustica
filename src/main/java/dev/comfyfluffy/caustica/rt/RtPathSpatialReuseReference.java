@@ -11,6 +11,8 @@ final class RtPathSpatialReuseReference {
     static final double RELATIVE_DEPTH_THRESHOLD = 0.10;
     static final double MAX_FOOTPRINT_RATIO = 4.0;
     static final double MAX_SPATIAL_SOURCE_COUNT = 8.0;
+    static final double MAX_STORED_WEIGHT_SUM = 1.0e30;
+    static final double MAX_STORED_EFFECTIVE_COUNT = 16_777_216.0;
     static final int RECONNECTION_HIT_DEPTH = 1;
     static final int RECONNECTION_VALID = 1;
     static final int RECONNECTION_EVENT_SHIFT = 5;
@@ -1554,6 +1556,139 @@ final class RtPathSpatialReuseReference {
                 boundary, retention, random,
                 probability == 0.0 && selected,
                 probability == 1.0 && !selected);
+    }
+
+    enum BranchDirectPostSelectionOutcome {
+        BERNOULLI_REJECT,
+        CURRENT_REJECT,
+        NEXT_REJECT,
+        SELECTED_READY,
+        SELECTED_TARGET_REJECT,
+        SELECTED_FINAL_REJECT,
+        RETAINED_READY,
+        RETAINED_TARGET_REJECT,
+        RETAINED_FINAL_REJECT
+    }
+
+    enum BranchDirectStoredCapOutcome {
+        NOT_ELIGIBLE,
+        UNCAPPED,
+        CAPPED
+    }
+
+    record BranchDirectPostSelectionAudit(
+            BranchDirectPostSelectionOutcome outcome,
+            BranchDirectStoredCapOutcome weightCap,
+            BranchDirectStoredCapOutcome countCap,
+            BranchCandidateRetentionOutcome retention,
+            double nextWeightSum,
+            double nextEffectiveCount,
+            double selectedTarget,
+            double finalWeight,
+            boolean sourceSelected,
+            boolean empty) {
+    }
+
+    /** CPU mirror for the aged register-only selected/retained final-weight arithmetic. */
+    static BranchDirectPostSelectionAudit branchDirectPostSelectionAudit(
+            BranchCandidateRetentionOutcome retention, boolean bernoulliReady,
+            boolean sourceSelected, double currentWeightSum, double currentEffectiveCount,
+            double currentTarget, double mergeWeight, double sourceEffectiveCount,
+            double shiftedTarget) {
+        if (!bernoulliReady) {
+            return branchDirectPostSelectionReject(
+                    BranchDirectPostSelectionOutcome.BERNOULLI_REJECT,
+                    retention, sourceSelected);
+        }
+        if (retention != BranchCandidateRetentionOutcome.AGE_ONE
+                && retention != BranchCandidateRetentionOutcome.AGE_TWO
+                && retention != BranchCandidateRetentionOutcome.AGE_THREE) {
+            throw new IllegalArgumentException(
+                    "direct post-selection audit requires a live aged branch candidate");
+        }
+        if (!nonNegativeFinite(currentWeightSum)
+                || !nonNegativeFinite(currentEffectiveCount)
+                || !nonNegativeFinite(currentTarget)) {
+            return branchDirectPostSelectionReject(
+                    BranchDirectPostSelectionOutcome.CURRENT_REJECT,
+                    retention, sourceSelected);
+        }
+        if (!nonNegativeFinite(mergeWeight)
+                || !nonNegativeFinite(sourceEffectiveCount)
+                || !nonNegativeFinite(shiftedTarget)) {
+            return branchDirectPostSelectionReject(
+                    BranchDirectPostSelectionOutcome.NEXT_REJECT,
+                    retention, sourceSelected);
+        }
+
+        double sourceCount = Math.min(sourceEffectiveCount, MAX_SPATIAL_SOURCE_COUNT);
+        boolean weightCapped = currentWeightSum > MAX_STORED_WEIGHT_SUM - mergeWeight;
+        boolean countCapped = currentEffectiveCount
+                > MAX_STORED_EFFECTIVE_COUNT - sourceCount;
+        double nextWeightSum = weightCapped
+                ? MAX_STORED_WEIGHT_SUM : currentWeightSum + mergeWeight;
+        double nextEffectiveCount = countCapped
+                ? MAX_STORED_EFFECTIVE_COUNT : currentEffectiveCount + sourceCount;
+        if (!nonNegativeFinite(nextWeightSum) || !nonNegativeFinite(nextEffectiveCount)) {
+            return branchDirectPostSelectionReject(
+                    BranchDirectPostSelectionOutcome.NEXT_REJECT,
+                    retention, sourceSelected);
+        }
+
+        BranchDirectStoredCapOutcome weightCap = weightCapped
+                ? BranchDirectStoredCapOutcome.CAPPED
+                : BranchDirectStoredCapOutcome.UNCAPPED;
+        BranchDirectStoredCapOutcome countCap = countCapped
+                ? BranchDirectStoredCapOutcome.CAPPED
+                : BranchDirectStoredCapOutcome.UNCAPPED;
+        double selectedTarget = sourceSelected ? shiftedTarget : currentTarget;
+        boolean empty = nextWeightSum == 0.0;
+        if (!nonNegativeFinite(selectedTarget) || (!empty && selectedTarget == 0.0)) {
+            return new BranchDirectPostSelectionAudit(
+                    sourceSelected
+                            ? BranchDirectPostSelectionOutcome.SELECTED_TARGET_REJECT
+                            : BranchDirectPostSelectionOutcome.RETAINED_TARGET_REJECT,
+                    weightCap, countCap, retention, nextWeightSum, nextEffectiveCount,
+                    selectedTarget, 0.0, sourceSelected, false);
+        }
+
+        double finalWeight = 0.0;
+        if (!empty) {
+            if (nextEffectiveCount == 0.0) {
+                return new BranchDirectPostSelectionAudit(
+                        sourceSelected
+                                ? BranchDirectPostSelectionOutcome.SELECTED_FINAL_REJECT
+                                : BranchDirectPostSelectionOutcome.RETAINED_FINAL_REJECT,
+                        weightCap, countCap, retention, nextWeightSum, nextEffectiveCount,
+                        selectedTarget, 0.0, sourceSelected, false);
+            }
+            double denominator = nextEffectiveCount * selectedTarget;
+            finalWeight = nextWeightSum / denominator;
+            if (!positiveFinite(denominator) || !positiveFinite(finalWeight)) {
+                return new BranchDirectPostSelectionAudit(
+                        sourceSelected
+                                ? BranchDirectPostSelectionOutcome.SELECTED_FINAL_REJECT
+                                : BranchDirectPostSelectionOutcome.RETAINED_FINAL_REJECT,
+                        weightCap, countCap, retention, nextWeightSum, nextEffectiveCount,
+                        selectedTarget, 0.0, sourceSelected, false);
+            }
+        }
+        return new BranchDirectPostSelectionAudit(
+                sourceSelected
+                        ? BranchDirectPostSelectionOutcome.SELECTED_READY
+                        : BranchDirectPostSelectionOutcome.RETAINED_READY,
+                weightCap, countCap, retention, nextWeightSum, nextEffectiveCount,
+                selectedTarget, finalWeight, sourceSelected, empty);
+    }
+
+    private static BranchDirectPostSelectionAudit branchDirectPostSelectionReject(
+            BranchDirectPostSelectionOutcome outcome,
+            BranchCandidateRetentionOutcome retention,
+            boolean sourceSelected) {
+        return new BranchDirectPostSelectionAudit(outcome,
+                BranchDirectStoredCapOutcome.NOT_ELIGIBLE,
+                BranchDirectStoredCapOutcome.NOT_ELIGIBLE,
+                retention, 0.0, 0.0, 0.0, 0.0, sourceSelected, false);
     }
 
     /**

@@ -822,6 +822,20 @@ scratch, history, or estimator state was written. The next isolated gate may eva
 retained post-selection weight/M/final-weight arithmetic in registers, but still must not assemble or
 write a persistent payload.
 
+That aged post-selection arithmetic gate is now proven. It keeps the stored caps at `1e30` and
+`16777216`, but detects saturation before addition so finite operands cannot overflow before the cap
+is applied. Effective M adds the same `min(sourceM, 8)` used by the GRIS weight. The selected branch
+uses the freshly shifted target, the retained branch uses the current receiver target, and every
+non-empty result requires finite positive M, target, denominator and final weight. A zero next weight
+sum remains a valid empty result with final weight zero. Across 61 Vulkan readbacks all 62392
+Bernoulli-ready candidates completed: 56362 selected and 6030 retained, with zero current, next,
+target or final-weight rejects. Ages 1/2/3 were 20683/20983/20726 and identity/mapped ownership was
+5169/57223; weight/count/terminal/age/mapping/gate deltas were all zero. No runtime sample hit either
+stored cap, while CPU tests cover both caps and overflow/denominator rejection. Counter storage is
+391 uints / 1564 B. The next isolated gate may assemble the complete aged selected/retained reservoir
+in registers and audit its receiver-dependent versus preserved replay lanes, but must not write
+scratch/history or feed the estimator.
+
 ## Delivery Phases
 
 ### Phase 0 — Wavefront Integration Baseline

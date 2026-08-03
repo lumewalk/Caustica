@@ -2361,6 +2361,91 @@ static void pathBranchAgeReplayValidate() {
     InterlockedAdd(counters[mappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION
             ? PATH_GUIDE_BRANCH_DIRECT_BERNOULLI_MAPPED_READY
             : PATH_GUIDE_BRANCH_DIRECT_BERNOULLI_IDENTITY_READY], 1u);
+
+    // Register-only post-selection arithmetic. Bernoulli uses the uncapped stable ratio above,
+    // while the stored reservoir contract still saturates weight sum and M at their established
+    // limits. Saturation is detected before addition so finite float operands cannot overflow and
+    // then depend on target-specific min(infinity, cap) behavior. Only scalar registers and
+    // counters are touched: no sample payload, reservoir, source root, scratch, history, or
+    // estimator state is assembled or written.
+    InterlockedAdd(counters[PATH_GUIDE_BRANCH_DIRECT_POST_SELECTION_ELIGIBLE], 1u);
+    float currentEffectiveCount = current.weights.y;
+    float currentTarget = current.sampleRadianceTarget.w;
+    bool currentArithmeticValid = isfinite(currentWeightSum) && currentWeightSum >= 0.0
+            && isfinite(currentEffectiveCount) && currentEffectiveCount >= 0.0
+            && isfinite(currentTarget) && currentTarget >= 0.0;
+    if (!currentArithmeticValid) {
+        InterlockedAdd(counters[
+                PATH_GUIDE_BRANCH_DIRECT_POST_SELECTION_CURRENT_REJECT], 1u);
+        return;
+    }
+
+    bool nextInputsValid = isfinite(mergeWeight) && mergeWeight >= 0.0
+            && isfinite(sourceCount) && sourceCount >= 0.0;
+    bool weightCapped = nextInputsValid
+            && currentWeightSum > 1.0e30 - mergeWeight;
+    bool countCapped = nextInputsValid
+            && currentEffectiveCount > 16777216.0 - sourceCount;
+    float nextWeightSum = !nextInputsValid
+            ? 0.0
+            : weightCapped ? 1.0e30 : currentWeightSum + mergeWeight;
+    float nextEffectiveCount = !nextInputsValid
+            ? 0.0
+            : countCapped ? 16777216.0 : currentEffectiveCount + sourceCount;
+    bool nextValid = nextInputsValid
+            && isfinite(nextWeightSum) && nextWeightSum >= 0.0
+            && isfinite(nextEffectiveCount) && nextEffectiveCount >= 0.0;
+    if (!nextValid) {
+        InterlockedAdd(counters[
+                PATH_GUIDE_BRANCH_DIRECT_POST_SELECTION_NEXT_INVALID], 1u);
+        return;
+    }
+    InterlockedAdd(counters[weightCapped
+            ? PATH_GUIDE_BRANCH_DIRECT_POST_SELECTION_WEIGHT_CAPPED
+            : PATH_GUIDE_BRANCH_DIRECT_POST_SELECTION_WEIGHT_UNCAPPED], 1u);
+    InterlockedAdd(counters[countCapped
+            ? PATH_GUIDE_BRANCH_DIRECT_POST_SELECTION_COUNT_CAPPED
+            : PATH_GUIDE_BRANCH_DIRECT_POST_SELECTION_COUNT_UNCAPPED], 1u);
+
+    float selectedTarget = sourceSelected ? shiftedTarget : currentTarget;
+    bool emptyReady = nextWeightSum == 0.0;
+    bool selectedTargetValid = isfinite(selectedTarget) && selectedTarget >= 0.0
+            && (emptyReady || selectedTarget > 0.0);
+    if (!selectedTargetValid) {
+        InterlockedAdd(counters[sourceSelected
+                ? PATH_GUIDE_BRANCH_DIRECT_POST_SELECTION_SELECTED_TARGET_REJECT
+                : PATH_GUIDE_BRANCH_DIRECT_POST_SELECTION_RETAINED_TARGET_REJECT], 1u);
+        return;
+    }
+
+    float finalWeight = 0.0;
+    bool finalWeightValid = emptyReady;
+    if (!emptyReady && nextEffectiveCount > 0.0) {
+        float finalDenominator = nextEffectiveCount * selectedTarget;
+        finalWeight = nextWeightSum / finalDenominator;
+        finalWeightValid = isfinite(finalDenominator) && finalDenominator > 0.0
+                && isfinite(finalWeight) && finalWeight > 0.0;
+    }
+    if (!finalWeightValid) {
+        InterlockedAdd(counters[sourceSelected
+                ? PATH_GUIDE_BRANCH_DIRECT_POST_SELECTION_SELECTED_FINAL_REJECT
+                : PATH_GUIDE_BRANCH_DIRECT_POST_SELECTION_RETAINED_FINAL_REJECT], 1u);
+        return;
+    }
+
+    InterlockedAdd(counters[sourceSelected
+            ? PATH_GUIDE_BRANCH_DIRECT_POST_SELECTION_SELECTED_READY
+            : PATH_GUIDE_BRANCH_DIRECT_POST_SELECTION_RETAINED_READY], 1u);
+    InterlockedAdd(counters[PATH_GUIDE_BRANCH_DIRECT_POST_SELECTION_EMPTY_READY],
+            emptyReady ? 1u : 0u);
+    InterlockedAdd(counters[age == 1u
+            ? PATH_GUIDE_BRANCH_DIRECT_POST_SELECTION_AGE_ONE_READY
+            : age == 2u
+                    ? PATH_GUIDE_BRANCH_DIRECT_POST_SELECTION_AGE_TWO_READY
+                    : PATH_GUIDE_BRANCH_DIRECT_POST_SELECTION_AGE_THREE_READY], 1u);
+    InterlockedAdd(counters[mappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION
+            ? PATH_GUIDE_BRANCH_DIRECT_POST_SELECTION_MAPPED_READY
+            : PATH_GUIDE_BRANCH_DIRECT_POST_SELECTION_IDENTITY_READY], 1u);
 }
 
 static void pathBranchScratchReplayValidate() {

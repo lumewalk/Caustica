@@ -1240,6 +1240,93 @@ final class RtPathSpatialReuseReferenceTest {
     }
 
     @Test
+    void branchDirectPostSelectionAuditKeepsCapsAndFinalWeightsRegisterOnly() {
+        var ageOne = RtPathSpatialReuseReference.BranchCandidateRetentionOutcome.AGE_ONE;
+        var ageTwo = RtPathSpatialReuseReference.BranchCandidateRetentionOutcome.AGE_TWO;
+        var ageThree = RtPathSpatialReuseReference.BranchCandidateRetentionOutcome.AGE_THREE;
+        var uncapped = RtPathSpatialReuseReference.BranchDirectStoredCapOutcome.UNCAPPED;
+        var notEligible = RtPathSpatialReuseReference.BranchDirectStoredCapOutcome.NOT_ELIGIBLE;
+
+        assertEquals(new RtPathSpatialReuseReference.BranchDirectPostSelectionAudit(
+                        RtPathSpatialReuseReference.BranchDirectPostSelectionOutcome.BERNOULLI_REJECT,
+                        notEligible, notEligible, ageOne,
+                        0.0, 0.0, 0.0, 0.0, true, false),
+                RtPathSpatialReuseReference.branchDirectPostSelectionAudit(
+                        ageOne, false, true, 10.0, 2.0, 5.0, 6.0, 4.0, 3.0));
+
+        var selected = RtPathSpatialReuseReference.branchDirectPostSelectionAudit(
+                ageOne, true, true, 10.0, 2.0, 5.0, 6.0, 4.0, 3.0);
+        assertEquals(RtPathSpatialReuseReference.BranchDirectPostSelectionOutcome.SELECTED_READY,
+                selected.outcome());
+        assertEquals(uncapped, selected.weightCap());
+        assertEquals(uncapped, selected.countCap());
+        assertEquals(16.0, selected.nextWeightSum(), 0.0);
+        assertEquals(6.0, selected.nextEffectiveCount(), 0.0);
+        assertEquals(3.0, selected.selectedTarget(), 0.0);
+        assertEquals(16.0 / 18.0, selected.finalWeight(), 1.0e-12);
+        assertTrue(selected.sourceSelected());
+        assertFalse(selected.empty());
+
+        var retained = RtPathSpatialReuseReference.branchDirectPostSelectionAudit(
+                ageTwo, true, false, 10.0, 2.0, 5.0, 6.0, 4.0, 3.0);
+        assertEquals(RtPathSpatialReuseReference.BranchDirectPostSelectionOutcome.RETAINED_READY,
+                retained.outcome());
+        assertEquals(5.0, retained.selectedTarget(), 0.0);
+        assertEquals(16.0 / 30.0, retained.finalWeight(), 1.0e-12);
+        assertFalse(retained.sourceSelected());
+
+        var empty = RtPathSpatialReuseReference.branchDirectPostSelectionAudit(
+                ageThree, true, false, 0.0, 0.0, 0.0, 0.0, 4.0, 0.0);
+        assertEquals(RtPathSpatialReuseReference.BranchDirectPostSelectionOutcome.RETAINED_READY,
+                empty.outcome());
+        assertEquals(0.0, empty.nextWeightSum(), 0.0);
+        assertEquals(4.0, empty.nextEffectiveCount(), 0.0);
+        assertEquals(0.0, empty.finalWeight(), 0.0);
+        assertTrue(empty.empty());
+
+        var capped = RtPathSpatialReuseReference.branchDirectPostSelectionAudit(
+                ageOne, true, true, 1.0e30, 16_777_216.0, 2.0,
+                Double.MAX_VALUE, 16.0, 2.0);
+        assertEquals(RtPathSpatialReuseReference.BranchDirectPostSelectionOutcome.SELECTED_READY,
+                capped.outcome());
+        assertEquals(RtPathSpatialReuseReference.BranchDirectStoredCapOutcome.CAPPED,
+                capped.weightCap());
+        assertEquals(RtPathSpatialReuseReference.BranchDirectStoredCapOutcome.CAPPED,
+                capped.countCap());
+        assertEquals(1.0e30, capped.nextWeightSum(), 0.0);
+        assertEquals(16_777_216.0, capped.nextEffectiveCount(), 0.0);
+        assertEquals(1.0e30 / (16_777_216.0 * 2.0), capped.finalWeight(), 1.0e-12);
+
+        assertEquals(RtPathSpatialReuseReference.BranchDirectPostSelectionOutcome.CURRENT_REJECT,
+                RtPathSpatialReuseReference.branchDirectPostSelectionAudit(
+                        ageOne, true, false, Double.NaN, 2.0, 5.0,
+                        6.0, 4.0, 3.0).outcome());
+        assertEquals(RtPathSpatialReuseReference.BranchDirectPostSelectionOutcome.NEXT_REJECT,
+                RtPathSpatialReuseReference.branchDirectPostSelectionAudit(
+                        ageOne, true, true, 10.0, 2.0, 5.0,
+                        Double.POSITIVE_INFINITY, 4.0, 3.0).outcome());
+        assertEquals(
+                RtPathSpatialReuseReference.BranchDirectPostSelectionOutcome.SELECTED_TARGET_REJECT,
+                RtPathSpatialReuseReference.branchDirectPostSelectionAudit(
+                        ageOne, true, true, 1.0, 1.0, 1.0,
+                        1.0, 1.0, 0.0).outcome());
+        assertEquals(
+                RtPathSpatialReuseReference.BranchDirectPostSelectionOutcome.RETAINED_TARGET_REJECT,
+                RtPathSpatialReuseReference.branchDirectPostSelectionAudit(
+                        ageTwo, true, false, 1.0, 1.0, 0.0,
+                        1.0, 1.0, 1.0).outcome());
+        assertEquals(
+                RtPathSpatialReuseReference.BranchDirectPostSelectionOutcome.SELECTED_FINAL_REJECT,
+                RtPathSpatialReuseReference.branchDirectPostSelectionAudit(
+                        ageThree, true, true, 1.0, 16_777_216.0, 1.0,
+                        1.0, 0.0, Double.MAX_VALUE).outcome());
+        assertThrows(IllegalArgumentException.class,
+                () -> RtPathSpatialReuseReference.branchDirectPostSelectionAudit(
+                        RtPathSpatialReuseReference.BranchCandidateRetentionOutcome.CURRENT,
+                        true, false, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0));
+    }
+
+    @Test
     void pairedMomentsExposeCovarianceAndCorrelationWithoutBatchStorage() {
         var moments = new RtPathSpatialReuseReference.PairMoments();
         moments.add(1.0, 2.0);
@@ -1845,8 +1932,48 @@ final class RtPathSpatialReuseReferenceTest {
         assertEquals(369,
                 RtPathReservoirHistory.GUIDE_BRANCH_DIRECT_BERNOULLI_MAPPED_READY_INDEX);
         assertEquals(370, RtPathReservoirHistory.GUIDE_BRANCH_DIRECT_BERNOULLI_DELTA_INDEX);
-        assertEquals(371, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
-        assertEquals(371 * Integer.BYTES,
+        assertEquals(371,
+                RtPathReservoirHistory.GUIDE_BRANCH_DIRECT_POST_SELECTION_ELIGIBLE_INDEX);
+        assertEquals(372,
+                RtPathReservoirHistory.GUIDE_BRANCH_DIRECT_POST_SELECTION_CURRENT_REJECT_INDEX);
+        assertEquals(373,
+                RtPathReservoirHistory.GUIDE_BRANCH_DIRECT_POST_SELECTION_NEXT_INVALID_INDEX);
+        assertEquals(374,
+                RtPathReservoirHistory.GUIDE_BRANCH_DIRECT_POST_SELECTION_SELECTED_READY_INDEX);
+        assertEquals(375, RtPathReservoirHistory
+                .GUIDE_BRANCH_DIRECT_POST_SELECTION_SELECTED_TARGET_REJECT_INDEX);
+        assertEquals(376, RtPathReservoirHistory
+                .GUIDE_BRANCH_DIRECT_POST_SELECTION_SELECTED_FINAL_REJECT_INDEX);
+        assertEquals(377,
+                RtPathReservoirHistory.GUIDE_BRANCH_DIRECT_POST_SELECTION_RETAINED_READY_INDEX);
+        assertEquals(378, RtPathReservoirHistory
+                .GUIDE_BRANCH_DIRECT_POST_SELECTION_RETAINED_TARGET_REJECT_INDEX);
+        assertEquals(379, RtPathReservoirHistory
+                .GUIDE_BRANCH_DIRECT_POST_SELECTION_RETAINED_FINAL_REJECT_INDEX);
+        assertEquals(380,
+                RtPathReservoirHistory.GUIDE_BRANCH_DIRECT_POST_SELECTION_EMPTY_READY_INDEX);
+        assertEquals(381,
+                RtPathReservoirHistory.GUIDE_BRANCH_DIRECT_POST_SELECTION_WEIGHT_UNCAPPED_INDEX);
+        assertEquals(382,
+                RtPathReservoirHistory.GUIDE_BRANCH_DIRECT_POST_SELECTION_WEIGHT_CAPPED_INDEX);
+        assertEquals(383,
+                RtPathReservoirHistory.GUIDE_BRANCH_DIRECT_POST_SELECTION_COUNT_UNCAPPED_INDEX);
+        assertEquals(384,
+                RtPathReservoirHistory.GUIDE_BRANCH_DIRECT_POST_SELECTION_COUNT_CAPPED_INDEX);
+        assertEquals(385,
+                RtPathReservoirHistory.GUIDE_BRANCH_DIRECT_POST_SELECTION_AGE_ONE_READY_INDEX);
+        assertEquals(386,
+                RtPathReservoirHistory.GUIDE_BRANCH_DIRECT_POST_SELECTION_AGE_TWO_READY_INDEX);
+        assertEquals(387,
+                RtPathReservoirHistory.GUIDE_BRANCH_DIRECT_POST_SELECTION_AGE_THREE_READY_INDEX);
+        assertEquals(388,
+                RtPathReservoirHistory.GUIDE_BRANCH_DIRECT_POST_SELECTION_IDENTITY_READY_INDEX);
+        assertEquals(389,
+                RtPathReservoirHistory.GUIDE_BRANCH_DIRECT_POST_SELECTION_MAPPED_READY_INDEX);
+        assertEquals(390,
+                RtPathReservoirHistory.GUIDE_BRANCH_DIRECT_POST_SELECTION_DELTA_INDEX);
+        assertEquals(391, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
+        assertEquals(391 * Integer.BYTES,
                 RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_COUNTER_BYTES);
         assertEquals(32, RtPathReservoirHistory.SHIFTED_RECEIVER_GUIDE_STRIDE);
         assertEquals(27_566_080L,
