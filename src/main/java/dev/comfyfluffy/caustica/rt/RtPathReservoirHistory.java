@@ -374,7 +374,21 @@ final class RtPathReservoirHistory {
     static final int GUIDE_BRANCH_DIRECT_WEIGHT_COUNT_UNCAPPED_INDEX = 339;
     static final int GUIDE_BRANCH_DIRECT_WEIGHT_COUNT_CAPPED_INDEX = 340;
     static final int GUIDE_BRANCH_DIRECT_WEIGHT_DELTA_INDEX = 341;
-    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 342;
+    static final int GUIDE_BRANCH_DIRECT_SELECTION_ELIGIBLE_INDEX = 342;
+    static final int GUIDE_BRANCH_DIRECT_SELECTION_CURRENT_REJECT_INDEX = 343;
+    static final int GUIDE_BRANCH_DIRECT_SELECTION_PROBABILITY_ZERO_INDEX = 344;
+    static final int GUIDE_BRANCH_DIRECT_SELECTION_PROBABILITY_OPEN_INDEX = 345;
+    static final int GUIDE_BRANCH_DIRECT_SELECTION_PROBABILITY_ONE_INDEX = 346;
+    static final int GUIDE_BRANCH_DIRECT_SELECTION_PROBABILITY_INVALID_INDEX = 347;
+    static final int GUIDE_BRANCH_DIRECT_SELECTION_AGE_ONE_READY_INDEX = 348;
+    static final int GUIDE_BRANCH_DIRECT_SELECTION_AGE_TWO_READY_INDEX = 349;
+    static final int GUIDE_BRANCH_DIRECT_SELECTION_AGE_THREE_READY_INDEX = 350;
+    static final int GUIDE_BRANCH_DIRECT_SELECTION_IDENTITY_READY_INDEX = 351;
+    static final int GUIDE_BRANCH_DIRECT_SELECTION_MAPPED_READY_INDEX = 352;
+    static final int GUIDE_BRANCH_DIRECT_SELECTION_CURRENT_ZERO_INDEX = 353;
+    static final int GUIDE_BRANCH_DIRECT_SELECTION_CURRENT_POSITIVE_INDEX = 354;
+    static final int GUIDE_BRANCH_DIRECT_SELECTION_DELTA_INDEX = 355;
+    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 356;
     static final int SHIFTED_RECEIVER_GUIDE_STRIDE = 8 * Float.BYTES;
     static final int BRANCH_CANDIDATE_TAG_STRIDE = 2 * Integer.BYTES;
     static final int SPATIAL_DIAGNOSTIC_COUNTER_BYTES =
@@ -1415,6 +1429,32 @@ final class RtPathReservoirHistory {
                     counters.get(GUIDE_BRANCH_DIRECT_WEIGHT_COUNT_UNCAPPED_INDEX));
             long guideBranchDirectWeightCountCapped = Integer.toUnsignedLong(
                     counters.get(GUIDE_BRANCH_DIRECT_WEIGHT_COUNT_CAPPED_INDEX));
+            long guideBranchDirectSelectionEligible = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_SELECTION_ELIGIBLE_INDEX));
+            long guideBranchDirectSelectionCurrentReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_SELECTION_CURRENT_REJECT_INDEX));
+            long guideBranchDirectSelectionProbabilityZero = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_SELECTION_PROBABILITY_ZERO_INDEX));
+            long guideBranchDirectSelectionProbabilityOpen = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_SELECTION_PROBABILITY_OPEN_INDEX));
+            long guideBranchDirectSelectionProbabilityOne = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_SELECTION_PROBABILITY_ONE_INDEX));
+            long guideBranchDirectSelectionProbabilityInvalid = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_SELECTION_PROBABILITY_INVALID_INDEX));
+            long guideBranchDirectSelectionAgeOneReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_SELECTION_AGE_ONE_READY_INDEX));
+            long guideBranchDirectSelectionAgeTwoReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_SELECTION_AGE_TWO_READY_INDEX));
+            long guideBranchDirectSelectionAgeThreeReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_SELECTION_AGE_THREE_READY_INDEX));
+            long guideBranchDirectSelectionIdentityReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_SELECTION_IDENTITY_READY_INDEX));
+            long guideBranchDirectSelectionMappedReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_SELECTION_MAPPED_READY_INDEX));
+            long guideBranchDirectSelectionCurrentZero = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_SELECTION_CURRENT_ZERO_INDEX));
+            long guideBranchDirectSelectionCurrentPositive = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_SELECTION_CURRENT_POSITIVE_INDEX));
             long crossFrameReceiverReject = crossFrameReceiverSurfaceReject
                     + crossFrameReceiverSampleReject + crossFrameReceiverEdgeReject
                     + crossFrameReceiverTopologyReject + crossFrameReceiverDepthReject
@@ -2258,6 +2298,49 @@ final class RtPathReservoirHistory {
                     guideBranchDirectWeightMappedReady,
                     guideBranchDirectWeightReady - guideBranchDirectWeightMappingReady,
                     guideBranchDirectTargetReady - guideBranchDirectWeightEligible);
+            long guideBranchDirectSelectionTerminal = guideBranchDirectSelectionCurrentReject
+                    + guideBranchDirectSelectionProbabilityZero
+                    + guideBranchDirectSelectionProbabilityOpen
+                    + guideBranchDirectSelectionProbabilityOne
+                    + guideBranchDirectSelectionProbabilityInvalid;
+            long guideBranchDirectSelectionReady = guideBranchDirectSelectionProbabilityZero
+                    + guideBranchDirectSelectionProbabilityOpen
+                    + guideBranchDirectSelectionProbabilityOne;
+            long guideBranchDirectSelectionCurrentReady = guideBranchDirectSelectionCurrentZero
+                    + guideBranchDirectSelectionCurrentPositive;
+            long guideBranchDirectSelectionAgeReady = guideBranchDirectSelectionAgeOneReady
+                    + guideBranchDirectSelectionAgeTwoReady
+                    + guideBranchDirectSelectionAgeThreeReady;
+            long guideBranchDirectSelectionMappingReady = guideBranchDirectSelectionIdentityReady
+                    + guideBranchDirectSelectionMappedReady;
+            CausticaMod.LOGGER.info(
+                    "RT path guide branch stable selection: weightReady={}, eligible={}, "
+                            + "currentReject={}, probability[zero={},open={},one={},invalid={}], "
+                            + "terminal={}, delta={}, ready={}, "
+                            + "current[zero={},positive={},delta={}], "
+                            + "age[one={},two={},three={},delta={}], "
+                            + "mapping[identity={},mapped={},delta={}], gateDelta={}",
+                    guideBranchDirectWeightReady,
+                    guideBranchDirectSelectionEligible,
+                    guideBranchDirectSelectionCurrentReject,
+                    guideBranchDirectSelectionProbabilityZero,
+                    guideBranchDirectSelectionProbabilityOpen,
+                    guideBranchDirectSelectionProbabilityOne,
+                    guideBranchDirectSelectionProbabilityInvalid,
+                    guideBranchDirectSelectionTerminal,
+                    guideBranchDirectSelectionEligible - guideBranchDirectSelectionTerminal,
+                    guideBranchDirectSelectionReady,
+                    guideBranchDirectSelectionCurrentZero,
+                    guideBranchDirectSelectionCurrentPositive,
+                    guideBranchDirectSelectionReady - guideBranchDirectSelectionCurrentReady,
+                    guideBranchDirectSelectionAgeOneReady,
+                    guideBranchDirectSelectionAgeTwoReady,
+                    guideBranchDirectSelectionAgeThreeReady,
+                    guideBranchDirectSelectionReady - guideBranchDirectSelectionAgeReady,
+                    guideBranchDirectSelectionIdentityReady,
+                    guideBranchDirectSelectionMappedReady,
+                    guideBranchDirectSelectionReady - guideBranchDirectSelectionMappingReady,
+                    guideBranchDirectWeightReady - guideBranchDirectSelectionEligible);
             spatialDiagnosticViewPending = 0;
             return;
         }

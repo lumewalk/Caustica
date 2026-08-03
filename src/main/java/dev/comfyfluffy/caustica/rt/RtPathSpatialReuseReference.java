@@ -1414,6 +1414,76 @@ final class RtPathSpatialReuseReference {
         return new BranchDirectWeightAudit(weight, count, retention, mergeWeight);
     }
 
+    enum BranchDirectSelectionOutcome {
+        WEIGHT_REJECT,
+        CURRENT_REJECT,
+        ZERO,
+        OPEN,
+        ONE,
+        INVALID
+    }
+
+    enum BranchDirectCurrentWeightOutcome {
+        NOT_ELIGIBLE,
+        ZERO,
+        POSITIVE
+    }
+
+    record BranchDirectSelectionAudit(
+            BranchDirectSelectionOutcome selection,
+            BranchDirectCurrentWeightOutcome currentWeight,
+            BranchCandidateRetentionOutcome retention,
+            double probability) {
+    }
+
+    /** CPU mirror for the aged counter-only overflow-stable relative selection ratio. */
+    static BranchDirectSelectionAudit branchDirectSelectionAudit(
+            BranchCandidateRetentionOutcome retention, boolean weightReady,
+            double currentWeightSum, double mergeWeight) {
+        if (!weightReady) {
+            return new BranchDirectSelectionAudit(BranchDirectSelectionOutcome.WEIGHT_REJECT,
+                    BranchDirectCurrentWeightOutcome.NOT_ELIGIBLE, retention, 0.0);
+        }
+        if (retention != BranchCandidateRetentionOutcome.AGE_ONE
+                && retention != BranchCandidateRetentionOutcome.AGE_TWO
+                && retention != BranchCandidateRetentionOutcome.AGE_THREE) {
+            throw new IllegalArgumentException(
+                    "direct selection audit requires a live aged branch candidate");
+        }
+        if (!nonNegativeFinite(currentWeightSum)) {
+            return new BranchDirectSelectionAudit(BranchDirectSelectionOutcome.CURRENT_REJECT,
+                    BranchDirectCurrentWeightOutcome.NOT_ELIGIBLE, retention, 0.0);
+        }
+        if (!nonNegativeFinite(mergeWeight)) {
+            return new BranchDirectSelectionAudit(BranchDirectSelectionOutcome.INVALID,
+                    BranchDirectCurrentWeightOutcome.NOT_ELIGIBLE, retention, 0.0);
+        }
+
+        double probability;
+        if (mergeWeight == 0.0) {
+            probability = 0.0;
+        } else if (currentWeightSum <= mergeWeight) {
+            probability = 1.0 / (1.0 + currentWeightSum / mergeWeight);
+        } else {
+            double ratio = mergeWeight / currentWeightSum;
+            probability = ratio / (1.0 + ratio);
+        }
+        if (!Double.isFinite(probability) || probability < 0.0 || probability > 1.0) {
+            return new BranchDirectSelectionAudit(BranchDirectSelectionOutcome.INVALID,
+                    BranchDirectCurrentWeightOutcome.NOT_ELIGIBLE, retention, 0.0);
+        }
+
+        BranchDirectSelectionOutcome selection = probability == 0.0
+                ? BranchDirectSelectionOutcome.ZERO
+                : probability == 1.0
+                        ? BranchDirectSelectionOutcome.ONE
+                        : BranchDirectSelectionOutcome.OPEN;
+        BranchDirectCurrentWeightOutcome currentWeight = currentWeightSum == 0.0
+                ? BranchDirectCurrentWeightOutcome.ZERO
+                : BranchDirectCurrentWeightOutcome.POSITIVE;
+        return new BranchDirectSelectionAudit(selection, currentWeight, retention, probability);
+    }
+
     /**
      * Ordered CPU mirror for the post-barrier exact-lane validation sample. Reservoir and root
      * equality are bitwise requirements; acceptance remains diagnostic-only.

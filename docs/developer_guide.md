@@ -511,6 +511,26 @@ for the current non-persistent producer; the `M > 8` capped branch is covered by
 contract. Counter storage is now 342 uints / 1368 B. Selection, RNG, reservoir/history writes and
 the estimator remain untouched.
 
+The next aged gate evaluates only the overflow-stable relative selection probability. It reads the
+current receiver reservoir's `weights.x`, permits zero for an empty reservoir, and calls
+`pathStableSelectionProbability(currentWeightSum, mergeWeight)` without first adding the two
+operands. `RT path guide branch stable selection` must satisfy all of the following:
+
+- `weightReady == eligible`;
+- `eligible == currentReject + probability.zero + probability.open + probability.one
+  + probability.invalid`;
+- `ready == current.zero + current.positive == age.one + age.two + age.three
+  == mapping.identity + mapping.mapped`;
+- all printed deltas are zero, with `currentReject == probability.invalid == 0` in a stable run.
+
+Forty-three fresh Vulkan readbacks covered 188524 records: probability categories were zero/open/one/
+invalid = 0/44733/143791/0, current zero/positive = 143760/44764, ages 1/2/3 =
+63375/62492/62657, and identity/mapped = 15914/172610. The 31 additional exact-one outcomes with a
+positive current weight are legitimate float rounding when that weight is negligible relative to the
+merge weight; CPU tests preserve this boundary. Counter storage is now 356 uints / 1424 B. This pass
+does not draw RNG, select or copy a sample, write any reservoir/history/scratch payload, or affect the
+ordinary estimator.
+
 For a fresh runtime check, use debug view 20 and inspect `run/logs/latest.log`. Normal operation
 requires `RT bring-up OK`, Vulkan, the intended NVIDIA device, exact zero-delta counter partitions,
 and no `DEVICE_LOST`, `VK_ERROR`, GPU fault or shader compilation error. Debug colors and sparse

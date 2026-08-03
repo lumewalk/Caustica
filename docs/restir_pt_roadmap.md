@@ -797,9 +797,20 @@ That aged GRIS weight gate is now proven counter-only. Forty-two Vulkan readback
 terminal, age, mapping and source-count accounting. Ages 1/2/3 were 56114/55285/55544 and mapping
 ownership was 13682 identity + 153261 mapped. The current non-persistent source population was
 entirely `M <= 8`; CPU reference tests separately prove that `M > 8` uses exactly 8 in the formula.
-No stored previous Jacobian is composed. The next isolated gate may evaluate the overflow-stable
-relative selection probability against the current receiver reservoir, but must not consume RNG or
-mutate reservoir/history/estimator state.
+No stored previous Jacobian is composed.
+
+The aged relative-selection gate is now proven independently against the current receiver
+reservoir's uncapped `weights.x`. It uses `pathStableSelectionProbability`, never forms the
+potentially overflowing sum, and accepts an empty current reservoir as weight zero. Forty-three
+Vulkan readbacks covered 188524 weight-ready records: 44733 probabilities were strictly between zero
+and one, 143791 rounded exactly to one, and none were zero, invalid, or rejected for current-weight
+arithmetic. Of the exact-one results, 31 had a positive but float-negligible current weight; the CPU
+reference explicitly covers this valid rounding boundary as well as equal `Double.MAX_VALUE`
+operands. Ages 1/2/3 split as 63375/62492/62657 and mapping ownership as 15914 identity + 172610
+mapped, with every terminal/current/age/mapping/gate delta equal to zero. The counter-only pass does
+not consume RNG or mutate reservoir, scratch, history, or estimator state. The next isolated gate may
+audit a local-hash Bernoulli partition using this probability, still without copying a payload or
+writing history/estimator state.
 
 ## Delivery Phases
 

@@ -2285,6 +2285,44 @@ static void pathBranchAgeReplayValidate() {
     InterlockedAdd(counters[mappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION
             ? PATH_GUIDE_BRANCH_DIRECT_WEIGHT_MAPPED_READY
             : PATH_GUIDE_BRANCH_DIRECT_WEIGHT_IDENTITY_READY], 1u);
+
+    // Counter-only relative selection audit against the current receiver reservoir. The stable
+    // ratio never forms currentWeightSum + mergeWeight, so two finite operands cannot overflow
+    // through the denominator. Empty current reservoirs are valid. No RNG is consumed and no
+    // reservoir, history, scratch payload, or estimator state is changed.
+    InterlockedAdd(counters[PATH_GUIDE_BRANCH_DIRECT_SELECTION_ELIGIBLE], 1u);
+    PathReservoir current = ConstPtr<PathReservoir>(
+            pc.pathReservoirAddr)[receiverPixelIndex];
+    float currentWeightSum = current.weights.x;
+    bool currentWeightValid = isfinite(currentWeightSum) && currentWeightSum >= 0.0;
+    if (!currentWeightValid) {
+        InterlockedAdd(counters[PATH_GUIDE_BRANCH_DIRECT_SELECTION_CURRENT_REJECT], 1u);
+        return;
+    }
+
+    float selectionProbability = pathStableSelectionProbability(currentWeightSum, mergeWeight);
+    bool selectionProbabilityValid = isfinite(selectionProbability)
+            && selectionProbability >= 0.0 && selectionProbability <= 1.0;
+    InterlockedAdd(counters[!selectionProbabilityValid
+            ? PATH_GUIDE_BRANCH_DIRECT_SELECTION_PROBABILITY_INVALID
+            : selectionProbability == 0.0
+                    ? PATH_GUIDE_BRANCH_DIRECT_SELECTION_PROBABILITY_ZERO
+                    : selectionProbability == 1.0
+                            ? PATH_GUIDE_BRANCH_DIRECT_SELECTION_PROBABILITY_ONE
+                            : PATH_GUIDE_BRANCH_DIRECT_SELECTION_PROBABILITY_OPEN], 1u);
+    if (!selectionProbabilityValid) return;
+
+    InterlockedAdd(counters[currentWeightSum == 0.0
+            ? PATH_GUIDE_BRANCH_DIRECT_SELECTION_CURRENT_ZERO
+            : PATH_GUIDE_BRANCH_DIRECT_SELECTION_CURRENT_POSITIVE], 1u);
+    InterlockedAdd(counters[age == 1u
+            ? PATH_GUIDE_BRANCH_DIRECT_SELECTION_AGE_ONE_READY
+            : age == 2u
+                    ? PATH_GUIDE_BRANCH_DIRECT_SELECTION_AGE_TWO_READY
+                    : PATH_GUIDE_BRANCH_DIRECT_SELECTION_AGE_THREE_READY], 1u);
+    InterlockedAdd(counters[mappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION
+            ? PATH_GUIDE_BRANCH_DIRECT_SELECTION_MAPPED_READY
+            : PATH_GUIDE_BRANCH_DIRECT_SELECTION_IDENTITY_READY], 1u);
 }
 
 static void pathBranchScratchReplayValidate() {
