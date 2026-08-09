@@ -1184,6 +1184,7 @@ public final class RtComposite {
             ByteBuffer branchScratchValidatePushConstants = null;
             ByteBuffer branchCandidateRetentionPushConstants = null;
             ByteBuffer branchAgeReplayPushConstants = null;
+            ByteBuffer branchAgedStorageValidatePushConstants = null;
             if (restirPt
                      && debugView == RtPathReservoirHistory.SHIFTED_RADIANCE_DEBUG_VIEW) {
                 guidePreviousReplayPushConstants =
@@ -1278,6 +1279,29 @@ public final class RtComposite {
                                 | RtPathReservoirHistory.GUIDE_BRANCH_AGE_REPLAY_PASS_FLAG,
                         worldConstants.historyGeneration())
                         .write(branchAgeReplayPushConstants);
+                branchAgedStorageValidatePushConstants =
+                        stack.malloc(WorldPushConstantsData.BYTE_SIZE);
+                new WorldPushConstantsData(
+                        worldConstants.worldPushAddr(),
+                        worldConstants.tableAddr(),
+                        worldConstants.entityTableAddr(),
+                        worldConstants.materialTableAddr(),
+                        worldConstants.lightBufAddr(),
+                        worldConstants.lightAliasAddr(),
+                        worldConstants.lightLocalAliasAddr(),
+                        worldConstants.lightGridCellAddr(),
+                        worldConstants.lightGridSpanAddr(),
+                        worldConstants.pathQueueAddr(),
+                        worldConstants.directReservoirAddr(),
+                        worldConstants.pathReservoirAddr(),
+                        worldConstants.pathReservoirPreviousAddr(),
+                        worldConstants.frameIndex(),
+                        worldConstants.debugView(),
+                        worldConstants.historyFlags()
+                                | RtPathReservoirHistory
+                                        .GUIDE_BRANCH_AGED_STORAGE_VALIDATE_PASS_FLAG,
+                        worldConstants.historyGeneration())
+                        .write(branchAgedStorageValidatePushConstants);
                 mappingReplayPushConstants =
                         stack.malloc(WorldPushConstantsData.BYTE_SIZE);
                 new WorldPushConstantsData(
@@ -1416,6 +1440,15 @@ public final class RtComposite {
                                 RtPathReservoirHistory.PATH_BRANCH_SCRATCH_CAPTURE_CAPACITY,
                                 RtPathReservoirHistory.PATH_BRANCH_CANDIDATE_HISTORY_SLOT_COUNT,
                                 branchAgeReplayPushConstants, 1);
+                    }
+                    VulkanCommandEncoder.memoryBarrier(cmd, stack);
+                    try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd,
+                                 "path branch aged storage validate");
+                         RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage(
+                                 "frame.pathBranchAgedStorageValidate")) {
+                        active.trace(cmd,
+                                RtPathReservoirHistory.PATH_BRANCH_SCRATCH_CAPTURE_CAPACITY,
+                                1, branchAgedStorageValidatePushConstants, 1);
                     }
                     VulkanCommandEncoder.memoryBarrier(cmd, stack);
                     pathReservoirs.commitBranchScratch(

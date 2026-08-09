@@ -1077,6 +1077,13 @@ final class RtPathSpatialReuseReference {
         RETAINED_ACCEPTED
     }
 
+    enum BranchAgedStorageOutcome {
+        METADATA_REJECT,
+        PAIR_REJECT,
+        SELECTED_ACCEPTED,
+        RETAINED_ACCEPTED
+    }
+
     enum BranchCandidateRetentionOutcome {
         EMPTY,
         FUTURE_REJECT,
@@ -1959,6 +1966,26 @@ final class RtPathSpatialReuseReference {
                         : BranchDirectPairReplayOutcome.RETAINED_REJECT,
                 BranchDirectPairReplayComparator.EXACT,
                 retention, segmentCount);
+    }
+
+    /** CPU mirror for bounded post-barrier storage of a replay-accepted aged pair. */
+    static BranchAgedStorageOutcome branchAgedStorageOutcome(
+            boolean metadataMatches, int age, MappingKind sourceMappingKind,
+            MappingKind outputMappingKind, int segmentCount,
+            boolean reservoirBitsMatch, boolean rootBitsMatch) {
+        boolean metadataValid = metadataMatches
+                && age >= 1 && age < 4
+                && sourceMappingKind != null && outputMappingKind != null
+                && (segmentCount == 1 || segmentCount == 2);
+        if (!metadataValid) {
+            return BranchAgedStorageOutcome.METADATA_REJECT;
+        }
+        if (!reservoirBitsMatch || !rootBitsMatch) {
+            return BranchAgedStorageOutcome.PAIR_REJECT;
+        }
+        return outputMappingKind == MappingKind.DIFFUSE_RECONNECTION
+                ? BranchAgedStorageOutcome.SELECTED_ACCEPTED
+                : BranchAgedStorageOutcome.RETAINED_ACCEPTED;
     }
 
     /**

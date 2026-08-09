@@ -879,6 +879,27 @@ register-only and authorizes no write; the next isolated gate may capture only r
 pairs in view-20 diagnostic storage and prove exact post-barrier reservoir/root equality before any
 persistent history integration.
 
+That isolated aged-pair storage gate is now proven. Replay-accepted pairs are copied into two
+separate view-20-only arrays, each capped at 4096 entries and using a 352-byte record: exact
+frame/generation/age/mapping metadata followed by the complete 176-byte reservoir and 160-byte
+source root. A distinct post-barrier pass compares the stored array against the expected array with
+bitwise reservoir/root equality. The diagnostic sample buffer grows from 6422528 bytes (6.125 MiB)
+to 9306112 bytes (8.875 MiB); counter storage grows to 468 uints / 1872 B. Ordinary rendering,
+full-resolution branch scratch, committed history and estimator state receive no new write.
+
+Across 24 Vulkan readbacks, 158319 replay-approved pairs reached the bounded writer. Exactly 98304
+were stored and validated and 60015 were explicitly classified as capacity overflow. Every stored
+pair matched: 88637 selected plus 9667 retained, ages 1/2/3 of 32643/32948/32713, original source
+ownership of 7452 identity plus 90852 mapped, zero metadata/reservoir/root/pair rejects, and zero
+validation/partition/gate deltas. Runtime again exercised one-segment paths; two-segment layout and
+classification remain CPU/shader tested.
+
+Persistent integration is still blocked by receiver ownership rather than storage fidelity. The
+aged ring can contain multiple candidates that reproject to one current receiver. Before a
+full-resolution diagnostic slot is written, the next bounded gate must measure this fan-in and
+prove a deterministic single-writer selection/ownership policy with reset and generation
+semantics. The new bounded arrays are evidence storage only and cannot become path history.
+
 ## Delivery Phases
 
 ### Phase 0 — Wavefront Integration Baseline

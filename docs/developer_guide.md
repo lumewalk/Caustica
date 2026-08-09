@@ -632,6 +632,29 @@ scene produced only one-segment pairs; two-segment policy is covered by the CPU 
 build. No replay reject, delta or Vulkan/GPU/shader error occurred. Counter storage is 448 uints /
 1792 B. The gate performs no scratch/history write and does not affect the ordinary estimator.
 
+`RT path guide branch aged storage` is the first device-write boundary for those replay-approved
+aged pairs. It appends two isolated arrays to the host-visible view-20 sample buffer: an expected
+capture and a stored capture, each bounded to 4096 entries with a 352-byte stride (16-byte
+frame/generation/age/mapping metadata, 176-byte `PathReservoir`, and 160-byte `PathSourceRoot`). A
+separate ray-generation pass reads both arrays only after a device barrier and requires exact
+metadata plus bit-for-bit reservoir/root equality. The complete sample buffer is therefore
+9306112 bytes (8.875 MiB), while the diagnostic counter buffer is 468 uints / 1872 B. Both BDAs
+remain zero outside view 20; full-resolution scratch, committed history and the estimator are not
+written by this gate.
+
+Twenty-four Vulkan readbacks offered 158319 replay-approved pairs to the bounded capture. It stored
+and validated the 98304-entry capacity (4096 per readback) and explicitly reported the remaining
+60015 entries as bounded overflow. All 98304 stored reservoirs and roots matched bit-for-bit;
+metadata, reservoir/root mismatch and pair rejects were zero. Accepted storage split into 88637
+selected and 9667 retained records, ages 1/2/3 were 32643/32948/32713, original source ownership
+was 7452 identity plus 90852 mapped, and every validated record had one replay segment in this
+scene. All validation/partition/gate deltas were zero and no Vulkan/GPU/shader error occurred.
+
+This proves isolated storage equality, not receiver-slot ownership. Several aged candidates may
+reproject to the same current receiver, so the next diagnostic boundary must measure that fan-in
+and define a deterministic single-writer winner before any full-resolution persistent branch slot
+is written. The bounded arrays themselves must never be treated as committed path history.
+
 For a fresh runtime check, use debug view 20 and inspect `run/logs/latest.log`. Normal operation
 requires `RT bring-up OK`, Vulkan, the intended NVIDIA device, exact zero-delta counter partitions,
 and no `DEVICE_LOST`, `VK_ERROR`, GPU fault or shader compilation error. Debug colors and sparse

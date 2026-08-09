@@ -39,6 +39,7 @@ final class RtPathReservoirHistory {
     static final int GUIDE_BRANCH_SCRATCH_VALIDATE_PASS_FLAG = 1 << 11;
     static final int GUIDE_BRANCH_CANDIDATE_RETENTION_PASS_FLAG = 1 << 12;
     static final int GUIDE_BRANCH_AGE_REPLAY_PASS_FLAG = 1 << 13;
+    static final int GUIDE_BRANCH_AGED_STORAGE_VALIDATE_PASS_FLAG = 1 << 14;
     static final int SPATIAL_DIAGNOSTIC_CATEGORY_COUNT = 9;
     static final int SPATIAL_DIAGNOSTIC_STRICT_PAIR_CURSOR_INDEX =
             SPATIAL_DIAGNOSTIC_CATEGORY_COUNT;
@@ -480,7 +481,27 @@ final class RtPathReservoirHistory {
     static final int GUIDE_BRANCH_DIRECT_PAIR_REPLAY_ONE_SEGMENT_ACCEPTED_INDEX = 445;
     static final int GUIDE_BRANCH_DIRECT_PAIR_REPLAY_TWO_SEGMENT_ACCEPTED_INDEX = 446;
     static final int GUIDE_BRANCH_DIRECT_PAIR_REPLAY_DELTA_INDEX = 447;
-    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 448;
+    static final int GUIDE_BRANCH_AGED_STORAGE_WRITE_ELIGIBLE_INDEX = 448;
+    static final int GUIDE_BRANCH_AGED_STORAGE_WRITE_COMPLETED_INDEX = 449;
+    static final int GUIDE_BRANCH_AGED_STORAGE_CAPTURE_CURSOR_INDEX = 450;
+    static final int GUIDE_BRANCH_AGED_STORAGE_VALIDATE_ATTEMPTED_INDEX = 451;
+    static final int GUIDE_BRANCH_AGED_STORAGE_VALIDATE_METADATA_REJECT_INDEX = 452;
+    static final int GUIDE_BRANCH_AGED_STORAGE_VALIDATE_RESERVOIR_MATCH_INDEX = 453;
+    static final int GUIDE_BRANCH_AGED_STORAGE_VALIDATE_RESERVOIR_MISMATCH_INDEX = 454;
+    static final int GUIDE_BRANCH_AGED_STORAGE_VALIDATE_ROOT_MATCH_INDEX = 455;
+    static final int GUIDE_BRANCH_AGED_STORAGE_VALIDATE_ROOT_MISMATCH_INDEX = 456;
+    static final int GUIDE_BRANCH_AGED_STORAGE_VALIDATE_SELECTED_ACCEPTED_INDEX = 457;
+    static final int GUIDE_BRANCH_AGED_STORAGE_VALIDATE_RETAINED_ACCEPTED_INDEX = 458;
+    static final int GUIDE_BRANCH_AGED_STORAGE_VALIDATE_PAIR_REJECT_INDEX = 459;
+    static final int GUIDE_BRANCH_AGED_STORAGE_VALIDATE_AGE_ONE_ACCEPTED_INDEX = 460;
+    static final int GUIDE_BRANCH_AGED_STORAGE_VALIDATE_AGE_TWO_ACCEPTED_INDEX = 461;
+    static final int GUIDE_BRANCH_AGED_STORAGE_VALIDATE_AGE_THREE_ACCEPTED_INDEX = 462;
+    static final int GUIDE_BRANCH_AGED_STORAGE_VALIDATE_IDENTITY_SOURCE_ACCEPTED_INDEX = 463;
+    static final int GUIDE_BRANCH_AGED_STORAGE_VALIDATE_MAPPED_SOURCE_ACCEPTED_INDEX = 464;
+    static final int GUIDE_BRANCH_AGED_STORAGE_VALIDATE_ONE_SEGMENT_ACCEPTED_INDEX = 465;
+    static final int GUIDE_BRANCH_AGED_STORAGE_VALIDATE_TWO_SEGMENT_ACCEPTED_INDEX = 466;
+    static final int GUIDE_BRANCH_AGED_STORAGE_VALIDATE_DELTA_INDEX = 467;
+    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 468;
     static final int SHIFTED_RECEIVER_GUIDE_STRIDE = 8 * Float.BYTES;
     static final int BRANCH_CANDIDATE_TAG_STRIDE = 2 * Integer.BYTES;
     static final int SPATIAL_DIAGNOSTIC_COUNTER_BYTES =
@@ -508,9 +529,16 @@ final class RtPathReservoirHistory {
             PATH_BRANCH_CANDIDATE_HISTORY_SLOT_COUNT
                     * PATH_BRANCH_SCRATCH_CAPTURE_CAPACITY
                     * PATH_BRANCH_SCRATCH_CAPTURE_STRIDE;
+    static final int PATH_BRANCH_AGED_STORAGE_CAPTURE_STRIDE =
+            PATH_BRANCH_SCRATCH_CAPTURE_HEADER_BYTES
+                    + PathReservoirData.BYTE_SIZE + PathSourceRootData.BYTE_SIZE;
+    static final int PATH_BRANCH_AGED_STORAGE_CAPTURE_BYTES =
+            2 * PATH_BRANCH_SCRATCH_CAPTURE_CAPACITY
+                    * PATH_BRANCH_AGED_STORAGE_CAPTURE_STRIDE;
     static final int SPATIAL_DIAGNOSTIC_PAIR_BYTES =
             SHIFTED_DIAGNOSTIC_PAIR_FLOAT_COUNT * Float.BYTES
-                    + PATH_BRANCH_SCRATCH_CAPTURE_BYTES;
+                    + PATH_BRANCH_SCRATCH_CAPTURE_BYTES
+                    + PATH_BRANCH_AGED_STORAGE_CAPTURE_BYTES;
 
     record Frame(long generation, int writeSlot, int previousSlot, boolean previousAvailable) {
         int finalSlot() {
@@ -1722,6 +1750,44 @@ final class RtPathReservoirHistory {
                     counters.get(GUIDE_BRANCH_DIRECT_PAIR_REPLAY_ONE_SEGMENT_ACCEPTED_INDEX));
             long guideBranchDirectPairReplayTwoSegmentAccepted = Integer.toUnsignedLong(
                     counters.get(GUIDE_BRANCH_DIRECT_PAIR_REPLAY_TWO_SEGMENT_ACCEPTED_INDEX));
+            long guideBranchAgedStorageWriteEligible = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_AGED_STORAGE_WRITE_ELIGIBLE_INDEX));
+            long guideBranchAgedStorageWriteCompleted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_AGED_STORAGE_WRITE_COMPLETED_INDEX));
+            long guideBranchAgedStorageCaptureCursor = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_AGED_STORAGE_CAPTURE_CURSOR_INDEX));
+            long guideBranchAgedStorageValidateAttempted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_AGED_STORAGE_VALIDATE_ATTEMPTED_INDEX));
+            long guideBranchAgedStorageValidateMetadataReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_AGED_STORAGE_VALIDATE_METADATA_REJECT_INDEX));
+            long guideBranchAgedStorageValidateReservoirMatch = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_AGED_STORAGE_VALIDATE_RESERVOIR_MATCH_INDEX));
+            long guideBranchAgedStorageValidateReservoirMismatch = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_AGED_STORAGE_VALIDATE_RESERVOIR_MISMATCH_INDEX));
+            long guideBranchAgedStorageValidateRootMatch = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_AGED_STORAGE_VALIDATE_ROOT_MATCH_INDEX));
+            long guideBranchAgedStorageValidateRootMismatch = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_AGED_STORAGE_VALIDATE_ROOT_MISMATCH_INDEX));
+            long guideBranchAgedStorageValidateSelectedAccepted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_AGED_STORAGE_VALIDATE_SELECTED_ACCEPTED_INDEX));
+            long guideBranchAgedStorageValidateRetainedAccepted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_AGED_STORAGE_VALIDATE_RETAINED_ACCEPTED_INDEX));
+            long guideBranchAgedStorageValidatePairReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_AGED_STORAGE_VALIDATE_PAIR_REJECT_INDEX));
+            long guideBranchAgedStorageValidateAgeOneAccepted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_AGED_STORAGE_VALIDATE_AGE_ONE_ACCEPTED_INDEX));
+            long guideBranchAgedStorageValidateAgeTwoAccepted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_AGED_STORAGE_VALIDATE_AGE_TWO_ACCEPTED_INDEX));
+            long guideBranchAgedStorageValidateAgeThreeAccepted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_AGED_STORAGE_VALIDATE_AGE_THREE_ACCEPTED_INDEX));
+            long guideBranchAgedStorageValidateIdentitySourceAccepted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_AGED_STORAGE_VALIDATE_IDENTITY_SOURCE_ACCEPTED_INDEX));
+            long guideBranchAgedStorageValidateMappedSourceAccepted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_AGED_STORAGE_VALIDATE_MAPPED_SOURCE_ACCEPTED_INDEX));
+            long guideBranchAgedStorageValidateOneSegmentAccepted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_AGED_STORAGE_VALIDATE_ONE_SEGMENT_ACCEPTED_INDEX));
+            long guideBranchAgedStorageValidateTwoSegmentAccepted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_AGED_STORAGE_VALIDATE_TWO_SEGMENT_ACCEPTED_INDEX));
             long crossFrameReceiverReject = crossFrameReceiverSurfaceReject
                     + crossFrameReceiverSampleReject + crossFrameReceiverEdgeReject
                     + crossFrameReceiverTopologyReject + crossFrameReceiverDepthReject
@@ -2928,6 +2994,66 @@ final class RtPathReservoirHistory {
                             - guideBranchDirectPairReplaySegmentAccepted,
                     guideBranchDirectPairReplayPopulation
                             - guideBranchDirectPairReplayEligible);
+            long guideBranchAgedStorageCaptured = Math.min(
+                    guideBranchAgedStorageCaptureCursor,
+                    PATH_BRANCH_SCRATCH_CAPTURE_CAPACITY);
+            long guideBranchAgedStorageAccepted =
+                    guideBranchAgedStorageValidateSelectedAccepted
+                            + guideBranchAgedStorageValidateRetainedAccepted;
+            long guideBranchAgedStorageTerminal =
+                    guideBranchAgedStorageValidateMetadataReject
+                            + guideBranchAgedStorageAccepted
+                            + guideBranchAgedStorageValidatePairReject;
+            long guideBranchAgedStorageAgeAccepted =
+                    guideBranchAgedStorageValidateAgeOneAccepted
+                            + guideBranchAgedStorageValidateAgeTwoAccepted
+                            + guideBranchAgedStorageValidateAgeThreeAccepted;
+            long guideBranchAgedStorageSourceAccepted =
+                    guideBranchAgedStorageValidateIdentitySourceAccepted
+                            + guideBranchAgedStorageValidateMappedSourceAccepted;
+            long guideBranchAgedStorageSegmentAccepted =
+                    guideBranchAgedStorageValidateOneSegmentAccepted
+                            + guideBranchAgedStorageValidateTwoSegmentAccepted;
+            CausticaMod.LOGGER.info(
+                    "RT path guide branch aged storage: "
+                            + "write[eligible={},stored={},overflow={}] "
+                            + "capture[cursor={},captured={},overflow={}] "
+                            + "validate[attempted={},metadata={},reservoir[match={},mismatch={}],"
+                            + "root[match={},mismatch={}],selected={},retained={},pairReject={},"
+                            + "terminal={},delta={}] age[one={},two={},three={},delta={}] "
+                            + "source[identity={},mapped={},delta={}] "
+                            + "segments[one={},two={},delta={}] gateDelta={}",
+                    guideBranchAgedStorageWriteEligible,
+                    guideBranchAgedStorageWriteCompleted,
+                    guideBranchAgedStorageWriteEligible
+                            - guideBranchAgedStorageWriteCompleted,
+                    guideBranchAgedStorageCaptureCursor,
+                    guideBranchAgedStorageCaptured,
+                    guideBranchAgedStorageCaptureCursor - guideBranchAgedStorageCaptured,
+                    guideBranchAgedStorageValidateAttempted,
+                    guideBranchAgedStorageValidateMetadataReject,
+                    guideBranchAgedStorageValidateReservoirMatch,
+                    guideBranchAgedStorageValidateReservoirMismatch,
+                    guideBranchAgedStorageValidateRootMatch,
+                    guideBranchAgedStorageValidateRootMismatch,
+                    guideBranchAgedStorageValidateSelectedAccepted,
+                    guideBranchAgedStorageValidateRetainedAccepted,
+                    guideBranchAgedStorageValidatePairReject,
+                    guideBranchAgedStorageTerminal,
+                    guideBranchAgedStorageValidateAttempted
+                            - guideBranchAgedStorageTerminal,
+                    guideBranchAgedStorageValidateAgeOneAccepted,
+                    guideBranchAgedStorageValidateAgeTwoAccepted,
+                    guideBranchAgedStorageValidateAgeThreeAccepted,
+                    guideBranchAgedStorageAccepted - guideBranchAgedStorageAgeAccepted,
+                    guideBranchAgedStorageValidateIdentitySourceAccepted,
+                    guideBranchAgedStorageValidateMappedSourceAccepted,
+                    guideBranchAgedStorageAccepted - guideBranchAgedStorageSourceAccepted,
+                    guideBranchAgedStorageValidateOneSegmentAccepted,
+                    guideBranchAgedStorageValidateTwoSegmentAccepted,
+                    guideBranchAgedStorageAccepted - guideBranchAgedStorageSegmentAccepted,
+                    guideBranchDirectPairReplayAccepted
+                            - guideBranchAgedStorageWriteEligible);
             spatialDiagnosticViewPending = 0;
             return;
         }
