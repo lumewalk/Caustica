@@ -615,6 +615,23 @@ were zero. Ages 1/2/3 were 59322/59432/59577; original identity/mapped ownership
 14276/164055. Counter storage is 435 uints / 1740 B. This still does not write scratch or history;
 the next diagnostic must retrace the assembled pair from its own root before storage is considered.
 
+`RT path guide branch register pair replay` is that final register-only replay boundary. It retraces
+the paired root with the paired source texel and saved seeds; selected records use the mapping-source
+comparator while retained records require the full exact replay comparator. Required identities are:
+
+- `pairReady - empty == eligible == selected.accepted + selected.reject
+  + retained.accepted + retained.reject`;
+- `accepted == age.one + age.two + age.three`;
+- `accepted == source.identity + source.mapped`;
+- `accepted == segments.one + segments.two`;
+- every branch, terminal, age, source, segment and gate delta is zero.
+
+Fifty-six Vulkan readbacks covered 32047 pairs: 29262 selected and 2785 retained, all accepted.
+Ages 1/2/3 were 10912/10543/10592 and identity/mapped source ownership was 2571/29476. The runtime
+scene produced only one-segment pairs; two-segment policy is covered by the CPU reference and shader
+build. No replay reject, delta or Vulkan/GPU/shader error occurred. Counter storage is 448 uints /
+1792 B. The gate performs no scratch/history write and does not affect the ordinary estimator.
+
 For a fresh runtime check, use debug view 20 and inspect `run/logs/latest.log`. Normal operation
 requires `RT bring-up OK`, Vulkan, the intended NVIDIA device, exact zero-delta counter partitions,
 and no `DEVICE_LOST`, `VK_ERROR`, GPU fault or shader compilation error. Debug colors and sparse

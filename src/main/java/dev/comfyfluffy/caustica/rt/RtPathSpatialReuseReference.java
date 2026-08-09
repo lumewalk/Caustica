@@ -1893,6 +1893,74 @@ final class RtPathSpatialReuseReference {
                 outcome, sourceProjection, selectedKey, root, retention);
     }
 
+    enum BranchDirectPairReplayOutcome {
+        NOT_ELIGIBLE,
+        SELECTED_ACCEPTED,
+        SELECTED_REJECT,
+        RETAINED_ACCEPTED,
+        RETAINED_REJECT
+    }
+
+    enum BranchDirectPairReplayComparator {
+        NONE,
+        MAPPING_SOURCE,
+        EXACT
+    }
+
+    record BranchDirectPairReplayAudit(
+            BranchDirectPairReplayOutcome outcome,
+            BranchDirectPairReplayComparator comparator,
+            BranchCandidateRetentionOutcome retention,
+            int segmentCount) {
+    }
+
+    /** CPU mirror for seeded replay of an aged register-only reservoir/root pair. */
+    static BranchDirectPairReplayAudit branchDirectPairReplayAudit(
+            BranchCandidateRetentionOutcome retention,
+            BranchDirectPairOutcome pairOutcome,
+            MappingKind mappingKind,
+            int segmentCount,
+            boolean mappingSourceReplayMatches,
+            int exactReplayMask) {
+        if (retention != BranchCandidateRetentionOutcome.AGE_ONE
+                && retention != BranchCandidateRetentionOutcome.AGE_TWO
+                && retention != BranchCandidateRetentionOutcome.AGE_THREE) {
+            throw new IllegalArgumentException(
+                    "direct pair replay requires a live aged branch candidate");
+        }
+        if (pairOutcome == null) {
+            throw new IllegalArgumentException("direct pair replay requires a pair outcome");
+        }
+        if (pairOutcome != BranchDirectPairOutcome.SELECTED_READY
+                && pairOutcome != BranchDirectPairOutcome.RETAINED_READY) {
+            return new BranchDirectPairReplayAudit(
+                    BranchDirectPairReplayOutcome.NOT_ELIGIBLE,
+                    BranchDirectPairReplayComparator.NONE,
+                    retention, 0);
+        }
+        if (mappingKind == null || (segmentCount != 1 && segmentCount != 2)) {
+            throw new IllegalArgumentException(
+                    "eligible direct pair replay requires mapping kind and one or two segments");
+        }
+
+        if (pairOutcome == BranchDirectPairOutcome.SELECTED_READY) {
+            boolean accepted = mappingKind == MappingKind.DIFFUSE_RECONNECTION
+                    && mappingSourceReplayMatches;
+            return new BranchDirectPairReplayAudit(
+                    accepted ? BranchDirectPairReplayOutcome.SELECTED_ACCEPTED
+                            : BranchDirectPairReplayOutcome.SELECTED_REJECT,
+                    BranchDirectPairReplayComparator.MAPPING_SOURCE,
+                    retention, segmentCount);
+        }
+
+        boolean accepted = mappingKind == MappingKind.IDENTITY && exactReplayMask == 0;
+        return new BranchDirectPairReplayAudit(
+                accepted ? BranchDirectPairReplayOutcome.RETAINED_ACCEPTED
+                        : BranchDirectPairReplayOutcome.RETAINED_REJECT,
+                BranchDirectPairReplayComparator.EXACT,
+                retention, segmentCount);
+    }
+
     /**
      * Ordered CPU mirror for the post-barrier exact-lane validation sample. Reservoir and root
      * equality are bitwise requirements; acceptance remains diagnostic-only.

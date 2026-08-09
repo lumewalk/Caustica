@@ -467,7 +467,20 @@ final class RtPathReservoirHistory {
     static final int GUIDE_BRANCH_DIRECT_PAIR_IDENTITY_SOURCE_READY_INDEX = 432;
     static final int GUIDE_BRANCH_DIRECT_PAIR_MAPPED_SOURCE_READY_INDEX = 433;
     static final int GUIDE_BRANCH_DIRECT_PAIR_DELTA_INDEX = 434;
-    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 435;
+    static final int GUIDE_BRANCH_DIRECT_PAIR_REPLAY_ELIGIBLE_INDEX = 435;
+    static final int GUIDE_BRANCH_DIRECT_PAIR_REPLAY_SELECTED_ACCEPTED_INDEX = 436;
+    static final int GUIDE_BRANCH_DIRECT_PAIR_REPLAY_SELECTED_REJECT_INDEX = 437;
+    static final int GUIDE_BRANCH_DIRECT_PAIR_REPLAY_RETAINED_ACCEPTED_INDEX = 438;
+    static final int GUIDE_BRANCH_DIRECT_PAIR_REPLAY_RETAINED_REJECT_INDEX = 439;
+    static final int GUIDE_BRANCH_DIRECT_PAIR_REPLAY_AGE_ONE_ACCEPTED_INDEX = 440;
+    static final int GUIDE_BRANCH_DIRECT_PAIR_REPLAY_AGE_TWO_ACCEPTED_INDEX = 441;
+    static final int GUIDE_BRANCH_DIRECT_PAIR_REPLAY_AGE_THREE_ACCEPTED_INDEX = 442;
+    static final int GUIDE_BRANCH_DIRECT_PAIR_REPLAY_IDENTITY_SOURCE_ACCEPTED_INDEX = 443;
+    static final int GUIDE_BRANCH_DIRECT_PAIR_REPLAY_MAPPED_SOURCE_ACCEPTED_INDEX = 444;
+    static final int GUIDE_BRANCH_DIRECT_PAIR_REPLAY_ONE_SEGMENT_ACCEPTED_INDEX = 445;
+    static final int GUIDE_BRANCH_DIRECT_PAIR_REPLAY_TWO_SEGMENT_ACCEPTED_INDEX = 446;
+    static final int GUIDE_BRANCH_DIRECT_PAIR_REPLAY_DELTA_INDEX = 447;
+    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 448;
     static final int SHIFTED_RECEIVER_GUIDE_STRIDE = 8 * Float.BYTES;
     static final int BRANCH_CANDIDATE_TAG_STRIDE = 2 * Integer.BYTES;
     static final int SPATIAL_DIAGNOSTIC_COUNTER_BYTES =
@@ -1684,6 +1697,31 @@ final class RtPathReservoirHistory {
                     counters.get(GUIDE_BRANCH_DIRECT_PAIR_IDENTITY_SOURCE_READY_INDEX));
             long guideBranchDirectPairMappedSourceReady = Integer.toUnsignedLong(
                     counters.get(GUIDE_BRANCH_DIRECT_PAIR_MAPPED_SOURCE_READY_INDEX));
+            long guideBranchDirectPairReplayEligible = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_PAIR_REPLAY_ELIGIBLE_INDEX));
+            long guideBranchDirectPairReplaySelectedAccepted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_PAIR_REPLAY_SELECTED_ACCEPTED_INDEX));
+            long guideBranchDirectPairReplaySelectedReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_PAIR_REPLAY_SELECTED_REJECT_INDEX));
+            long guideBranchDirectPairReplayRetainedAccepted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_PAIR_REPLAY_RETAINED_ACCEPTED_INDEX));
+            long guideBranchDirectPairReplayRetainedReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_PAIR_REPLAY_RETAINED_REJECT_INDEX));
+            long guideBranchDirectPairReplayAgeOneAccepted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_PAIR_REPLAY_AGE_ONE_ACCEPTED_INDEX));
+            long guideBranchDirectPairReplayAgeTwoAccepted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_PAIR_REPLAY_AGE_TWO_ACCEPTED_INDEX));
+            long guideBranchDirectPairReplayAgeThreeAccepted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_PAIR_REPLAY_AGE_THREE_ACCEPTED_INDEX));
+            long guideBranchDirectPairReplayIdentitySourceAccepted = Integer.toUnsignedLong(
+                    counters.get(
+                            GUIDE_BRANCH_DIRECT_PAIR_REPLAY_IDENTITY_SOURCE_ACCEPTED_INDEX));
+            long guideBranchDirectPairReplayMappedSourceAccepted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_PAIR_REPLAY_MAPPED_SOURCE_ACCEPTED_INDEX));
+            long guideBranchDirectPairReplayOneSegmentAccepted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_PAIR_REPLAY_ONE_SEGMENT_ACCEPTED_INDEX));
+            long guideBranchDirectPairReplayTwoSegmentAccepted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_DIRECT_PAIR_REPLAY_TWO_SEGMENT_ACCEPTED_INDEX));
             long crossFrameReceiverReject = crossFrameReceiverSurfaceReject
                     + crossFrameReceiverSampleReject + crossFrameReceiverEdgeReject
                     + crossFrameReceiverTopologyReject + crossFrameReceiverDepthReject
@@ -2831,6 +2869,65 @@ final class RtPathReservoirHistory {
                     guideBranchDirectPairMappedSourceReady,
                     guideBranchDirectPairReady - guideBranchDirectPairMappingReady,
                     guideBranchDirectRecordReady - guideBranchDirectPairEligible);
+            long guideBranchDirectPairReplayTerminal =
+                    guideBranchDirectPairReplaySelectedAccepted
+                            + guideBranchDirectPairReplaySelectedReject
+                            + guideBranchDirectPairReplayRetainedAccepted
+                            + guideBranchDirectPairReplayRetainedReject;
+            long guideBranchDirectPairReplayAccepted =
+                    guideBranchDirectPairReplaySelectedAccepted
+                            + guideBranchDirectPairReplayRetainedAccepted;
+            long guideBranchDirectPairReplayAgeAccepted =
+                    guideBranchDirectPairReplayAgeOneAccepted
+                            + guideBranchDirectPairReplayAgeTwoAccepted
+                            + guideBranchDirectPairReplayAgeThreeAccepted;
+            long guideBranchDirectPairReplayMappingAccepted =
+                    guideBranchDirectPairReplayIdentitySourceAccepted
+                            + guideBranchDirectPairReplayMappedSourceAccepted;
+            long guideBranchDirectPairReplaySegmentAccepted =
+                    guideBranchDirectPairReplayOneSegmentAccepted
+                            + guideBranchDirectPairReplayTwoSegmentAccepted;
+            long guideBranchDirectPairReplayPopulation = guideBranchDirectPairReady
+                    - guideBranchDirectPairEmptyReady;
+            CausticaMod.LOGGER.info(
+                    "RT path guide branch register pair replay: pairReady={}, empty={}, "
+                            + "eligible={}, selected[accepted={},reject={},delta={}], "
+                            + "retained[accepted={},reject={},delta={}], terminal={},delta={}, "
+                            + "accepted={}, age[one={},two={},three={},delta={}], "
+                            + "source[identity={},mapped={},delta={}], "
+                            + "segments[one={},two={},delta={}], gateDelta={}",
+                    guideBranchDirectPairReady,
+                    guideBranchDirectPairEmptyReady,
+                    guideBranchDirectPairReplayEligible,
+                    guideBranchDirectPairReplaySelectedAccepted,
+                    guideBranchDirectPairReplaySelectedReject,
+                    guideBranchDirectPairSelectedReady
+                            - guideBranchDirectPairReplaySelectedAccepted
+                            - guideBranchDirectPairReplaySelectedReject,
+                    guideBranchDirectPairReplayRetainedAccepted,
+                    guideBranchDirectPairReplayRetainedReject,
+                    guideBranchDirectPairRetainedReady
+                            - guideBranchDirectPairReplayRetainedAccepted
+                            - guideBranchDirectPairReplayRetainedReject,
+                    guideBranchDirectPairReplayTerminal,
+                    guideBranchDirectPairReplayEligible
+                            - guideBranchDirectPairReplayTerminal,
+                    guideBranchDirectPairReplayAccepted,
+                    guideBranchDirectPairReplayAgeOneAccepted,
+                    guideBranchDirectPairReplayAgeTwoAccepted,
+                    guideBranchDirectPairReplayAgeThreeAccepted,
+                    guideBranchDirectPairReplayAccepted
+                            - guideBranchDirectPairReplayAgeAccepted,
+                    guideBranchDirectPairReplayIdentitySourceAccepted,
+                    guideBranchDirectPairReplayMappedSourceAccepted,
+                    guideBranchDirectPairReplayAccepted
+                            - guideBranchDirectPairReplayMappingAccepted,
+                    guideBranchDirectPairReplayOneSegmentAccepted,
+                    guideBranchDirectPairReplayTwoSegmentAccepted,
+                    guideBranchDirectPairReplayAccepted
+                            - guideBranchDirectPairReplaySegmentAccepted,
+                    guideBranchDirectPairReplayPopulation
+                            - guideBranchDirectPairReplayEligible);
             spatialDiagnosticViewPending = 0;
             return;
         }

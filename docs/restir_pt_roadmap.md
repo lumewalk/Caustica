@@ -865,6 +865,20 @@ rejects were all zero, as were every terminal/lane/age/source/gate delta. Counte
 uints / 1740 B. The pair remains register-only; the next isolated gate must seeded-replay this exact
 pair from its newly current-relative root before any scratch/history write or estimator use.
 
+That seeded replay gate is now proven. Each non-empty ready pair retraces its one or two packed
+segments from the newly current-relative `PathSourceRoot`, using the paired current source texel and
+the original replay/proposal seeds. Selected diffuse output uses
+`pathMappingSourceReplayMatches`, because its receiver-dependent lanes were deliberately rewritten;
+retained identity output requires `pathReplayCompare == 0`. Across 56 Vulkan readbacks, all 32047
+eligible pairs replayed exactly: 29262 selected and 2785 retained. Ages 1/2/3 were
+10912/10543/10592 and original source ownership was 2571 identity plus 29476 mapped. This scene
+exercised 32047 one-segment and zero two-segment pairs; the CPU reference validates both allowed
+segment counts and the branch-specific comparator policy. Every terminal, branch, age, mapping,
+segment and gate delta was zero. Counter storage is 448 uints / 1792 B. The replay remains
+register-only and authorizes no write; the next isolated gate may capture only replay-accepted aged
+pairs in view-20 diagnostic storage and prove exact post-barrier reservoir/root equality before any
+persistent history integration.
+
 ## Delivery Phases
 
 ### Phase 0 — Wavefront Integration Baseline
