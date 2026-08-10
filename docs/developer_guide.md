@@ -815,7 +815,7 @@ empty terminal partition. Rewrite, selected-preserve and source-key lane partiti
 selected population; retained-preserve equals the non-empty retained population; weights and common
 metadata each equal all non-empty records. Accepted record count must equal previous-output,
 source-mapping and segment partitions. Every printed delta/gateDelta must be zero. The counter
-buffer for this and the follow-on root-pair gate is 649 uints / 2596 B, with all allocation and ABI
+buffer for this and the follow-on root-pair replay gate is 661 uints / 2644 B, with all allocation and ABI
 sizes unchanged.
 
 Fresh runtime validation produced 15 non-zero readbacks / 169988 eligible records, plus one excluded
@@ -839,6 +839,18 @@ The reference quick-play produced 18 readbacks / 100967 eligible pairs: 91637 se
 retained-ready, with zero key/root/chain/identity rejects and exact ownership/segment accounting.
 The client was then closed and no Java process remained. This gate performs no pair replay or write;
 the next allowed step is direct register-only replay from the newly assembled root.
+
+`RT path guide branch winner pair replay` retraces the pair directly from that root. Selected-ready
+records must use the mapping-source comparator; retained-ready identity records must use the full
+exact replay comparator. Valid accounting requires pair-ready to equal replay eligible and its
+selected/retained terminal partition; accepted replay must equal every previous-output,
+source-mapping and segment partition. All deltas and gate deltas must be zero.
+
+The reference run produced 8 full-resolution readbacks / 89520 accepted pairs: 81254 selected +
+8266 retained, zero replay rejects, and exact previous/source/segment partitions. Vulkan/device/GPU/
+shader errors were absent; the client was closed and no Java process remained. The replay pair is
+still not stored. The next allowed gate is bounded diagnostic storage plus exact post-barrier payload
+equality, not committed history or estimator use.
 
 For a fresh runtime check, use debug view 20 and inspect `run/logs/latest.log`. Normal operation
 requires `RT bring-up OK`, Vulkan, the intended NVIDIA device, exact zero-delta counter partitions,

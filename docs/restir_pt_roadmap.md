@@ -1068,7 +1068,7 @@ must remain identity mapped. Empty retained results remain explicit records with
 
 Twenty-five counters partition selected/retained/empty results, rewrite, selected-preserve,
 retained-preserve, source-key, weight and common-metadata lanes plus previous-output/source/segment
-ownership. The follow-on pair gate adds 21 counters, taking storage to 649 uints / 2596 B. No
+ownership. The follow-on pair and pair-replay gates take storage to 661 uints / 2644 B. No
 allocation, `WorldPush`, replay ABI, scratch, committed history or estimator state changes.
 
 Runtime produced 15 non-zero readbacks / 169988 post-selection-ready outcomes; one separate zero
@@ -1096,6 +1096,18 @@ retained winners and 7778 identity + 93189 mapped original sources. Runtime exer
 segment and zero two-segment roots. Every printed delta/gateDelta was zero and no Vulkan/device/GPU/
 shader failure occurred. The next gate may replay each just-assembled pair directly from its own
 current-frame root, still register/counter-only; all storage/history/estimator writes remain blocked.
+
+The direct pair replay gate now retraces the stored seeds from that current-frame root. Selected
+diffuse-reconnection output uses `pathMappingSourceReplayMatches`, so rewritten receiver lanes do
+not invalidate immutable source provenance; retained identity output requires the complete generic
+replay comparison. The reconstructed pair remains local registers and counters only.
+
+Across 8 full-resolution Vulkan readbacks, all 89520 ready pairs replayed successfully: 81254
+selected and 8266 retained, with zero comparator rejects. Accepted previous-winner ownership was
+82759 selected + 6761 retained, original-source ownership was 6692 identity + 82828 mapped, and all
+89520 roots had one segment. Every terminal, branch, provenance and segment delta was zero; no
+Vulkan/device/GPU/shader failure occurred. The next safe gate is bounded isolated storage/equality
+of exactly this replay-approved pair before any dense candidate-history or estimator integration.
 
 ## Delivery Phases
 

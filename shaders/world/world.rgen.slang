@@ -2985,6 +2985,52 @@ static void pathBranchWinnerPreviousReplayValidate() {
             InterlockedAdd(counters[pairedSegments == 1u
                     ? PATH_GUIDE_BRANCH_WINNER_PAIR_ONE_SEGMENT
                     : PATH_GUIDE_BRANCH_WINNER_PAIR_TWO_SEGMENT], 1u);
+
+            // Replay the just-assembled pair directly from its current-camera-relative root.
+            // Selected output intentionally compares only immutable original-source replay lanes;
+            // retained identity output requires the full generic replay comparator. This remains
+            // register/counter-only and cannot authorize scratch/history/estimator writes.
+            InterlockedAdd(counters[
+                    PATH_GUIDE_BRANCH_WINNER_PAIR_REPLAY_ELIGIBLE], 1u);
+            PathReplayAggregate pairedReplay = pathReplayAggregateEmpty();
+            for (uint leaf = 0u; leaf < MAX_PATH_SEGMENTS; ++leaf) {
+                if (leaf >= pairedSegments) break;
+                PackedPathSegment packed = leaf == 0u
+                        ? pairedRoot.segment0 : pairedRoot.segment1;
+                packed.ro += worldPush.camOffset;
+                PathSegment pairedSegment = unpackPathSegment(packed);
+                uint pairedReplaySeed = leaf == 0u
+                        ? branchRecord.replay.x : branchRecord.replay.z;
+                uint pairedProposalReplaySeed = leaf == 0u
+                        ? branchRecord.replay.y : branchRecord.replay.w;
+                PathTraceResult pairedTraced = tracePathSeeded(
+                        pairedSegment, pairedSourcePixel, true,
+                        pairedReplaySeed, pairedProposalReplaySeed);
+                pathReplayAccumulate(pairedReplay, pairedTraced, leaf);
+            }
+            bool pairedReplayMatches = selectedPairReady
+                    ? pathMappingSourceReplayMatches(branchRecord, pairedReplay)
+                    : pathReplayCompare(branchRecord, pairedReplay) == 0u;
+            InterlockedAdd(counters[selectedPairReady
+                    ? pairedReplayMatches
+                            ? PATH_GUIDE_BRANCH_WINNER_PAIR_REPLAY_SELECTED_ACCEPTED
+                            : PATH_GUIDE_BRANCH_WINNER_PAIR_REPLAY_SELECTED_REJECT
+                    : pairedReplayMatches
+                            ? PATH_GUIDE_BRANCH_WINNER_PAIR_REPLAY_RETAINED_ACCEPTED
+                            : PATH_GUIDE_BRANCH_WINNER_PAIR_REPLAY_RETAINED_REJECT], 1u);
+            if (pairedReplayMatches) {
+                InterlockedAdd(counters[outputMappingKind
+                        == PATH_MAPPING_DIFFUSE_RECONNECTION
+                                ? PATH_GUIDE_BRANCH_WINNER_PAIR_REPLAY_PREVIOUS_SELECTED
+                                : PATH_GUIDE_BRANCH_WINNER_PAIR_REPLAY_PREVIOUS_RETAINED], 1u);
+                InterlockedAdd(counters[sourceMappingKind
+                        == PATH_MAPPING_DIFFUSE_RECONNECTION
+                                ? PATH_GUIDE_BRANCH_WINNER_PAIR_REPLAY_MAPPED_SOURCE
+                                : PATH_GUIDE_BRANCH_WINNER_PAIR_REPLAY_IDENTITY_SOURCE], 1u);
+                InterlockedAdd(counters[pairedSegments == 1u
+                        ? PATH_GUIDE_BRANCH_WINNER_PAIR_REPLAY_ONE_SEGMENT
+                        : PATH_GUIDE_BRANCH_WINNER_PAIR_REPLAY_TWO_SEGMENT], 1u);
+            }
         }
     }
 }
