@@ -41,6 +41,7 @@ final class RtPathReservoirHistory {
     static final int GUIDE_BRANCH_AGE_REPLAY_PASS_FLAG = 1 << 13;
     static final int GUIDE_BRANCH_AGED_STORAGE_VALIDATE_PASS_FLAG = 1 << 14;
     static final int GUIDE_BRANCH_RECEIVER_OWNER_VALIDATE_PASS_FLAG = 1 << 15;
+    static final int GUIDE_BRANCH_WINNER_STORAGE_VALIDATE_PASS_FLAG = 1 << 16;
     static final int SPATIAL_DIAGNOSTIC_CATEGORY_COUNT = 9;
     static final int SPATIAL_DIAGNOSTIC_STRICT_PAIR_CURSOR_INDEX =
             SPATIAL_DIAGNOSTIC_CATEGORY_COUNT;
@@ -525,7 +526,29 @@ final class RtPathReservoirHistory {
     static final int GUIDE_BRANCH_RECEIVER_OWNER_WINNER_ONE_SEGMENT_INDEX = 488;
     static final int GUIDE_BRANCH_RECEIVER_OWNER_WINNER_TWO_SEGMENT_INDEX = 489;
     static final int GUIDE_BRANCH_RECEIVER_OWNER_DELTA_INDEX = 490;
-    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 491;
+    static final int GUIDE_BRANCH_WINNER_STORAGE_WRITE_ELIGIBLE_INDEX = 491;
+    static final int GUIDE_BRANCH_WINNER_STORAGE_WRITE_COMPLETED_INDEX = 492;
+    static final int GUIDE_BRANCH_WINNER_STORAGE_VALIDATE_ATTEMPTED_INDEX = 493;
+    static final int GUIDE_BRANCH_WINNER_STORAGE_EMPTY_INDEX = 494;
+    static final int GUIDE_BRANCH_WINNER_STORAGE_EMPTY_DIRTY_REJECT_INDEX = 495;
+    static final int GUIDE_BRANCH_WINNER_STORAGE_METADATA_REJECT_INDEX = 496;
+    static final int GUIDE_BRANCH_WINNER_STORAGE_RESERVOIR_MATCH_INDEX = 497;
+    static final int GUIDE_BRANCH_WINNER_STORAGE_RESERVOIR_MISMATCH_INDEX = 498;
+    static final int GUIDE_BRANCH_WINNER_STORAGE_ROOT_MATCH_INDEX = 499;
+    static final int GUIDE_BRANCH_WINNER_STORAGE_ROOT_MISMATCH_INDEX = 500;
+    static final int GUIDE_BRANCH_WINNER_STORAGE_PAIR_ACCEPTED_INDEX = 501;
+    static final int GUIDE_BRANCH_WINNER_STORAGE_PAIR_REJECT_INDEX = 502;
+    static final int GUIDE_BRANCH_WINNER_STORAGE_SELECTED_ACCEPTED_INDEX = 503;
+    static final int GUIDE_BRANCH_WINNER_STORAGE_RETAINED_ACCEPTED_INDEX = 504;
+    static final int GUIDE_BRANCH_WINNER_STORAGE_AGE_ONE_ACCEPTED_INDEX = 505;
+    static final int GUIDE_BRANCH_WINNER_STORAGE_AGE_TWO_ACCEPTED_INDEX = 506;
+    static final int GUIDE_BRANCH_WINNER_STORAGE_AGE_THREE_ACCEPTED_INDEX = 507;
+    static final int GUIDE_BRANCH_WINNER_STORAGE_IDENTITY_SOURCE_ACCEPTED_INDEX = 508;
+    static final int GUIDE_BRANCH_WINNER_STORAGE_MAPPED_SOURCE_ACCEPTED_INDEX = 509;
+    static final int GUIDE_BRANCH_WINNER_STORAGE_ONE_SEGMENT_ACCEPTED_INDEX = 510;
+    static final int GUIDE_BRANCH_WINNER_STORAGE_TWO_SEGMENT_ACCEPTED_INDEX = 511;
+    static final int GUIDE_BRANCH_WINNER_STORAGE_DELTA_INDEX = 512;
+    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 513;
     static final int SHIFTED_RECEIVER_GUIDE_STRIDE = 8 * Float.BYTES;
     static final int BRANCH_RECEIVER_OWNERSHIP_STRIDE = 2 * Integer.BYTES;
     static final int BRANCH_CANDIDATE_TAG_STRIDE = 2 * Integer.BYTES;
@@ -565,11 +588,19 @@ final class RtPathReservoirHistory {
             PATH_BRANCH_CANDIDATE_HISTORY_SLOT_COUNT
                     * PATH_BRANCH_SCRATCH_CAPTURE_CAPACITY
                     * PATH_BRANCH_RECEIVER_OWNER_CLAIM_STRIDE;
+    static final int PATH_BRANCH_RECEIVER_OWNER_PAIR_STRIDE =
+            PathReservoirData.BYTE_SIZE + PathSourceRootData.BYTE_SIZE;
+    static final int PATH_BRANCH_RECEIVER_OWNER_PAIR_BYTES =
+            PATH_BRANCH_CANDIDATE_HISTORY_SLOT_COUNT
+                    * PATH_BRANCH_SCRATCH_CAPTURE_CAPACITY
+                    * PATH_BRANCH_RECEIVER_OWNER_PAIR_STRIDE;
+    static final int PATH_BRANCH_WINNER_TAG_STRIDE = 4 * Integer.BYTES;
     static final int SPATIAL_DIAGNOSTIC_PAIR_BYTES =
             SHIFTED_DIAGNOSTIC_PAIR_FLOAT_COUNT * Float.BYTES
                     + PATH_BRANCH_SCRATCH_CAPTURE_BYTES
                     + PATH_BRANCH_AGED_STORAGE_CAPTURE_BYTES
-                    + PATH_BRANCH_RECEIVER_OWNER_CLAIM_BYTES;
+                    + PATH_BRANCH_RECEIVER_OWNER_CLAIM_BYTES
+                    + PATH_BRANCH_RECEIVER_OWNER_PAIR_BYTES;
 
     record Frame(long generation, int writeSlot, int previousSlot, boolean previousAvailable) {
         int finalSlot() {
@@ -672,6 +703,7 @@ final class RtPathReservoirHistory {
     private RtBuffer shiftedGuideScratchSourceRoots;
     private final RtBuffer[] branchScratchReservoirs = new RtBuffer[SLOT_COUNT];
     private final RtBuffer[] branchScratchSourceRoots = new RtBuffer[SLOT_COUNT];
+    private RtBuffer branchWinnerScratch;
     private RtPathTemporalPipeline temporalPipeline;
     private int spatialDiagnosticViewPending;
     private boolean spatialDiagnosticPairsInitialized;
@@ -786,7 +818,8 @@ final class RtPathReservoirHistory {
                 && shiftedReceiverGuides != null && shiftedGuideScratchReservoirs != null
                 && shiftedGuideScratchSourceRoots != null
                 && branchScratchReservoirs[0] != null && branchScratchReservoirs[1] != null
-                && branchScratchSourceRoots[0] != null && branchScratchSourceRoots[1] != null) {
+                && branchScratchSourceRoots[0] != null && branchScratchSourceRoots[1] != null
+                && branchWinnerScratch != null) {
             return;
         }
         long rootBytes = Math.multiplyExact(Math.multiplyExact((long) width, height),
@@ -797,6 +830,7 @@ final class RtPathReservoirHistory {
         long receiverGuideBytes = shiftedReceiverGuideBytes(width, height);
         long receiverOwnershipBytes = branchReceiverOwnershipBytes(width, height);
         long receiverStorageBytes = Math.addExact(receiverGuideBytes, receiverOwnershipBytes);
+        long winnerScratchBytes = branchWinnerScratchBytes(width, height);
         shiftedSourceRoots = ctx.createBuffer(rootBytes, VK10.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
                 false, "path shifted source roots " + width + "x" + height);
         shiftedMappedReservoirs = ctx.createBuffer(mappedBytes,
@@ -820,6 +854,9 @@ final class RtPathReservoirHistory {
                     VK10.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK10.VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                     false, "path branch scratch source roots " + slot + " " + width + "x" + height);
         }
+        branchWinnerScratch = ctx.createBuffer(winnerScratchBytes,
+                VK10.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK10.VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                false, "path branch winner scratch " + width + "x" + height);
         CausticaMod.LOGGER.info(
                 "RT path shifted snapshot: render={}x{}, rootStride={} B, mappedStride={} B, "
                         + "receiverGuideStride={} B, guideScratchStride={} B, "
@@ -827,16 +864,17 @@ final class RtPathReservoirHistory {
                         + "rootBytes={}, branchRootBytes={}, mappedBytes={}, "
                         + "receiverGuideBytes={}, receiverOwnershipBytes={}, "
                         + "receiverStorageBytes={}, guideScratchBytes={}, guideRootScratchBytes={}, "
-                        + "gpuMiB={}",
+                        + "winnerScratchBytes={}, gpuMiB={}",
                 width, height, PathSourceRootData.BYTE_SIZE, BYTES_PER_RESERVOIR,
                 SHIFTED_RECEIVER_GUIDE_STRIDE, BYTES_PER_RESERVOIR,
                 PathSourceRootData.BYTE_SIZE, BRANCH_CANDIDATE_TAG_STRIDE,
                 rootBytes, branchRootBytes, mappedBytes,
                 receiverGuideBytes, receiverOwnershipBytes, receiverStorageBytes,
-                mappedBytes, rootBytes,
+                mappedBytes, rootBytes, winnerScratchBytes,
                 String.format(Locale.ROOT, "%.2f",
                         (rootBytes + mappedBytes + receiverStorageBytes + mappedBytes + rootBytes
-                                + (branchRootBytes + mappedBytes) * SLOT_COUNT)
+                                + (branchRootBytes + mappedBytes) * SLOT_COUNT
+                                + winnerScratchBytes)
                                 / (1024.0 * 1024.0)));
         shiftedSnapshotState.reset();
         guideScratchSnapshotState.reset();
@@ -891,6 +929,10 @@ final class RtPathReservoirHistory {
                 ? 0L : branchScratchSourceRoots[frame.previousSlot()].deviceAddress;
     }
 
+    long branchWinnerScratchAddress() {
+        return branchWinnerScratch == null ? 0L : branchWinnerScratch.deviceAddress;
+    }
+
     BranchScratchFrame beginBranchScratch(Frame frame, long frameIndex) {
         return branchScratchState.begin(frame, frameIndex);
     }
@@ -903,6 +945,17 @@ final class RtPathReservoirHistory {
         RtBuffer roots = branchScratchSourceRoots[frame.writeSlot()];
         VK10.vkCmdFillBuffer(cmd, reservoirs.handle, 0L, reservoirs.size, 0);
         VK10.vkCmdFillBuffer(cmd, roots.handle, 0L, roots.size, 0);
+        try (var stack = org.lwjgl.system.MemoryStack.stackPush()) {
+            VulkanCommandEncoder.memoryBarrier(cmd, stack);
+        }
+    }
+
+    void beginBranchWinnerScratch(VkCommandBuffer cmd) {
+        if (branchWinnerScratch == null) {
+            throw new IllegalStateException("Branch winner scratch used before allocation");
+        }
+        VK10.vkCmdFillBuffer(cmd, branchWinnerScratch.handle, 0L,
+                branchWinnerScratch.size, 0);
         try (var stack = org.lwjgl.system.MemoryStack.stackPush()) {
             VulkanCommandEncoder.memoryBarrier(cmd, stack);
         }
@@ -1871,6 +1924,48 @@ final class RtPathReservoirHistory {
                     counters.get(GUIDE_BRANCH_RECEIVER_OWNER_WINNER_ONE_SEGMENT_INDEX));
             long guideBranchReceiverOwnerWinnerTwoSegment = Integer.toUnsignedLong(
                     counters.get(GUIDE_BRANCH_RECEIVER_OWNER_WINNER_TWO_SEGMENT_INDEX));
+            long guideBranchWinnerStorageWriteEligible = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_STORAGE_WRITE_ELIGIBLE_INDEX));
+            long guideBranchWinnerStorageWriteCompleted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_STORAGE_WRITE_COMPLETED_INDEX));
+            long guideBranchWinnerStorageValidateAttempted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_STORAGE_VALIDATE_ATTEMPTED_INDEX));
+            long guideBranchWinnerStorageEmpty = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_STORAGE_EMPTY_INDEX));
+            long guideBranchWinnerStorageEmptyDirtyReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_STORAGE_EMPTY_DIRTY_REJECT_INDEX));
+            long guideBranchWinnerStorageMetadataReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_STORAGE_METADATA_REJECT_INDEX));
+            long guideBranchWinnerStorageReservoirMatch = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_STORAGE_RESERVOIR_MATCH_INDEX));
+            long guideBranchWinnerStorageReservoirMismatch = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_STORAGE_RESERVOIR_MISMATCH_INDEX));
+            long guideBranchWinnerStorageRootMatch = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_STORAGE_ROOT_MATCH_INDEX));
+            long guideBranchWinnerStorageRootMismatch = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_STORAGE_ROOT_MISMATCH_INDEX));
+            long guideBranchWinnerStoragePairAccepted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_STORAGE_PAIR_ACCEPTED_INDEX));
+            long guideBranchWinnerStoragePairReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_STORAGE_PAIR_REJECT_INDEX));
+            long guideBranchWinnerStorageSelectedAccepted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_STORAGE_SELECTED_ACCEPTED_INDEX));
+            long guideBranchWinnerStorageRetainedAccepted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_STORAGE_RETAINED_ACCEPTED_INDEX));
+            long guideBranchWinnerStorageAgeOneAccepted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_STORAGE_AGE_ONE_ACCEPTED_INDEX));
+            long guideBranchWinnerStorageAgeTwoAccepted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_STORAGE_AGE_TWO_ACCEPTED_INDEX));
+            long guideBranchWinnerStorageAgeThreeAccepted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_STORAGE_AGE_THREE_ACCEPTED_INDEX));
+            long guideBranchWinnerStorageIdentitySourceAccepted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_STORAGE_IDENTITY_SOURCE_ACCEPTED_INDEX));
+            long guideBranchWinnerStorageMappedSourceAccepted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_STORAGE_MAPPED_SOURCE_ACCEPTED_INDEX));
+            long guideBranchWinnerStorageOneSegmentAccepted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_STORAGE_ONE_SEGMENT_ACCEPTED_INDEX));
+            long guideBranchWinnerStorageTwoSegmentAccepted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_STORAGE_TWO_SEGMENT_ACCEPTED_INDEX));
             long crossFrameReceiverReject = crossFrameReceiverSurfaceReject
                     + crossFrameReceiverSampleReject + crossFrameReceiverEdgeReject
                     + crossFrameReceiverTopologyReject + crossFrameReceiverDepthReject
@@ -3214,6 +3309,84 @@ final class RtPathReservoirHistory {
                     guideBranchReceiverOwnerWinnerTwoSegment,
                     guideBranchReceiverOwnerWinnerAccepted
                             - guideBranchReceiverOwnerWinnerSegments);
+            long guideBranchWinnerStorageTerminal = guideBranchWinnerStorageEmpty
+                    + guideBranchWinnerStorageEmptyDirtyReject
+                    + guideBranchWinnerStorageMetadataReject
+                    + guideBranchWinnerStoragePairAccepted
+                    + guideBranchWinnerStoragePairReject;
+            long guideBranchWinnerStorageNonEmptyTerminal =
+                    guideBranchWinnerStorageMetadataReject
+                            + guideBranchWinnerStoragePairAccepted
+                            + guideBranchWinnerStoragePairReject;
+            long guideBranchWinnerStorageReservoirTerminal =
+                    guideBranchWinnerStorageReservoirMatch
+                            + guideBranchWinnerStorageReservoirMismatch;
+            long guideBranchWinnerStorageRootTerminal =
+                    guideBranchWinnerStorageRootMatch
+                            + guideBranchWinnerStorageRootMismatch;
+            long guideBranchWinnerStorageBranch = guideBranchWinnerStorageSelectedAccepted
+                    + guideBranchWinnerStorageRetainedAccepted;
+            long guideBranchWinnerStorageAge = guideBranchWinnerStorageAgeOneAccepted
+                    + guideBranchWinnerStorageAgeTwoAccepted
+                    + guideBranchWinnerStorageAgeThreeAccepted;
+            long guideBranchWinnerStorageSource =
+                    guideBranchWinnerStorageIdentitySourceAccepted
+                            + guideBranchWinnerStorageMappedSourceAccepted;
+            long guideBranchWinnerStorageSegments =
+                    guideBranchWinnerStorageOneSegmentAccepted
+                            + guideBranchWinnerStorageTwoSegmentAccepted;
+            CausticaMod.LOGGER.info(
+                    "RT path guide branch winner storage: "
+                            + "write[eligible={},completed={},delta={}] "
+                            + "validate[attempted={},empty={},emptyDirty={},metadata={},"
+                            + "pairAccepted={},pairReject={},terminal={},delta={}] "
+                            + "nonEmpty[ownerAccepted={},terminal={},delta={}] "
+                            + "bits[reservoirMatch={},reservoirMismatch={},delta={},"
+                            + "rootMatch={},rootMismatch={},delta={}] "
+                            + "accepted[selected={},retained={},branchDelta={},"
+                            + "age[one={},two={},three={},delta={}],"
+                            + "source[identity={},mapped={},delta={}],"
+                            + "segments[one={},two={},delta={}]]",
+                    guideBranchWinnerStorageWriteEligible,
+                    guideBranchWinnerStorageWriteCompleted,
+                    guideBranchWinnerStorageWriteEligible
+                            - guideBranchWinnerStorageWriteCompleted,
+                    guideBranchWinnerStorageValidateAttempted,
+                    guideBranchWinnerStorageEmpty,
+                    guideBranchWinnerStorageEmptyDirtyReject,
+                    guideBranchWinnerStorageMetadataReject,
+                    guideBranchWinnerStoragePairAccepted,
+                    guideBranchWinnerStoragePairReject,
+                    guideBranchWinnerStorageTerminal,
+                    guideBranchWinnerStorageValidateAttempted
+                            - guideBranchWinnerStorageTerminal,
+                    guideBranchReceiverOwnerWinnerAccepted,
+                    guideBranchWinnerStorageNonEmptyTerminal,
+                    guideBranchReceiverOwnerWinnerAccepted
+                            - guideBranchWinnerStorageNonEmptyTerminal,
+                    guideBranchWinnerStorageReservoirMatch,
+                    guideBranchWinnerStorageReservoirMismatch,
+                    guideBranchWinnerStorageNonEmptyTerminal
+                            - guideBranchWinnerStorageMetadataReject
+                            - guideBranchWinnerStorageReservoirTerminal,
+                    guideBranchWinnerStorageRootMatch,
+                    guideBranchWinnerStorageRootMismatch,
+                    guideBranchWinnerStorageNonEmptyTerminal
+                            - guideBranchWinnerStorageMetadataReject
+                            - guideBranchWinnerStorageRootTerminal,
+                    guideBranchWinnerStorageSelectedAccepted,
+                    guideBranchWinnerStorageRetainedAccepted,
+                    guideBranchWinnerStoragePairAccepted - guideBranchWinnerStorageBranch,
+                    guideBranchWinnerStorageAgeOneAccepted,
+                    guideBranchWinnerStorageAgeTwoAccepted,
+                    guideBranchWinnerStorageAgeThreeAccepted,
+                    guideBranchWinnerStoragePairAccepted - guideBranchWinnerStorageAge,
+                    guideBranchWinnerStorageIdentitySourceAccepted,
+                    guideBranchWinnerStorageMappedSourceAccepted,
+                    guideBranchWinnerStoragePairAccepted - guideBranchWinnerStorageSource,
+                    guideBranchWinnerStorageOneSegmentAccepted,
+                    guideBranchWinnerStorageTwoSegmentAccepted,
+                    guideBranchWinnerStoragePairAccepted - guideBranchWinnerStorageSegments);
             spatialDiagnosticViewPending = 0;
             return;
         }
@@ -3334,6 +3507,16 @@ final class RtPathReservoirHistory {
                 BRANCH_RECEIVER_OWNERSHIP_STRIDE);
     }
 
+    static long branchWinnerScratchBytes(int width, int height) {
+        if (width <= 0 || height <= 0) {
+            throw new IllegalArgumentException("Branch winner-scratch extent must be positive");
+        }
+        long pixelCount = Math.multiplyExact((long) width, height);
+        return Math.multiplyExact(pixelCount,
+                (long) PathReservoirData.BYTE_SIZE + PathSourceRootData.BYTE_SIZE
+                        + PATH_BRANCH_WINNER_TAG_STRIDE);
+    }
+
     static long branchCandidateTagBytes(int width, int height) {
         if (width <= 0 || height <= 0) {
             throw new IllegalArgumentException("Branch candidate-tag extent must be positive");
@@ -3390,6 +3573,10 @@ final class RtPathReservoirHistory {
                 branchScratchSourceRoots[slot].destroy();
                 branchScratchSourceRoots[slot] = null;
             }
+        }
+        if (branchWinnerScratch != null) {
+            branchWinnerScratch.destroy();
+            branchWinnerScratch = null;
         }
         for (int slot = 0; slot < SLOT_COUNT; slot++) {
             if (slots[slot] != null) {

@@ -922,6 +922,33 @@ separate full-resolution view-20 scratch slot and compare it after a barrier. It
 existing one-frame branch scratch, commit path history, or feed the estimator until that lifecycle
 is independently proven.
 
+The isolated winner-pair storage gate now uses a separate full-resolution allocation rather than
+either branch ping-pong slot. Every replay-approved ring invocation stores its exact 336-byte
+reservoir/root pair next to its unique claim. The post-ownership invocation for each occupied
+receiver alone copies the winning pair to dense reservoir/root arrays and writes a 16-byte
+frame/generation/priority/control tag. The allocation is cleared before ownership, so an empty
+receiver is valid only with an all-zero tag. A separate barrier and validation dispatch then
+reopens the claim and ring pair, validates lifecycle/mapping/segment metadata and compares all
+reservoir/root bits. It cannot set a candidate tag, alter a history slot or reach the estimator.
+
+The ring-indexed exact-pair area adds 5505024 bytes, increasing the host-visible diagnostic sample
+buffer to 15073280 bytes (14.375 MiB). The dense winner allocation is 352 B/pixel, or 303226880
+bytes (289.18 MiB) at 1280x673. Counter storage is 513 uints / 2052 B and reflected `WorldPush` is
+688 bytes; the PathReservoir replay ABI remains 10. Runtime acceptance of the next gate requires
+zero empty-dirty, metadata, reservoir, root and pair rejects, exact write/receiver/branch/age/
+mapping/segment accounting and no use by committed history or the ordinary estimator.
+
+That gate passed 46 Vulkan readbacks. All 30471 eligible winners completed their full-resolution
+write and all 30471 stored reservoirs and roots matched bit-for-bit after the barrier. Empty-dirty,
+metadata, reservoir/root mismatch and pair-reject counters were zero, as were every write,
+validation, owner, branch, age, source and segment delta. Accepted pairs split into 27605 selected
+and 2866 retained; ages 1/2/3 were 10246/10164/10061; original source ownership was 2516 identity
+plus 27955 mapped. The ownership population included 60 fan-in-two collisions and no higher fan-in,
+so deterministic collision winners reached the exact-copy path. Runtime still exercised only
+one-segment paths. This proves isolated current-frame winner storage only; persistent lifetime,
+reprojection and replay of this winner scratch remain the next required boundary before history
+integration.
+
 ## Delivery Phases
 
 ### Phase 0 — Wavefront Integration Baseline

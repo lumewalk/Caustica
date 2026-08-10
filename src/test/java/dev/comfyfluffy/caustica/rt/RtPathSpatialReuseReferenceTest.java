@@ -1575,6 +1575,39 @@ final class RtPathSpatialReuseReferenceTest {
     }
 
     @Test
+    void branchWinnerStorageRequiresClearedEmptyTagsAndExactPairBits() {
+        var identity = RtPathSpatialReuseReference.MappingKind.IDENTITY;
+        var mapped = RtPathSpatialReuseReference.MappingKind.DIFFUSE_RECONNECTION;
+        assertEquals(RtPathSpatialReuseReference.BranchWinnerStorageOutcome.EMPTY,
+                RtPathSpatialReuseReference.branchWinnerStorageOutcome(
+                        0, true, false, false, false, null));
+        assertEquals(
+                RtPathSpatialReuseReference.BranchWinnerStorageOutcome.EMPTY_DIRTY_REJECT,
+                RtPathSpatialReuseReference.branchWinnerStorageOutcome(
+                        0, false, false, false, false, null));
+        assertEquals(RtPathSpatialReuseReference.BranchWinnerStorageOutcome.METADATA_REJECT,
+                RtPathSpatialReuseReference.branchWinnerStorageOutcome(
+                        1, true, false, true, true, mapped));
+        assertEquals(RtPathSpatialReuseReference.BranchWinnerStorageOutcome.PAIR_REJECT,
+                RtPathSpatialReuseReference.branchWinnerStorageOutcome(
+                        2, true, true, false, true, mapped));
+        assertEquals(RtPathSpatialReuseReference.BranchWinnerStorageOutcome.PAIR_REJECT,
+                RtPathSpatialReuseReference.branchWinnerStorageOutcome(
+                        1, true, true, true, false, identity));
+        assertEquals(
+                RtPathSpatialReuseReference.BranchWinnerStorageOutcome.SELECTED_ACCEPTED,
+                RtPathSpatialReuseReference.branchWinnerStorageOutcome(
+                        2, true, true, true, true, mapped));
+        assertEquals(
+                RtPathSpatialReuseReference.BranchWinnerStorageOutcome.RETAINED_ACCEPTED,
+                RtPathSpatialReuseReference.branchWinnerStorageOutcome(
+                        1, true, true, true, true, identity));
+        assertThrows(IllegalArgumentException.class,
+                () -> RtPathSpatialReuseReference.branchWinnerStorageOutcome(
+                        -1, true, true, true, true, identity));
+    }
+
+    @Test
     void pairedMomentsExposeCovarianceAndCorrelationWithoutBatchStorage() {
         var moments = new RtPathSpatialReuseReference.PairMoments();
         moments.add(1.0, 2.0);
@@ -2404,8 +2437,50 @@ final class RtPathSpatialReuseReferenceTest {
         assertEquals(489,
                 RtPathReservoirHistory.GUIDE_BRANCH_RECEIVER_OWNER_WINNER_TWO_SEGMENT_INDEX);
         assertEquals(490, RtPathReservoirHistory.GUIDE_BRANCH_RECEIVER_OWNER_DELTA_INDEX);
-        assertEquals(491, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
-        assertEquals(491 * Integer.BYTES,
+        assertEquals(491,
+                RtPathReservoirHistory.GUIDE_BRANCH_WINNER_STORAGE_WRITE_ELIGIBLE_INDEX);
+        assertEquals(492,
+                RtPathReservoirHistory.GUIDE_BRANCH_WINNER_STORAGE_WRITE_COMPLETED_INDEX);
+        assertEquals(493,
+                RtPathReservoirHistory.GUIDE_BRANCH_WINNER_STORAGE_VALIDATE_ATTEMPTED_INDEX);
+        assertEquals(494, RtPathReservoirHistory.GUIDE_BRANCH_WINNER_STORAGE_EMPTY_INDEX);
+        assertEquals(495,
+                RtPathReservoirHistory.GUIDE_BRANCH_WINNER_STORAGE_EMPTY_DIRTY_REJECT_INDEX);
+        assertEquals(496,
+                RtPathReservoirHistory.GUIDE_BRANCH_WINNER_STORAGE_METADATA_REJECT_INDEX);
+        assertEquals(497,
+                RtPathReservoirHistory.GUIDE_BRANCH_WINNER_STORAGE_RESERVOIR_MATCH_INDEX);
+        assertEquals(498,
+                RtPathReservoirHistory.GUIDE_BRANCH_WINNER_STORAGE_RESERVOIR_MISMATCH_INDEX);
+        assertEquals(499,
+                RtPathReservoirHistory.GUIDE_BRANCH_WINNER_STORAGE_ROOT_MATCH_INDEX);
+        assertEquals(500,
+                RtPathReservoirHistory.GUIDE_BRANCH_WINNER_STORAGE_ROOT_MISMATCH_INDEX);
+        assertEquals(501,
+                RtPathReservoirHistory.GUIDE_BRANCH_WINNER_STORAGE_PAIR_ACCEPTED_INDEX);
+        assertEquals(502,
+                RtPathReservoirHistory.GUIDE_BRANCH_WINNER_STORAGE_PAIR_REJECT_INDEX);
+        assertEquals(503,
+                RtPathReservoirHistory.GUIDE_BRANCH_WINNER_STORAGE_SELECTED_ACCEPTED_INDEX);
+        assertEquals(504,
+                RtPathReservoirHistory.GUIDE_BRANCH_WINNER_STORAGE_RETAINED_ACCEPTED_INDEX);
+        assertEquals(505,
+                RtPathReservoirHistory.GUIDE_BRANCH_WINNER_STORAGE_AGE_ONE_ACCEPTED_INDEX);
+        assertEquals(506,
+                RtPathReservoirHistory.GUIDE_BRANCH_WINNER_STORAGE_AGE_TWO_ACCEPTED_INDEX);
+        assertEquals(507,
+                RtPathReservoirHistory.GUIDE_BRANCH_WINNER_STORAGE_AGE_THREE_ACCEPTED_INDEX);
+        assertEquals(508, RtPathReservoirHistory
+                .GUIDE_BRANCH_WINNER_STORAGE_IDENTITY_SOURCE_ACCEPTED_INDEX);
+        assertEquals(509,
+                RtPathReservoirHistory.GUIDE_BRANCH_WINNER_STORAGE_MAPPED_SOURCE_ACCEPTED_INDEX);
+        assertEquals(510,
+                RtPathReservoirHistory.GUIDE_BRANCH_WINNER_STORAGE_ONE_SEGMENT_ACCEPTED_INDEX);
+        assertEquals(511,
+                RtPathReservoirHistory.GUIDE_BRANCH_WINNER_STORAGE_TWO_SEGMENT_ACCEPTED_INDEX);
+        assertEquals(512, RtPathReservoirHistory.GUIDE_BRANCH_WINNER_STORAGE_DELTA_INDEX);
+        assertEquals(513, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
+        assertEquals(513 * Integer.BYTES,
                 RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_COUNTER_BYTES);
         assertEquals(32, RtPathReservoirHistory.SHIFTED_RECEIVER_GUIDE_STRIDE);
         assertEquals(8, RtPathReservoirHistory.BRANCH_RECEIVER_OWNERSHIP_STRIDE);
@@ -2430,8 +2505,12 @@ final class RtPathSpatialReuseReferenceTest {
         assertEquals(16, RtPathReservoirHistory.PATH_BRANCH_RECEIVER_OWNER_CLAIM_STRIDE);
         assertEquals(4 * 4096 * 16,
                 RtPathReservoirHistory.PATH_BRANCH_RECEIVER_OWNER_CLAIM_BYTES);
+        assertEquals(336, RtPathReservoirHistory.PATH_BRANCH_RECEIVER_OWNER_PAIR_STRIDE);
+        assertEquals(4 * 4096 * 336,
+                RtPathReservoirHistory.PATH_BRANCH_RECEIVER_OWNER_PAIR_BYTES);
+        assertEquals(16, RtPathReservoirHistory.PATH_BRANCH_WINNER_TAG_STRIDE);
         assertEquals(4096 * 8 * Float.BYTES + 4 * 4096 * 384 + 2 * 4096 * 352
-                        + 4 * 4096 * 16,
+                        + 4 * 4096 * 16 + 4 * 4096 * 336,
                 RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_PAIR_BYTES);
     }
 }

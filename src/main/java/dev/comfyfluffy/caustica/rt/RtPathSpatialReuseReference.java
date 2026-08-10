@@ -1087,6 +1087,15 @@ final class RtPathSpatialReuseReference {
         RETAINED_ACCEPTED
     }
 
+    enum BranchWinnerStorageOutcome {
+        EMPTY,
+        EMPTY_DIRTY_REJECT,
+        METADATA_REJECT,
+        PAIR_REJECT,
+        SELECTED_ACCEPTED,
+        RETAINED_ACCEPTED
+    }
+
     enum BranchCandidateRetentionOutcome {
         EMPTY,
         FUTURE_REJECT,
@@ -2034,6 +2043,30 @@ final class RtPathSpatialReuseReference {
             }
         }
         return BranchReceiverOwnerClaim.fromPriority(winnerPriority);
+    }
+
+    /** CPU mirror for the cleared full-resolution winner-pair scratch validator. */
+    static BranchWinnerStorageOutcome branchWinnerStorageOutcome(
+            int fanIn, boolean emptyTagCleared, boolean metadataValid,
+            boolean reservoirBitsMatch, boolean rootBitsMatch,
+            MappingKind outputMappingKind) {
+        if (fanIn < 0) {
+            throw new IllegalArgumentException("receiver fan-in must not be negative");
+        }
+        if (fanIn == 0) {
+            return emptyTagCleared
+                    ? BranchWinnerStorageOutcome.EMPTY
+                    : BranchWinnerStorageOutcome.EMPTY_DIRTY_REJECT;
+        }
+        if (!metadataValid || outputMappingKind == null) {
+            return BranchWinnerStorageOutcome.METADATA_REJECT;
+        }
+        if (!reservoirBitsMatch || !rootBitsMatch) {
+            return BranchWinnerStorageOutcome.PAIR_REJECT;
+        }
+        return outputMappingKind == MappingKind.DIFFUSE_RECONNECTION
+                ? BranchWinnerStorageOutcome.SELECTED_ACCEPTED
+                : BranchWinnerStorageOutcome.RETAINED_ACCEPTED;
     }
 
     /**

@@ -14,9 +14,9 @@ final class RtPathReservoirHistoryTest {
     void reflectedAbiIncludesReplayAndReconnectionGeometryLanes() {
         assertEquals(176, PathReservoirData.BYTE_SIZE);
         assertEquals(176, RtPathReservoirHistory.BYTES_PER_RESERVOIR);
-        assertEquals(672, WorldPushData.BYTE_SIZE);
-        assertEquals(491, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
-        assertEquals(1964, RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_COUNTER_BYTES);
+        assertEquals(688, WorldPushData.BYTE_SIZE);
+        assertEquals(513, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
+        assertEquals(2052, RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_COUNTER_BYTES);
         assertEquals(1 << 8, RtPathReservoirHistory.GUIDE_PREVIOUS_REPLAY_PASS_FLAG);
         assertEquals(1 << 9, RtPathReservoirHistory.GUIDE_PREVIOUS_AVAILABLE_FLAG);
         assertEquals(1 << 10, RtPathReservoirHistory.GUIDE_BRANCH_PREVIOUS_AVAILABLE_FLAG);
@@ -29,6 +29,8 @@ final class RtPathReservoirHistoryTest {
                 RtPathReservoirHistory.GUIDE_BRANCH_AGED_STORAGE_VALIDATE_PASS_FLAG);
         assertEquals(1 << 15,
                 RtPathReservoirHistory.GUIDE_BRANCH_RECEIVER_OWNER_VALIDATE_PASS_FLAG);
+        assertEquals(1 << 16,
+                RtPathReservoirHistory.GUIDE_BRANCH_WINNER_STORAGE_VALIDATE_PASS_FLAG);
     }
 
     @Test
@@ -119,6 +121,9 @@ final class RtPathReservoirHistoryTest {
         assertEquals(6_891_520L,
                 RtPathReservoirHistory.branchCandidateTagBytes(1280, 673));
         assertEquals(8, RtPathReservoirHistory.BRANCH_CANDIDATE_TAG_STRIDE);
+        assertEquals(303_226_880L,
+                RtPathReservoirHistory.branchWinnerScratchBytes(1280, 673));
+        assertEquals(16, RtPathReservoirHistory.PATH_BRANCH_WINNER_TAG_STRIDE);
     }
 
     @Test

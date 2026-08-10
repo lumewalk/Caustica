@@ -678,6 +678,34 @@ rejects and every claim/receiver/collision/winner/partition delta were zero, wit
 shader error. The next isolated gate may write only the winner pair to a separate view-20
 full-resolution scratch slot and prove post-barrier equality; it still may not commit path history.
 
+The winner-storage gate implements that copy without reusing either branch ping-pong slot. The
+age-replay invocation first writes its complete 336-byte `PathReservoir` + `PathSourceRoot` pair at
+the same unique ring index as its ownership claim. After the ownership barrier, exactly one
+full-resolution invocation per occupied receiver reads the deterministic winner and copies it into
+a separately cleared scratch allocation. The scratch contains three dense arrays: 176 B/pixel
+reservoirs, 160 B/pixel roots and a 16 B/pixel frame/generation/priority/control commit tag. The tag
+is written last and is the only validity gate; an empty receiver must observe an all-zero tag.
+
+A distinct post-barrier pass reopens the winning claim and ring pair, checks frame, generation,
+receiver, age, source/output mapping, replay segment count and exact tag ownership, then compares
+every reservoir and root bit. It records empty-dirty, metadata, reservoir, root and pair rejects
+separately and partitions accepted pairs by selected/retained branch, age, original source mapping
+and segment count. The indexed owner-pair area adds 5505024 bytes, taking the host-visible sample
+buffer to 15073280 bytes (14.375 MiB). The full-resolution winner scratch is 352 B/pixel or
+303226880 bytes (289.18 MiB) at 1280x673. `WorldPush` is 688 bytes and the diagnostic counter
+buffer is 513 uints / 2052 B; replay ABI 10 and the 120-byte inline push constants are unchanged.
+All new addresses remain zero outside view 20, and this scratch is neither committed history nor an
+estimator input.
+
+Fresh Vulkan/RTX 5060 Ti runtime validation produced 46 readbacks. All 30471 winner writes
+completed and all 30471 post-barrier pairs matched both reservoir and root bits. Empty receivers
+totalled 8345209; empty-dirty tags, metadata rejects, reservoir/root mismatches, pair rejects and
+every write/validation/partition delta were zero. The accepted split was 27605 selected plus 2866
+retained, ages 1/2/3 were 10246/10164/10061, original source ownership was 2516 identity plus
+27955 mapped, and all paths had one segment. The same readbacks included 60 true receiver
+collisions, all fan-in two, so the exact-copy proof exercised the deterministic winner rather than
+only unique claims. No Vulkan/device/shader failure occurred and the validation client was closed.
+
 For a fresh runtime check, use debug view 20 and inspect `run/logs/latest.log`. Normal operation
 requires `RT bring-up OK`, Vulkan, the intended NVIDIA device, exact zero-delta counter partitions,
 and no `DEVICE_LOST`, `VK_ERROR`, GPU fault or shader compilation error. Debug colors and sparse

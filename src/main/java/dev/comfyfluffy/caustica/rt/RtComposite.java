@@ -1106,7 +1106,9 @@ public final class RtComposite {
                     restirPt && debugView == RtPathReservoirHistory.SHIFTED_RADIANCE_DEBUG_VIEW
                             ? pathReservoirs.previousBranchScratchReservoirAddress(branchScratchFrame) : 0L,
                     restirPt && debugView == RtPathReservoirHistory.SHIFTED_RADIANCE_DEBUG_VIEW
-                            ? pathReservoirs.previousBranchScratchRootAddress(branchScratchFrame) : 0L
+                            ? pathReservoirs.previousBranchScratchRootAddress(branchScratchFrame) : 0L,
+                    restirPt && debugView == RtPathReservoirHistory.SHIFTED_RADIANCE_DEBUG_VIEW
+                            ? pathReservoirs.branchWinnerScratchAddress() : 0L
             ).write(push);
             pushBuf.flush(0L, WORLD_PUSH_SIZE);
             // Upload any entity textures registered this frame into the bindless set before the trace.
@@ -1186,6 +1188,7 @@ public final class RtComposite {
             ByteBuffer branchAgeReplayPushConstants = null;
             ByteBuffer branchAgedStorageValidatePushConstants = null;
             ByteBuffer branchReceiverOwnerValidatePushConstants = null;
+            ByteBuffer branchWinnerStorageValidatePushConstants = null;
             if (restirPt
                      && debugView == RtPathReservoirHistory.SHIFTED_RADIANCE_DEBUG_VIEW) {
                 guidePreviousReplayPushConstants =
@@ -1326,6 +1329,29 @@ public final class RtComposite {
                                         .GUIDE_BRANCH_RECEIVER_OWNER_VALIDATE_PASS_FLAG,
                         worldConstants.historyGeneration())
                         .write(branchReceiverOwnerValidatePushConstants);
+                branchWinnerStorageValidatePushConstants =
+                        stack.malloc(WorldPushConstantsData.BYTE_SIZE);
+                new WorldPushConstantsData(
+                        worldConstants.worldPushAddr(),
+                        worldConstants.tableAddr(),
+                        worldConstants.entityTableAddr(),
+                        worldConstants.materialTableAddr(),
+                        worldConstants.lightBufAddr(),
+                        worldConstants.lightAliasAddr(),
+                        worldConstants.lightLocalAliasAddr(),
+                        worldConstants.lightGridCellAddr(),
+                        worldConstants.lightGridSpanAddr(),
+                        worldConstants.pathQueueAddr(),
+                        worldConstants.directReservoirAddr(),
+                        worldConstants.pathReservoirAddr(),
+                        worldConstants.pathReservoirPreviousAddr(),
+                        worldConstants.frameIndex(),
+                        worldConstants.debugView(),
+                        worldConstants.historyFlags()
+                                | RtPathReservoirHistory
+                                        .GUIDE_BRANCH_WINNER_STORAGE_VALIDATE_PASS_FLAG,
+                        worldConstants.historyGeneration())
+                        .write(branchWinnerStorageValidatePushConstants);
                 mappingReplayPushConstants =
                         stack.malloc(WorldPushConstantsData.BYTE_SIZE);
                 new WorldPushConstantsData(
@@ -1466,12 +1492,21 @@ public final class RtComposite {
                                 branchAgeReplayPushConstants, 1);
                     }
                     VulkanCommandEncoder.memoryBarrier(cmd, stack);
+                    pathReservoirs.beginBranchWinnerScratch(cmd);
                     try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd,
                                  "path branch receiver ownership validate");
                          RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage(
                                  "frame.pathBranchReceiverOwnershipValidate")) {
                         active.trace(cmd, renderW, renderH,
                                 branchReceiverOwnerValidatePushConstants, 1);
+                    }
+                    VulkanCommandEncoder.memoryBarrier(cmd, stack);
+                    try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd,
+                                 "path branch winner storage validate");
+                         RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage(
+                                 "frame.pathBranchWinnerStorageValidate")) {
+                        active.trace(cmd, renderW, renderH,
+                                branchWinnerStorageValidatePushConstants, 1);
                     }
                     VulkanCommandEncoder.memoryBarrier(cmd, stack);
                     try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd,
