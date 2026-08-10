@@ -852,6 +852,27 @@ shader errors were absent; the client was closed and no Java process remained. T
 still not stored. The next allowed gate is bounded diagnostic storage plus exact post-barrier payload
 equality, not committed history or estimator use.
 
+`RT path guide branch winner pair storage` is that bounded storage gate. It captures at most 4096
+replay-approved current-frame pairs per readback, then a separate ray-generation pass validates
+metadata and compares every reservoir/root bit after a device barrier. `write.overflow` is expected
+when eligible input exceeds 4096; correctness requires `completed + overflow == eligible`,
+`validate.attempted == completed`, zero metadata/reservoir/root/pair rejects, exact branch/previous/
+source/segment partitions, and every `delta`/`gateDelta` equal to zero.
+
+The expected and stored 352-byte arrays intentionally alias the aged storage-audit arrays. Command
+ordering guarantees that the winner-pair validator consumes them before the later aged writer may
+reuse them. Do not reorder those passes without introducing independent storage or proving a new
+lifetime. This reuse keeps the diagnostic sample buffer at 14.375 MiB; the counter buffer is 682
+uints / 2728 B, `WorldPush` is 688 B, inline push constants are 120 B and replay ABI is 10.
+
+The reference windowed/full-screen run produced 36 non-zero readbacks / 246013 eligible pairs:
+125256 completed and validated, 120757 explicit capacity overflows, and zero metadata, reservoir,
+root or pair rejects. Full-screen readbacks repeatedly reached exactly 4096 completed records. All
+accounting deltas were zero; no Vulkan/device/GPU/shader error was logged, and the client process
+tree was closed. This proves only bounded device storage equality. Before any dense candidate write,
+define its ownership, clear/reset, generation and adjacent-frame lifetime contract; committed path
+history and the ordinary estimator are still forbidden.
+
 For a fresh runtime check, use debug view 20 and inspect `run/logs/latest.log`. Normal operation
 requires `RT bring-up OK`, Vulkan, the intended NVIDIA device, exact zero-delta counter partitions,
 and no `DEVICE_LOST`, `VK_ERROR`, GPU fault or shader compilation error. Debug colors and sparse

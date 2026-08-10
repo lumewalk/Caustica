@@ -2692,6 +2692,32 @@ final class RtPathSpatialReuseReference {
                 BranchDirectPairReplayComparator.EXACT, segmentCount);
     }
 
+    /** CPU mirror for bounded post-barrier storage of a replay-approved winner pair. */
+    static BranchAgedStorageOutcome branchWinnerPairStorageOutcome(
+            boolean metadataMatches,
+            boolean receiverIndexValid,
+            MappingKind sourceMappingKind,
+            MappingKind outputMappingKind,
+            MappingKind previousOutputMappingKind,
+            int segmentCount,
+            boolean reservoirBitsMatch,
+            boolean rootBitsMatch) {
+        boolean metadataValid = metadataMatches && receiverIndexValid
+                && sourceMappingKind != null
+                && outputMappingKind != null
+                && previousOutputMappingKind != null
+                && (segmentCount == 1 || segmentCount == 2);
+        if (!metadataValid) {
+            return BranchAgedStorageOutcome.METADATA_REJECT;
+        }
+        if (!reservoirBitsMatch || !rootBitsMatch) {
+            return BranchAgedStorageOutcome.PAIR_REJECT;
+        }
+        return outputMappingKind == MappingKind.DIFFUSE_RECONNECTION
+                ? BranchAgedStorageOutcome.SELECTED_ACCEPTED
+                : BranchAgedStorageOutcome.RETAINED_ACCEPTED;
+    }
+
     /**
      * Ordered CPU mirror for the post-barrier exact-lane validation sample. Reservoir and root
      * equality are bitwise requirements; acceptance remains diagnostic-only.

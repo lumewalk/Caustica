@@ -1109,6 +1109,23 @@ selected and 8266 retained, with zero comparator rejects. Accepted previous-winn
 Vulkan/device/GPU/shader failure occurred. The next safe gate is bounded isolated storage/equality
 of exactly this replay-approved pair before any dense candidate-history or estimator integration.
 
+That bounded storage gate now writes up to 4096 replay-approved pairs per readback into two
+352-byte capture arrays and validates them after an explicit device barrier. The arrays reuse the
+already allocated aged expected/stored capture regions under an ordered lifetime: previous-winner
+write and validation complete before the later aged diagnostic may overwrite them. Consequently the
+host-visible sample buffer remains 15073280 bytes (14.375 MiB), `WorldPush` remains 688 B, inline
+push constants remain 120 B and replay ABI remains 10. Twenty-one new counters bring the view-20
+counter buffer to 682 uints / 2728 B. Overflow is an explicit capacity outcome, never a silent drop.
+
+Fresh windowed and full-screen Vulkan validation produced 36 non-zero readbacks / 246013 eligible
+pairs. The bounded writer stored 125256 pairs and reported 120757 capacity overflows. All 125256
+stored records passed frame/generation/receiver/mapping/segment metadata validation and matched
+every `PathReservoir` and `PathSourceRoot` bit after the barrier; metadata, reservoir, root and pair
+rejects were zero, and all accounting deltas were zero. Full-screen readbacks repeatedly saturated
+the exact 4096-record capacity. No Vulkan/device/GPU/shader failure occurred. The next safe step is
+to define dense current-candidate ownership, reset and lifetime semantics before allocating or
+writing any persistent candidate slot; committed history and the ordinary estimator remain blocked.
+
 ## Delivery Phases
 
 ### Phase 0 — Wavefront Integration Baseline
