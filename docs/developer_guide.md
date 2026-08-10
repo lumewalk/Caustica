@@ -781,6 +781,28 @@ GPU/shader error was logged, and the exact validation client was closed. The fol
 compute selected/retained post-selection weights and caps in registers only; it must still not write
 winner scratch, committed path history or the ordinary estimator.
 
+`RT path guide branch winner post-selection` mirrors the future weight lane but never constructs a
+reservoir. The stored weight sum and M use pre-add saturation at `1e30` and `16777216`; do not reuse
+either cap in the preceding Bernoulli denominator. Selected outcomes use the fresh shifted target,
+retained outcomes use the current target, and non-empty records require a positive finite final
+weight. Exact zero weight is valid only as an empty result with final weight zero.
+
+For a valid readback, Bernoulli ready must equal post-selection eligible and its complete terminal
+partition. Selected and retained terminal counts must individually equal their preceding Bernoulli
+outcomes. After current/next validation, both weight-cap and count-cap partitions must equal the cap
+eligible count. Final ready must equal each previous-output, source-mapping and segment partition.
+Every `delta` and `gateDelta` must be zero. Counter storage is 603 uints / 2412 B; no allocation or
+ABI size changes accompany this gate.
+
+Fresh full-resolution runtime validation produced 12 readbacks / 137581 ready inputs: 125834
+selected-ready, 11747 retained-ready and one retained empty result. All current/next/target/final
+rejects were zero. Runtime weight and count caps were entirely uncapped; CPU reference tests cover
+both saturation boundaries. Previous output was 128009 selected + 9572 retained, original source
+was 9431 identity + 128150 mapped, and all records had one segment. All deltas were zero, no Vulkan/
+GPU/shader error was logged, and the client was closed with no Java process remaining. The next
+gate may assemble and validate only the future reservoir record in registers; root pairing,
+scratch/history storage and ordinary-estimator use remain forbidden.
+
 For a fresh runtime check, use debug view 20 and inspect `run/logs/latest.log`. Normal operation
 requires `RT bring-up OK`, Vulkan, the intended NVIDIA device, exact zero-delta counter partitions,
 and no `DEVICE_LOST`, `VK_ERROR`, GPU fault or shader compilation error. Debug colors and sparse

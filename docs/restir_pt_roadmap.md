@@ -1033,6 +1033,30 @@ had one segment. Every terminal, partition and gate delta was zero, and no Vulka
 failure was logged. The next gate may audit selected/retained post-selection arithmetic and caps in
 registers only; persistent history and the ordinary estimator remain blocked.
 
+The follow-on register/counter-only post-selection gate now shadows the future stored weight lane.
+It keeps Bernoulli selection on the uncapped ratio while saturating the prospective stored weight
+sum and effective count independently at `1e30` and `16777216`, with overflow detected before
+addition. A selected outcome uses the freshly reconstructed shifted target; a retained outcome
+uses the current receiver reservoir target. Non-empty results require a positive finite
+`nextWeightSum / (nextM * selectedTarget)`; an exact zero-weight result remains a valid empty
+retained outcome with final weight zero. No reservoir or root is constructed or written.
+
+Twenty-one counters partition current/next arithmetic, selected and retained target/final-weight
+outcomes, empty results, both stored caps and previous-output/source-mapping/segment ownership.
+The view-20 counter buffer is therefore 603 uints / 2412 B; allocations, `WorldPush`, inline push
+constants and replay ABI 10 remain unchanged.
+
+At full 1280x673 resolution the gate passed 12 fresh Vulkan readbacks / 137581 Bernoulli-ready
+winners. Exactly 125834 selected and 11747 retained outcomes reached ready, including one valid
+retained empty result. Current, next, selected-target, selected-final, retained-target and
+retained-final rejects were all zero. Weight and count were uncapped for all 137581 runtime
+records; CPU tests cover both caps and overflow boundaries. Previous output split into 128009
+selected + 9572 retained, original source into 9431 identity + 128150 mapped, and all records used
+one segment. Every terminal, branch, cap, ownership and gate delta was zero, with no Vulkan/device/
+GPU/shader failure. The next gate may assemble the complete selected/retained reservoir record in
+registers and validate its lane policy, still without a root pair, scratch/history write or
+ordinary-estimator contribution.
+
 ## Delivery Phases
 
 ### Phase 0 — Wavefront Integration Baseline

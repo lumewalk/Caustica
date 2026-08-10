@@ -2379,6 +2379,110 @@ final class RtPathSpatialReuseReference {
                 probability == 1.0 && !selected);
     }
 
+    record BranchWinnerDirectPostSelectionAudit(
+            BranchDirectPostSelectionOutcome outcome,
+            BranchDirectStoredCapOutcome weightCap,
+            BranchDirectStoredCapOutcome countCap,
+            double nextWeightSum,
+            double nextEffectiveCount,
+            double selectedTarget,
+            double finalWeight,
+            boolean sourceSelected,
+            boolean empty) {
+    }
+
+    /** CPU authority for winner post-selection arithmetic without constructing a reservoir. */
+    static BranchWinnerDirectPostSelectionAudit branchWinnerDirectPostSelectionAudit(
+            BranchDirectBernoulliOutcome bernoulliOutcome,
+            double currentWeightSum, double currentEffectiveCount, double currentTarget,
+            double mergeWeight, double sourceEffectiveCount, double shiftedTarget) {
+        boolean bernoulliReady = bernoulliOutcome == BranchDirectBernoulliOutcome.SELECTED
+                || bernoulliOutcome == BranchDirectBernoulliOutcome.RETAINED;
+        boolean sourceSelected = bernoulliOutcome == BranchDirectBernoulliOutcome.SELECTED;
+        if (!bernoulliReady) {
+            return branchWinnerDirectPostSelectionReject(
+                    BranchDirectPostSelectionOutcome.BERNOULLI_REJECT, sourceSelected);
+        }
+        if (!nonNegativeFinite(currentWeightSum)
+                || !nonNegativeFinite(currentEffectiveCount)
+                || !nonNegativeFinite(currentTarget)) {
+            return branchWinnerDirectPostSelectionReject(
+                    BranchDirectPostSelectionOutcome.CURRENT_REJECT, sourceSelected);
+        }
+        if (!nonNegativeFinite(mergeWeight)
+                || !nonNegativeFinite(sourceEffectiveCount)
+                || !nonNegativeFinite(shiftedTarget)) {
+            return branchWinnerDirectPostSelectionReject(
+                    BranchDirectPostSelectionOutcome.NEXT_REJECT, sourceSelected);
+        }
+
+        double sourceCount = Math.min(sourceEffectiveCount, MAX_SPATIAL_SOURCE_COUNT);
+        boolean weightCapped = currentWeightSum > MAX_STORED_WEIGHT_SUM - mergeWeight;
+        boolean countCapped = currentEffectiveCount
+                > MAX_STORED_EFFECTIVE_COUNT - sourceCount;
+        double nextWeightSum = weightCapped
+                ? MAX_STORED_WEIGHT_SUM : currentWeightSum + mergeWeight;
+        double nextEffectiveCount = countCapped
+                ? MAX_STORED_EFFECTIVE_COUNT : currentEffectiveCount + sourceCount;
+        if (!nonNegativeFinite(nextWeightSum) || !nonNegativeFinite(nextEffectiveCount)) {
+            return branchWinnerDirectPostSelectionReject(
+                    BranchDirectPostSelectionOutcome.NEXT_REJECT, sourceSelected);
+        }
+
+        BranchDirectStoredCapOutcome weightCap = weightCapped
+                ? BranchDirectStoredCapOutcome.CAPPED
+                : BranchDirectStoredCapOutcome.UNCAPPED;
+        BranchDirectStoredCapOutcome countCap = countCapped
+                ? BranchDirectStoredCapOutcome.CAPPED
+                : BranchDirectStoredCapOutcome.UNCAPPED;
+        double selectedTarget = sourceSelected ? shiftedTarget : currentTarget;
+        boolean empty = nextWeightSum == 0.0;
+        if (!nonNegativeFinite(selectedTarget) || (!empty && selectedTarget == 0.0)) {
+            return new BranchWinnerDirectPostSelectionAudit(
+                    sourceSelected
+                            ? BranchDirectPostSelectionOutcome.SELECTED_TARGET_REJECT
+                            : BranchDirectPostSelectionOutcome.RETAINED_TARGET_REJECT,
+                    weightCap, countCap, nextWeightSum, nextEffectiveCount,
+                    selectedTarget, 0.0, sourceSelected, false);
+        }
+
+        double finalWeight = 0.0;
+        if (!empty) {
+            if (nextEffectiveCount == 0.0) {
+                return new BranchWinnerDirectPostSelectionAudit(
+                        sourceSelected
+                                ? BranchDirectPostSelectionOutcome.SELECTED_FINAL_REJECT
+                                : BranchDirectPostSelectionOutcome.RETAINED_FINAL_REJECT,
+                        weightCap, countCap, nextWeightSum, nextEffectiveCount,
+                        selectedTarget, 0.0, sourceSelected, false);
+            }
+            double denominator = nextEffectiveCount * selectedTarget;
+            finalWeight = nextWeightSum / denominator;
+            if (!positiveFinite(denominator) || !positiveFinite(finalWeight)) {
+                return new BranchWinnerDirectPostSelectionAudit(
+                        sourceSelected
+                                ? BranchDirectPostSelectionOutcome.SELECTED_FINAL_REJECT
+                                : BranchDirectPostSelectionOutcome.RETAINED_FINAL_REJECT,
+                        weightCap, countCap, nextWeightSum, nextEffectiveCount,
+                        selectedTarget, 0.0, sourceSelected, false);
+            }
+        }
+        return new BranchWinnerDirectPostSelectionAudit(
+                sourceSelected
+                        ? BranchDirectPostSelectionOutcome.SELECTED_READY
+                        : BranchDirectPostSelectionOutcome.RETAINED_READY,
+                weightCap, countCap, nextWeightSum, nextEffectiveCount,
+                selectedTarget, finalWeight, sourceSelected, empty);
+    }
+
+    private static BranchWinnerDirectPostSelectionAudit branchWinnerDirectPostSelectionReject(
+            BranchDirectPostSelectionOutcome outcome, boolean sourceSelected) {
+        return new BranchWinnerDirectPostSelectionAudit(outcome,
+                BranchDirectStoredCapOutcome.NOT_ELIGIBLE,
+                BranchDirectStoredCapOutcome.NOT_ELIGIBLE,
+                0.0, 0.0, 0.0, 0.0, sourceSelected, false);
+    }
+
     /**
      * Ordered CPU mirror for the post-barrier exact-lane validation sample. Reservoir and root
      * equality are bitwise requirements; acceptance remains diagnostic-only.

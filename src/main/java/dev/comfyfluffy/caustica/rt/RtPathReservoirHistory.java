@@ -619,7 +619,28 @@ final class RtPathReservoirHistory {
     static final int GUIDE_BRANCH_WINNER_BERNOULLI_ONE_SEGMENT_INDEX = 579;
     static final int GUIDE_BRANCH_WINNER_BERNOULLI_TWO_SEGMENT_INDEX = 580;
     static final int GUIDE_BRANCH_WINNER_BERNOULLI_DELTA_INDEX = 581;
-    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 582;
+    static final int GUIDE_BRANCH_WINNER_POST_SELECTION_ELIGIBLE_INDEX = 582;
+    static final int GUIDE_BRANCH_WINNER_POST_SELECTION_CURRENT_REJECT_INDEX = 583;
+    static final int GUIDE_BRANCH_WINNER_POST_SELECTION_NEXT_INVALID_INDEX = 584;
+    static final int GUIDE_BRANCH_WINNER_POST_SELECTION_SELECTED_READY_INDEX = 585;
+    static final int GUIDE_BRANCH_WINNER_POST_SELECTION_SELECTED_TARGET_REJECT_INDEX = 586;
+    static final int GUIDE_BRANCH_WINNER_POST_SELECTION_SELECTED_FINAL_REJECT_INDEX = 587;
+    static final int GUIDE_BRANCH_WINNER_POST_SELECTION_RETAINED_READY_INDEX = 588;
+    static final int GUIDE_BRANCH_WINNER_POST_SELECTION_RETAINED_TARGET_REJECT_INDEX = 589;
+    static final int GUIDE_BRANCH_WINNER_POST_SELECTION_RETAINED_FINAL_REJECT_INDEX = 590;
+    static final int GUIDE_BRANCH_WINNER_POST_SELECTION_EMPTY_READY_INDEX = 591;
+    static final int GUIDE_BRANCH_WINNER_POST_SELECTION_WEIGHT_UNCAPPED_INDEX = 592;
+    static final int GUIDE_BRANCH_WINNER_POST_SELECTION_WEIGHT_CAPPED_INDEX = 593;
+    static final int GUIDE_BRANCH_WINNER_POST_SELECTION_COUNT_UNCAPPED_INDEX = 594;
+    static final int GUIDE_BRANCH_WINNER_POST_SELECTION_COUNT_CAPPED_INDEX = 595;
+    static final int GUIDE_BRANCH_WINNER_POST_SELECTION_PREVIOUS_SELECTED_INDEX = 596;
+    static final int GUIDE_BRANCH_WINNER_POST_SELECTION_PREVIOUS_RETAINED_INDEX = 597;
+    static final int GUIDE_BRANCH_WINNER_POST_SELECTION_IDENTITY_SOURCE_INDEX = 598;
+    static final int GUIDE_BRANCH_WINNER_POST_SELECTION_MAPPED_SOURCE_INDEX = 599;
+    static final int GUIDE_BRANCH_WINNER_POST_SELECTION_ONE_SEGMENT_INDEX = 600;
+    static final int GUIDE_BRANCH_WINNER_POST_SELECTION_TWO_SEGMENT_INDEX = 601;
+    static final int GUIDE_BRANCH_WINNER_POST_SELECTION_DELTA_INDEX = 602;
+    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 603;
     static final int SHIFTED_RECEIVER_GUIDE_STRIDE = 8 * Float.BYTES;
     static final int BRANCH_RECEIVER_OWNERSHIP_STRIDE = 2 * Integer.BYTES;
     static final int BRANCH_CANDIDATE_TAG_STRIDE = 2 * Integer.BYTES;
@@ -2188,6 +2209,50 @@ final class RtPathReservoirHistory {
                     counters.get(GUIDE_BRANCH_WINNER_BERNOULLI_ONE_SEGMENT_INDEX));
             long guideBranchWinnerBernoulliTwoSegment = Integer.toUnsignedLong(
                     counters.get(GUIDE_BRANCH_WINNER_BERNOULLI_TWO_SEGMENT_INDEX));
+            long guideBranchWinnerPostSelectionEligible = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_POST_SELECTION_ELIGIBLE_INDEX));
+            long guideBranchWinnerPostSelectionCurrentReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_POST_SELECTION_CURRENT_REJECT_INDEX));
+            long guideBranchWinnerPostSelectionNextInvalid = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_POST_SELECTION_NEXT_INVALID_INDEX));
+            long guideBranchWinnerPostSelectionSelectedReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_POST_SELECTION_SELECTED_READY_INDEX));
+            long guideBranchWinnerPostSelectionSelectedTargetReject = Integer.toUnsignedLong(
+                    counters.get(
+                            GUIDE_BRANCH_WINNER_POST_SELECTION_SELECTED_TARGET_REJECT_INDEX));
+            long guideBranchWinnerPostSelectionSelectedFinalReject = Integer.toUnsignedLong(
+                    counters.get(
+                            GUIDE_BRANCH_WINNER_POST_SELECTION_SELECTED_FINAL_REJECT_INDEX));
+            long guideBranchWinnerPostSelectionRetainedReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_POST_SELECTION_RETAINED_READY_INDEX));
+            long guideBranchWinnerPostSelectionRetainedTargetReject = Integer.toUnsignedLong(
+                    counters.get(
+                            GUIDE_BRANCH_WINNER_POST_SELECTION_RETAINED_TARGET_REJECT_INDEX));
+            long guideBranchWinnerPostSelectionRetainedFinalReject = Integer.toUnsignedLong(
+                    counters.get(
+                            GUIDE_BRANCH_WINNER_POST_SELECTION_RETAINED_FINAL_REJECT_INDEX));
+            long guideBranchWinnerPostSelectionEmptyReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_POST_SELECTION_EMPTY_READY_INDEX));
+            long guideBranchWinnerPostSelectionWeightUncapped = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_POST_SELECTION_WEIGHT_UNCAPPED_INDEX));
+            long guideBranchWinnerPostSelectionWeightCapped = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_POST_SELECTION_WEIGHT_CAPPED_INDEX));
+            long guideBranchWinnerPostSelectionCountUncapped = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_POST_SELECTION_COUNT_UNCAPPED_INDEX));
+            long guideBranchWinnerPostSelectionCountCapped = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_POST_SELECTION_COUNT_CAPPED_INDEX));
+            long guideBranchWinnerPostSelectionPreviousSelected = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_POST_SELECTION_PREVIOUS_SELECTED_INDEX));
+            long guideBranchWinnerPostSelectionPreviousRetained = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_POST_SELECTION_PREVIOUS_RETAINED_INDEX));
+            long guideBranchWinnerPostSelectionIdentitySource = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_POST_SELECTION_IDENTITY_SOURCE_INDEX));
+            long guideBranchWinnerPostSelectionMappedSource = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_POST_SELECTION_MAPPED_SOURCE_INDEX));
+            long guideBranchWinnerPostSelectionOneSegment = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_POST_SELECTION_ONE_SEGMENT_INDEX));
+            long guideBranchWinnerPostSelectionTwoSegment = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_POST_SELECTION_TWO_SEGMENT_INDEX));
             long crossFrameReceiverReject = crossFrameReceiverSurfaceReject
                     + crossFrameReceiverSampleReject + crossFrameReceiverEdgeReject
                     + crossFrameReceiverTopologyReject + crossFrameReceiverDepthReject
@@ -3726,6 +3791,41 @@ final class RtPathReservoirHistory {
             long guideBranchWinnerBernoulliSegments =
                     guideBranchWinnerBernoulliOneSegment
                             + guideBranchWinnerBernoulliTwoSegment;
+            long guideBranchWinnerPostSelectionSelectedTerminal =
+                    guideBranchWinnerPostSelectionSelectedReady
+                            + guideBranchWinnerPostSelectionSelectedTargetReject
+                            + guideBranchWinnerPostSelectionSelectedFinalReject;
+            long guideBranchWinnerPostSelectionRetainedTerminal =
+                    guideBranchWinnerPostSelectionRetainedReady
+                            + guideBranchWinnerPostSelectionRetainedTargetReject
+                            + guideBranchWinnerPostSelectionRetainedFinalReject;
+            long guideBranchWinnerPostSelectionTerminal =
+                    guideBranchWinnerPostSelectionCurrentReject
+                            + guideBranchWinnerPostSelectionNextInvalid
+                            + guideBranchWinnerPostSelectionSelectedTerminal
+                            + guideBranchWinnerPostSelectionRetainedTerminal;
+            long guideBranchWinnerPostSelectionReady =
+                    guideBranchWinnerPostSelectionSelectedReady
+                            + guideBranchWinnerPostSelectionRetainedReady;
+            long guideBranchWinnerPostSelectionCapEligible =
+                    guideBranchWinnerPostSelectionEligible
+                            - guideBranchWinnerPostSelectionCurrentReject
+                            - guideBranchWinnerPostSelectionNextInvalid;
+            long guideBranchWinnerPostSelectionWeightCap =
+                    guideBranchWinnerPostSelectionWeightUncapped
+                            + guideBranchWinnerPostSelectionWeightCapped;
+            long guideBranchWinnerPostSelectionCountCap =
+                    guideBranchWinnerPostSelectionCountUncapped
+                            + guideBranchWinnerPostSelectionCountCapped;
+            long guideBranchWinnerPostSelectionPrevious =
+                    guideBranchWinnerPostSelectionPreviousSelected
+                            + guideBranchWinnerPostSelectionPreviousRetained;
+            long guideBranchWinnerPostSelectionSource =
+                    guideBranchWinnerPostSelectionIdentitySource
+                            + guideBranchWinnerPostSelectionMappedSource;
+            long guideBranchWinnerPostSelectionSegments =
+                    guideBranchWinnerPostSelectionOneSegment
+                            + guideBranchWinnerPostSelectionTwoSegment;
             CausticaMod.LOGGER.info(
                     "RT path guide branch winner direct remap: "
                             + "replayAccepted={} remap[eligible={},guide={},edge={},geometry={},"
@@ -3841,6 +3941,59 @@ final class RtPathReservoirHistory {
                     guideBranchWinnerBernoulliOneSegment,
                     guideBranchWinnerBernoulliTwoSegment,
                     guideBranchWinnerBernoulliReady - guideBranchWinnerBernoulliSegments);
+            CausticaMod.LOGGER.info(
+                    "RT path guide branch winner post-selection: BernoulliReady={} "
+                            + "eligible={} currentReject={} nextInvalid={} "
+                            + "selected[ready={},targetReject={},finalReject={},terminal={},"
+                            + "gateDelta={}] retained[ready={},targetReject={},finalReject={},"
+                            + "terminal={},gateDelta={}] empty={} terminal={} delta={} gateDelta={} "
+                            + "weight[uncapped={},capped={},delta={}] "
+                            + "count[uncapped={},capped={},delta={}] "
+                            + "previous[selected={},retained={},delta={}] "
+                            + "source[identity={},mapped={},delta={}] "
+                            + "segments[one={},two={},delta={}]",
+                    guideBranchWinnerBernoulliReady,
+                    guideBranchWinnerPostSelectionEligible,
+                    guideBranchWinnerPostSelectionCurrentReject,
+                    guideBranchWinnerPostSelectionNextInvalid,
+                    guideBranchWinnerPostSelectionSelectedReady,
+                    guideBranchWinnerPostSelectionSelectedTargetReject,
+                    guideBranchWinnerPostSelectionSelectedFinalReject,
+                    guideBranchWinnerPostSelectionSelectedTerminal,
+                    guideBranchWinnerBernoulliSelected
+                            - guideBranchWinnerPostSelectionSelectedTerminal,
+                    guideBranchWinnerPostSelectionRetainedReady,
+                    guideBranchWinnerPostSelectionRetainedTargetReject,
+                    guideBranchWinnerPostSelectionRetainedFinalReject,
+                    guideBranchWinnerPostSelectionRetainedTerminal,
+                    guideBranchWinnerBernoulliRetained
+                            - guideBranchWinnerPostSelectionRetainedTerminal,
+                    guideBranchWinnerPostSelectionEmptyReady,
+                    guideBranchWinnerPostSelectionTerminal,
+                    guideBranchWinnerPostSelectionEligible
+                            - guideBranchWinnerPostSelectionTerminal,
+                    guideBranchWinnerBernoulliReady
+                            - guideBranchWinnerPostSelectionEligible,
+                    guideBranchWinnerPostSelectionWeightUncapped,
+                    guideBranchWinnerPostSelectionWeightCapped,
+                    guideBranchWinnerPostSelectionCapEligible
+                            - guideBranchWinnerPostSelectionWeightCap,
+                    guideBranchWinnerPostSelectionCountUncapped,
+                    guideBranchWinnerPostSelectionCountCapped,
+                    guideBranchWinnerPostSelectionCapEligible
+                            - guideBranchWinnerPostSelectionCountCap,
+                    guideBranchWinnerPostSelectionPreviousSelected,
+                    guideBranchWinnerPostSelectionPreviousRetained,
+                    guideBranchWinnerPostSelectionReady
+                            - guideBranchWinnerPostSelectionPrevious,
+                    guideBranchWinnerPostSelectionIdentitySource,
+                    guideBranchWinnerPostSelectionMappedSource,
+                    guideBranchWinnerPostSelectionReady
+                            - guideBranchWinnerPostSelectionSource,
+                    guideBranchWinnerPostSelectionOneSegment,
+                    guideBranchWinnerPostSelectionTwoSegment,
+                    guideBranchWinnerPostSelectionReady
+                            - guideBranchWinnerPostSelectionSegments);
             spatialDiagnosticViewPending = 0;
             return;
         }
