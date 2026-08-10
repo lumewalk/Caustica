@@ -900,6 +900,28 @@ full-resolution diagnostic slot is written, the next bounded gate must measure t
 prove a deterministic single-writer selection/ownership policy with reset and generation
 semantics. The new bounded arrays are evidence storage only and cannot become path history.
 
+That receiver-ownership gate is now proven. Each replay-approved aged pair emits a 16-byte claim
+bound to its exact ring index, current frame/generation and reprojected receiver. A cleared
+8-byte-per-receiver sidecar counts fan-in and uses a commutative `atomicMax` priority: age 1 wins
+over age 2/3, then the smaller 14-bit ring index wins. The priority bands are disjoint, unique and
+non-zero, so invocation scheduling cannot change the result. A separate post-barrier pass decodes
+the winner, reopens its ring entry, and verifies age, generation, receiver, source/output mapping
+and replay segment metadata. No path payload is copied by this gate.
+
+The claim tail increases diagnostic sample storage to 9568256 bytes (9.125 MiB). Ownership adds
+8 B/pixel to the lazy receiver-guide allocation (6.57 MiB at 1280x673); counter storage is
+491 uints / 1964 B. Across 36 Vulkan readbacks, all 130558 claims closed exactly over 129703
+occupied receivers: 128848 unique and 855 fan-in-two collisions, with maximum fan-in two. All
+129703 winners validated: 116715 selected plus 12988 retained, ages 1/2/3 of
+43947/43955/41801, and original source ownership of 10714 identity plus 118989 mapped. Metadata
+rejects and every accounting/partition delta were zero; runtime again exercised one-segment paths.
+
+Receiver collision is therefore no longer a write race, but the winner still exists only as
+ownership metadata. The next gate may copy the winning complete reservoir/root pair into a
+separate full-resolution view-20 scratch slot and compare it after a barrier. It must not reuse the
+existing one-frame branch scratch, commit path history, or feed the estimator until that lifecycle
+is independently proven.
+
 ## Delivery Phases
 
 ### Phase 0 — Wavefront Integration Baseline

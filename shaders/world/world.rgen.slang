@@ -1703,6 +1703,19 @@ static const uint PATH_BRANCH_AGED_STORAGE_STORED_BYTE_OFFSET =
         PATH_BRANCH_AGED_STORAGE_EXPECTED_BYTE_OFFSET
                 + PATH_BRANCH_SCRATCH_CAPTURE_CAPACITY
                         * PATH_BRANCH_AGED_STORAGE_CAPTURE_STRIDE_BYTES;
+static const uint PATH_BRANCH_RECEIVER_OWNER_CLAIM_BYTE_OFFSET =
+        PATH_BRANCH_AGED_STORAGE_STORED_BYTE_OFFSET
+                + PATH_BRANCH_SCRATCH_CAPTURE_CAPACITY
+                        * PATH_BRANCH_AGED_STORAGE_CAPTURE_STRIDE_BYTES;
+static const uint PATH_BRANCH_RECEIVER_OWNER_CLAIM_CAPACITY =
+        PATH_BRANCH_SCRATCH_CAPTURE_CAPACITY * PATH_BRANCH_CANDIDATE_HISTORY_SLOT_COUNT;
+static const uint PATH_BRANCH_RECEIVER_OWNER_CLAIM_STRIDE_BYTES = 16u;
+static const uint PATH_SHIFT_RECEIVER_GUIDE_STRIDE_BYTES = 32u;
+static const uint PATH_BRANCH_RECEIVER_OWNER_INDEX_MASK = 0x3FFFu;
+static const uint PATH_BRANCH_RECEIVER_OWNER_PRIORITY_MASK = 0xFFFFu;
+static const uint PATH_BRANCH_RECEIVER_OWNER_OUTPUT_MAPPING_SHIFT = 16u;
+static const uint PATH_BRANCH_RECEIVER_OWNER_SOURCE_MAPPING_SHIFT = 20u;
+static const uint PATH_BRANCH_RECEIVER_OWNER_SEGMENT_SHIFT = 24u;
 static const uint PATH_BRANCH_CANDIDATE_PROMOTION_MAGIC = 0xC411DA7Eu;
 static const uint PATH_SOURCE_ROOT_STRIDE_BYTES = 160u;
 static const uint PATH_BRANCH_CANDIDATE_TAG_VALID_BIT = 0x80000000u;
@@ -1758,6 +1771,35 @@ static uint pathBranchAgedStorageControl(
     return (sourceMappingKind & 0xFFu)
             | ((outputMappingKind & 0xFFu) << 8u)
             | ((replaySegments & 0xFFu) << 16u);
+}
+
+static uint64_t pathBranchReceiverOwnerClaimAddress(uint64_t sampleAddress) {
+    return sampleAddress + uint64_t(PATH_BRANCH_RECEIVER_OWNER_CLAIM_BYTE_OFFSET);
+}
+
+static uint64_t pathBranchReceiverOwnershipAddress(
+        uint64_t receiverGuideAddress, uint pixelCount) {
+    return receiverGuideAddress
+            + uint64_t(pixelCount) * uint64_t(PATH_SHIFT_RECEIVER_GUIDE_STRIDE_BYTES);
+}
+
+// Atomic-max makes ownership independent of invocation order: age 1 outranks age 2/3, then the
+// smaller exact ring index wins. The three age bands and 14-bit ring index make every live claim's
+// priority unique and non-zero.
+static uint pathBranchReceiverOwnerPriority(uint age, uint linearIndex) {
+    return ((4u - age) << 14u)
+            | (PATH_BRANCH_RECEIVER_OWNER_INDEX_MASK - linearIndex);
+}
+
+static uint pathBranchReceiverOwnerControl(
+        uint priority, uint outputMappingKind, uint sourceMappingKind,
+        uint replaySegments) {
+    return (priority & PATH_BRANCH_RECEIVER_OWNER_PRIORITY_MASK)
+            | ((outputMappingKind & 0xFu)
+                    << PATH_BRANCH_RECEIVER_OWNER_OUTPUT_MAPPING_SHIFT)
+            | ((sourceMappingKind & 0xFu)
+                    << PATH_BRANCH_RECEIVER_OWNER_SOURCE_MAPPING_SHIFT)
+            | ((replaySegments & 0xFu) << PATH_BRANCH_RECEIVER_OWNER_SEGMENT_SHIFT);
 }
 
 static bool pathReservoirBitsMatch(PathReservoir a, PathReservoir b);
@@ -1836,6 +1878,115 @@ static void pathBranchAgedStorageValidate() {
     InterlockedAdd(counters[replaySegments == 1u
             ? PATH_GUIDE_BRANCH_AGED_STORAGE_VALIDATE_ONE_SEGMENT_ACCEPTED
             : PATH_GUIDE_BRANCH_AGED_STORAGE_VALIDATE_TWO_SEGMENT_ACCEPTED], 1u);
+}
+
+static void pathBranchReceiverOwnerValidate() {
+    if (pc.debugView != PATH_SHIFTED_RADIANCE_DEBUG_VIEW
+            || (pc.historyFlags & PATH_GUIDE_BRANCH_RECEIVER_OWNER_VALIDATE_PASS_FLAG) == 0u
+            || worldPush.pathShiftDiagnosticCounterAddr == 0u
+            || worldPush.pathShiftDiagnosticPairAddr == 0u
+            || worldPush.pathShiftReceiverGuideAddr == 0u) {
+        return;
+    }
+    uint2 pixel = DispatchRaysIndex().xy;
+    uint2 dimensions = DispatchRaysDimensions().xy;
+    uint pixelIndex = pixel.y * dimensions.x + pixel.x;
+    uint pixelCount = dimensions.x * dimensions.y;
+    DevicePtr<uint> counters = DevicePtr<uint>(worldPush.pathShiftDiagnosticCounterAddr);
+    InterlockedAdd(counters[PATH_GUIDE_BRANCH_RECEIVER_OWNER_VALIDATE_ATTEMPTED], 1u);
+
+    ConstPtr<uint> ownership = ConstPtr<uint>(pathBranchReceiverOwnershipAddress(
+            worldPush.pathShiftReceiverGuideAddr, pixelCount));
+    uint fanIn = ownership[pixelIndex * 2u];
+    uint winnerPriority = ownership[pixelIndex * 2u + 1u];
+    if (fanIn == 0u) {
+        InterlockedAdd(counters[PATH_GUIDE_BRANCH_RECEIVER_OWNER_EMPTY], 1u);
+        return;
+    }
+
+    InterlockedAdd(counters[fanIn == 1u
+            ? PATH_GUIDE_BRANCH_RECEIVER_OWNER_UNIQUE
+            : PATH_GUIDE_BRANCH_RECEIVER_OWNER_COLLISION], 1u);
+    if (fanIn > 1u) {
+        InterlockedAdd(counters[fanIn == 2u
+                ? PATH_GUIDE_BRANCH_RECEIVER_OWNER_FAN_IN_TWO
+                : fanIn == 3u
+                        ? PATH_GUIDE_BRANCH_RECEIVER_OWNER_FAN_IN_THREE
+                        : PATH_GUIDE_BRANCH_RECEIVER_OWNER_FAN_IN_FOUR_PLUS], 1u);
+    }
+    InterlockedMax(counters[PATH_GUIDE_BRANCH_RECEIVER_OWNER_MAX_FAN_IN], fanIn);
+    InterlockedAdd(counters[PATH_GUIDE_BRANCH_RECEIVER_OWNER_CLAIM_SUM], fanIn);
+
+    uint priorityAgeBand = winnerPriority >> 14u;
+    uint winnerAge = priorityAgeBand >= 1u && priorityAgeBand <= 3u
+            ? 4u - priorityAgeBand : 0u;
+    uint winnerLinearIndex = PATH_BRANCH_RECEIVER_OWNER_INDEX_MASK
+            - (winnerPriority & PATH_BRANCH_RECEIVER_OWNER_INDEX_MASK);
+    ConstPtr<uint4> claims = ConstPtr<uint4>(pathBranchReceiverOwnerClaimAddress(
+            worldPush.pathShiftDiagnosticPairAddr));
+    uint4 claim = winnerLinearIndex < PATH_BRANCH_RECEIVER_OWNER_CLAIM_CAPACITY
+            ? claims[winnerLinearIndex] : uint4(0u);
+    uint claimPriority = claim.w & PATH_BRANCH_RECEIVER_OWNER_PRIORITY_MASK;
+    uint outputMappingKind = (claim.w
+            >> PATH_BRANCH_RECEIVER_OWNER_OUTPUT_MAPPING_SHIFT) & 0xFu;
+    uint sourceMappingKind = (claim.w
+            >> PATH_BRANCH_RECEIVER_OWNER_SOURCE_MAPPING_SHIFT) & 0xFu;
+    uint replaySegments = (claim.w
+            >> PATH_BRANCH_RECEIVER_OWNER_SEGMENT_SHIFT) & 0xFu;
+    uint currentGeneration = pc.historyGeneration & PATH_GENERATION_MASK;
+    uint slot = winnerLinearIndex / PATH_BRANCH_SCRATCH_CAPTURE_CAPACITY;
+    uint sampleIndex = winnerLinearIndex % PATH_BRANCH_SCRATCH_CAPTURE_CAPACITY;
+    ConstPtr<PathBranchScratchCapture> captures = ConstPtr<PathBranchScratchCapture>(
+            pathBranchCaptureStorageAddress(worldPush.pathShiftDiagnosticPairAddr, slot));
+    PathBranchScratchCapture capture = {};
+    if (winnerLinearIndex < PATH_BRANCH_RECEIVER_OWNER_CLAIM_CAPACITY) {
+        capture = captures[sampleIndex];
+    }
+    bool captureFrameValid = capture.promotion.x == PATH_BRANCH_CANDIDATE_PROMOTION_MAGIC
+            && capture.promotion.y <= worldPush.frameIndex;
+    uint captureAge = captureFrameValid
+            ? worldPush.frameIndex - capture.promotion.y : 0u;
+    bool metadataValid = winnerPriority != 0u
+            && winnerLinearIndex < PATH_BRANCH_RECEIVER_OWNER_CLAIM_CAPACITY
+            && claim.x == worldPush.frameIndex
+            && claim.y == currentGeneration
+            && claim.z == pixelIndex
+            && claimPriority == winnerPriority
+            && winnerAge >= 1u
+            && winnerAge < PATH_BRANCH_CANDIDATE_HISTORY_SLOT_COUNT
+            && captureAge == winnerAge
+            && capture.promotion.z == currentGeneration
+            && capture.promotion.w == sourceMappingKind
+            && capture.metadata.y == sourceMappingKind
+            && capture.metadata.w == currentGeneration
+            && pathMappingKind(capture.reservoir) == sourceMappingKind
+            && (sourceMappingKind == PATH_MAPPING_IDENTITY
+                    || sourceMappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION)
+            && (outputMappingKind == PATH_MAPPING_IDENTITY
+                    || outputMappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION)
+            && (replaySegments == 1u || replaySegments == MAX_PATH_SEGMENTS)
+            && (claim.w & 0xF0000000u) == 0u;
+    if (!metadataValid) {
+        InterlockedAdd(counters[
+                PATH_GUIDE_BRANCH_RECEIVER_OWNER_WINNER_METADATA_REJECT], 1u);
+        return;
+    }
+
+    InterlockedAdd(counters[PATH_GUIDE_BRANCH_RECEIVER_OWNER_WINNER_ACCEPTED], 1u);
+    InterlockedAdd(counters[outputMappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION
+            ? PATH_GUIDE_BRANCH_RECEIVER_OWNER_WINNER_SELECTED
+            : PATH_GUIDE_BRANCH_RECEIVER_OWNER_WINNER_RETAINED], 1u);
+    InterlockedAdd(counters[winnerAge == 1u
+            ? PATH_GUIDE_BRANCH_RECEIVER_OWNER_WINNER_AGE_ONE
+            : winnerAge == 2u
+                    ? PATH_GUIDE_BRANCH_RECEIVER_OWNER_WINNER_AGE_TWO
+                    : PATH_GUIDE_BRANCH_RECEIVER_OWNER_WINNER_AGE_THREE], 1u);
+    InterlockedAdd(counters[sourceMappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION
+            ? PATH_GUIDE_BRANCH_RECEIVER_OWNER_WINNER_MAPPED_SOURCE
+            : PATH_GUIDE_BRANCH_RECEIVER_OWNER_WINNER_IDENTITY_SOURCE], 1u);
+    InterlockedAdd(counters[replaySegments == 1u
+            ? PATH_GUIDE_BRANCH_RECEIVER_OWNER_WINNER_ONE_SEGMENT
+            : PATH_GUIDE_BRANCH_RECEIVER_OWNER_WINNER_TWO_SEGMENT], 1u);
 }
 
 static bool pathReservoirBitsMatch(PathReservoir a, PathReservoir b) {
@@ -2963,6 +3114,33 @@ static void pathBranchAgeReplayValidate() {
                     InterlockedAdd(counters[pairedSegments == 1u
                             ? PATH_GUIDE_BRANCH_DIRECT_PAIR_REPLAY_ONE_SEGMENT_ACCEPTED
                             : PATH_GUIDE_BRANCH_DIRECT_PAIR_REPLAY_TWO_SEGMENT_ACCEPTED], 1u);
+
+                    // Claim receiver ownership without writing a reservoir payload. Atomic-max is
+                    // commutative and uses a unique age/ring priority, so scheduling cannot change
+                    // the winner. A separate post-barrier pass validates the winning claim and
+                    // measures fan-in before any persistent receiver slot is allowed to exist.
+                    InterlockedAdd(counters[
+                            PATH_GUIDE_BRANCH_RECEIVER_OWNER_CLAIM_ELIGIBLE], 1u);
+                    uint ownerPriority = pathBranchReceiverOwnerPriority(age, linearIndex);
+                    uint ownerControl = pathBranchReceiverOwnerControl(
+                            ownerPriority, pathMappingKind(pairedRecord), mappingKind,
+                            pairedSegments);
+                    DevicePtr<uint4> ownerClaims = DevicePtr<uint4>(
+                            pathBranchReceiverOwnerClaimAddress(
+                                    worldPush.pathShiftDiagnosticPairAddr));
+                    ownerClaims[linearIndex] = uint4(
+                            worldPush.frameIndex, currentGeneration,
+                            receiverPixelIndex, ownerControl);
+                    uint ownershipPixelCount = guideDimensions.x * guideDimensions.y;
+                    DevicePtr<uint> receiverOwnership = DevicePtr<uint>(
+                            pathBranchReceiverOwnershipAddress(
+                                    worldPush.pathShiftReceiverGuideAddr,
+                                    ownershipPixelCount));
+                    InterlockedAdd(receiverOwnership[receiverPixelIndex * 2u], 1u);
+                    InterlockedMax(receiverOwnership[receiverPixelIndex * 2u + 1u],
+                            ownerPriority);
+                    InterlockedAdd(counters[
+                            PATH_GUIDE_BRANCH_RECEIVER_OWNER_CLAIM_WRITTEN], 1u);
 
                     // First isolated device-storage gate for the replay-accepted aged pair. The
                     // expected and stored arrays are both bounded, view-20-only diagnostic memory;
@@ -4277,6 +4455,10 @@ public void pathGuideScratchValidate() {
 [shader("raygeneration")]
 void main() {
     worldPush = ConstPtr<WorldPush>(pc.worldPushAddr)[0];
+    if ((pc.historyFlags & PATH_GUIDE_BRANCH_RECEIVER_OWNER_VALIDATE_PASS_FLAG) != 0u) {
+        pathBranchReceiverOwnerValidate();
+        return;
+    }
     if ((pc.historyFlags & PATH_GUIDE_BRANCH_AGED_STORAGE_VALIDATE_PASS_FLAG) != 0u) {
         pathBranchAgedStorageValidate();
         return;

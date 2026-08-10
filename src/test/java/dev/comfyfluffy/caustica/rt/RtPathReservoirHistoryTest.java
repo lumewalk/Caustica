@@ -15,8 +15,8 @@ final class RtPathReservoirHistoryTest {
         assertEquals(176, PathReservoirData.BYTE_SIZE);
         assertEquals(176, RtPathReservoirHistory.BYTES_PER_RESERVOIR);
         assertEquals(672, WorldPushData.BYTE_SIZE);
-        assertEquals(468, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
-        assertEquals(1872, RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_COUNTER_BYTES);
+        assertEquals(491, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
+        assertEquals(1964, RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_COUNTER_BYTES);
         assertEquals(1 << 8, RtPathReservoirHistory.GUIDE_PREVIOUS_REPLAY_PASS_FLAG);
         assertEquals(1 << 9, RtPathReservoirHistory.GUIDE_PREVIOUS_AVAILABLE_FLAG);
         assertEquals(1 << 10, RtPathReservoirHistory.GUIDE_BRANCH_PREVIOUS_AVAILABLE_FLAG);
@@ -27,6 +27,8 @@ final class RtPathReservoirHistoryTest {
         assertEquals(1 << 13, RtPathReservoirHistory.GUIDE_BRANCH_AGE_REPLAY_PASS_FLAG);
         assertEquals(1 << 14,
                 RtPathReservoirHistory.GUIDE_BRANCH_AGED_STORAGE_VALIDATE_PASS_FLAG);
+        assertEquals(1 << 15,
+                RtPathReservoirHistory.GUIDE_BRANCH_RECEIVER_OWNER_VALIDATE_PASS_FLAG);
     }
 
     @Test

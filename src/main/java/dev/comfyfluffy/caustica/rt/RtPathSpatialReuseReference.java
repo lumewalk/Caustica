@@ -28,6 +28,9 @@ final class RtPathSpatialReuseReference {
     static final int BRANCH_BERNOULLI_ENTRY_MULTIPLIER = 747_796_405;
     static final int BRANCH_BERNOULLI_FRAME_MULTIPLIER = (int) 2_891_336_453L;
     static final int BRANCH_BERNOULLI_SALT = (int) 0x94D0_49BBL;
+    static final int BRANCH_RECEIVER_OWNER_INDEX_BITS = 14;
+    static final int BRANCH_RECEIVER_OWNER_INDEX_MASK =
+            (1 << BRANCH_RECEIVER_OWNER_INDEX_BITS) - 1;
 
     enum ReconnectionEvent {
         NONE(0),
@@ -1986,6 +1989,51 @@ final class RtPathSpatialReuseReference {
         return outputMappingKind == MappingKind.DIFFUSE_RECONNECTION
                 ? BranchAgedStorageOutcome.SELECTED_ACCEPTED
                 : BranchAgedStorageOutcome.RETAINED_ACCEPTED;
+    }
+
+    record BranchReceiverOwnerClaim(int age, int linearIndex) {
+        BranchReceiverOwnerClaim {
+            if (age < 1 || age > 3) {
+                throw new IllegalArgumentException("branch receiver owner age must be 1..3");
+            }
+            if (linearIndex < 0 || linearIndex > BRANCH_RECEIVER_OWNER_INDEX_MASK) {
+                throw new IllegalArgumentException(
+                        "branch receiver owner index must fit the four-slot ring");
+            }
+        }
+
+        int priority() {
+            return ((4 - age) << BRANCH_RECEIVER_OWNER_INDEX_BITS)
+                    | (BRANCH_RECEIVER_OWNER_INDEX_MASK - linearIndex);
+        }
+
+        static BranchReceiverOwnerClaim fromPriority(int priority) {
+            int ageBand = priority >>> BRANCH_RECEIVER_OWNER_INDEX_BITS;
+            int age = 4 - ageBand;
+            int linearIndex = BRANCH_RECEIVER_OWNER_INDEX_MASK
+                    - (priority & BRANCH_RECEIVER_OWNER_INDEX_MASK);
+            return new BranchReceiverOwnerClaim(age, linearIndex);
+        }
+    }
+
+    /** Commutative CPU mirror of the shader's atomic-max receiver ownership policy. */
+    static BranchReceiverOwnerClaim branchReceiverOwnerWinner(
+            BranchReceiverOwnerClaim... claims) {
+        if (claims == null || claims.length == 0) {
+            throw new IllegalArgumentException("receiver ownership requires at least one claim");
+        }
+        BranchReceiverOwnerClaim winner = null;
+        int winnerPriority = 0;
+        for (BranchReceiverOwnerClaim claim : claims) {
+            if (claim == null) {
+                throw new IllegalArgumentException("receiver ownership claim must be present");
+            }
+            if (claim.priority() > winnerPriority) {
+                winner = claim;
+                winnerPriority = claim.priority();
+            }
+        }
+        return BranchReceiverOwnerClaim.fromPriority(winnerPriority);
     }
 
     /**

@@ -467,7 +467,30 @@ public static const uint PATH_GUIDE_BRANCH_AGED_STORAGE_VALIDATE_MAPPED_SOURCE_A
 public static const uint PATH_GUIDE_BRANCH_AGED_STORAGE_VALIDATE_ONE_SEGMENT_ACCEPTED = 465u;
 public static const uint PATH_GUIDE_BRANCH_AGED_STORAGE_VALIDATE_TWO_SEGMENT_ACCEPTED = 466u;
 public static const uint PATH_GUIDE_BRANCH_AGED_STORAGE_VALIDATE_DELTA = 467u;
-public static const uint PATH_SHIFT_DIAGNOSTIC_COUNTER_COUNT = 468u;
+public static const uint PATH_GUIDE_BRANCH_RECEIVER_OWNER_CLAIM_ELIGIBLE = 468u;
+public static const uint PATH_GUIDE_BRANCH_RECEIVER_OWNER_CLAIM_WRITTEN = 469u;
+public static const uint PATH_GUIDE_BRANCH_RECEIVER_OWNER_VALIDATE_ATTEMPTED = 470u;
+public static const uint PATH_GUIDE_BRANCH_RECEIVER_OWNER_EMPTY = 471u;
+public static const uint PATH_GUIDE_BRANCH_RECEIVER_OWNER_UNIQUE = 472u;
+public static const uint PATH_GUIDE_BRANCH_RECEIVER_OWNER_COLLISION = 473u;
+public static const uint PATH_GUIDE_BRANCH_RECEIVER_OWNER_FAN_IN_TWO = 474u;
+public static const uint PATH_GUIDE_BRANCH_RECEIVER_OWNER_FAN_IN_THREE = 475u;
+public static const uint PATH_GUIDE_BRANCH_RECEIVER_OWNER_FAN_IN_FOUR_PLUS = 476u;
+public static const uint PATH_GUIDE_BRANCH_RECEIVER_OWNER_MAX_FAN_IN = 477u;
+public static const uint PATH_GUIDE_BRANCH_RECEIVER_OWNER_CLAIM_SUM = 478u;
+public static const uint PATH_GUIDE_BRANCH_RECEIVER_OWNER_WINNER_METADATA_REJECT = 479u;
+public static const uint PATH_GUIDE_BRANCH_RECEIVER_OWNER_WINNER_ACCEPTED = 480u;
+public static const uint PATH_GUIDE_BRANCH_RECEIVER_OWNER_WINNER_SELECTED = 481u;
+public static const uint PATH_GUIDE_BRANCH_RECEIVER_OWNER_WINNER_RETAINED = 482u;
+public static const uint PATH_GUIDE_BRANCH_RECEIVER_OWNER_WINNER_AGE_ONE = 483u;
+public static const uint PATH_GUIDE_BRANCH_RECEIVER_OWNER_WINNER_AGE_TWO = 484u;
+public static const uint PATH_GUIDE_BRANCH_RECEIVER_OWNER_WINNER_AGE_THREE = 485u;
+public static const uint PATH_GUIDE_BRANCH_RECEIVER_OWNER_WINNER_IDENTITY_SOURCE = 486u;
+public static const uint PATH_GUIDE_BRANCH_RECEIVER_OWNER_WINNER_MAPPED_SOURCE = 487u;
+public static const uint PATH_GUIDE_BRANCH_RECEIVER_OWNER_WINNER_ONE_SEGMENT = 488u;
+public static const uint PATH_GUIDE_BRANCH_RECEIVER_OWNER_WINNER_TWO_SEGMENT = 489u;
+public static const uint PATH_GUIDE_BRANCH_RECEIVER_OWNER_DELTA = 490u;
+public static const uint PATH_SHIFT_DIAGNOSTIC_COUNTER_COUNT = 491u;
 public static const uint PATH_SHIFT_DIAGNOSTIC_PAIR_MASK = 3u;
 public static const uint PATH_SHIFT_DIAGNOSTIC_MERGE_PAIR_OFFSET =
         PATH_SPATIAL_DIAGNOSTIC_PAIR_CAPACITY * 2u;
@@ -579,6 +602,7 @@ public static const uint PATH_GUIDE_BRANCH_SCRATCH_VALIDATE_PASS_FLAG = 2048u;
 public static const uint PATH_GUIDE_BRANCH_CANDIDATE_RETENTION_PASS_FLAG = 4096u;
 public static const uint PATH_GUIDE_BRANCH_AGE_REPLAY_PASS_FLAG = 8192u;
 public static const uint PATH_GUIDE_BRANCH_AGED_STORAGE_VALIDATE_PASS_FLAG = 16384u;
+public static const uint PATH_GUIDE_BRANCH_RECEIVER_OWNER_VALIDATE_PASS_FLAG = 32768u;
 // replayControl.y == 0 keeps a terminal sentinel outside the valid replay-segment domain. The
 // magic prevents a cleared or partially written record from being mistaken for an intentional
 // sample-copy terminal state.

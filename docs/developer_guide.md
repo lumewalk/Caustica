@@ -655,6 +655,29 @@ reproject to the same current receiver, so the next diagnostic boundary must mea
 and define a deterministic single-writer winner before any full-resolution persistent branch slot
 is written. The bounded arrays themselves must never be treated as committed path history.
 
+`RT path guide branch receiver ownership` now proves that boundary without storing a path payload.
+Every replay-approved aged pair writes one 16-byte frame/generation/receiver/control claim at its
+unique four-slot ring index and atomically increments an 8-byte-per-receiver ownership sidecar. A
+commutative `atomicMax` priority prefers age 1 over age 2 over age 3, then the smaller ring index;
+the three disjoint 14-bit age bands make every live priority unique and non-zero. The sidecar is
+cleared independently each view-20 frame, while stale claims fail the frame/generation checks.
+A separate post-barrier full-resolution pass validates the winner against its exact ring entry and
+partitions receiver fan-in, output branch, age, original source mapping and replay segment count.
+
+The claim array adds 262144 bytes, bringing the host-visible sample buffer to 9568256 bytes
+(9.125 MiB). The receiver ownership sidecar adds 8 B/pixel (6891520 bytes / 6.57 MiB at
+1280x673), and the counter buffer is 491 uints / 1964 B. All storage remains lazy and view-20-only;
+no `PathReservoir`, `PathSourceRoot`, committed history or estimator lane is written.
+
+Across 36 Vulkan readbacks, all 130558 replay-approved claims were written and recovered through
+the receiver sidecar. They occupied 129703 receivers: 128848 unique plus 855 collisions, all with
+fan-in two (`128848 + 2*855 = 130558`); maximum fan-in was two. Every occupied receiver produced
+one valid winner: 116715 selected and 12988 retained, ages 1/2/3 of 43947/43955/41801, original
+source ownership of 10714 identity plus 118989 mapped, and 129703 one-segment winners. Metadata
+rejects and every claim/receiver/collision/winner/partition delta were zero, with no Vulkan/GPU/
+shader error. The next isolated gate may write only the winner pair to a separate view-20
+full-resolution scratch slot and prove post-barrier equality; it still may not commit path history.
+
 For a fresh runtime check, use debug view 20 and inspect `run/logs/latest.log`. Normal operation
 requires `RT bring-up OK`, Vulkan, the intended NVIDIA device, exact zero-delta counter partitions,
 and no `DEVICE_LOST`, `VK_ERROR`, GPU fault or shader compilation error. Debug colors and sparse

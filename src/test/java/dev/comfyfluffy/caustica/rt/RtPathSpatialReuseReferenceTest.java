@@ -1551,6 +1551,30 @@ final class RtPathSpatialReuseReferenceTest {
     }
 
     @Test
+    void branchReceiverOwnershipPrefersYoungestThenStableRingIndex() {
+        var ageThreeFirst = new RtPathSpatialReuseReference.BranchReceiverOwnerClaim(3, 1);
+        var ageTwo = new RtPathSpatialReuseReference.BranchReceiverOwnerClaim(2, 8000);
+        var ageOneLater = new RtPathSpatialReuseReference.BranchReceiverOwnerClaim(1, 12000);
+        var ageOneEarlier = new RtPathSpatialReuseReference.BranchReceiverOwnerClaim(1, 100);
+
+        assertEquals(ageOneEarlier, RtPathSpatialReuseReference.branchReceiverOwnerWinner(
+                ageThreeFirst, ageOneLater, ageTwo, ageOneEarlier));
+        assertEquals(ageOneEarlier, RtPathSpatialReuseReference.branchReceiverOwnerWinner(
+                ageOneEarlier, ageTwo, ageOneLater, ageThreeFirst));
+        assertEquals(ageTwo, RtPathSpatialReuseReference.branchReceiverOwnerWinner(
+                ageThreeFirst, ageTwo));
+        assertEquals(ageOneEarlier,
+                RtPathSpatialReuseReference.BranchReceiverOwnerClaim.fromPriority(
+                        ageOneEarlier.priority()));
+        assertThrows(IllegalArgumentException.class,
+                () -> new RtPathSpatialReuseReference.BranchReceiverOwnerClaim(0, 1));
+        assertThrows(IllegalArgumentException.class,
+                () -> new RtPathSpatialReuseReference.BranchReceiverOwnerClaim(1, 16384));
+        assertThrows(IllegalArgumentException.class,
+                RtPathSpatialReuseReference::branchReceiverOwnerWinner);
+    }
+
+    @Test
     void pairedMomentsExposeCovarianceAndCorrelationWithoutBatchStorage() {
         var moments = new RtPathSpatialReuseReference.PairMoments();
         moments.add(1.0, 2.0);
@@ -2342,12 +2366,53 @@ final class RtPathSpatialReuseReferenceTest {
         assertEquals(466, RtPathReservoirHistory
                 .GUIDE_BRANCH_AGED_STORAGE_VALIDATE_TWO_SEGMENT_ACCEPTED_INDEX);
         assertEquals(467, RtPathReservoirHistory.GUIDE_BRANCH_AGED_STORAGE_VALIDATE_DELTA_INDEX);
-        assertEquals(468, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
-        assertEquals(468 * Integer.BYTES,
+        assertEquals(468,
+                RtPathReservoirHistory.GUIDE_BRANCH_RECEIVER_OWNER_CLAIM_ELIGIBLE_INDEX);
+        assertEquals(469,
+                RtPathReservoirHistory.GUIDE_BRANCH_RECEIVER_OWNER_CLAIM_WRITTEN_INDEX);
+        assertEquals(470,
+                RtPathReservoirHistory.GUIDE_BRANCH_RECEIVER_OWNER_VALIDATE_ATTEMPTED_INDEX);
+        assertEquals(471, RtPathReservoirHistory.GUIDE_BRANCH_RECEIVER_OWNER_EMPTY_INDEX);
+        assertEquals(472, RtPathReservoirHistory.GUIDE_BRANCH_RECEIVER_OWNER_UNIQUE_INDEX);
+        assertEquals(473, RtPathReservoirHistory.GUIDE_BRANCH_RECEIVER_OWNER_COLLISION_INDEX);
+        assertEquals(474, RtPathReservoirHistory.GUIDE_BRANCH_RECEIVER_OWNER_FAN_IN_TWO_INDEX);
+        assertEquals(475, RtPathReservoirHistory.GUIDE_BRANCH_RECEIVER_OWNER_FAN_IN_THREE_INDEX);
+        assertEquals(476,
+                RtPathReservoirHistory.GUIDE_BRANCH_RECEIVER_OWNER_FAN_IN_FOUR_PLUS_INDEX);
+        assertEquals(477, RtPathReservoirHistory.GUIDE_BRANCH_RECEIVER_OWNER_MAX_FAN_IN_INDEX);
+        assertEquals(478, RtPathReservoirHistory.GUIDE_BRANCH_RECEIVER_OWNER_CLAIM_SUM_INDEX);
+        assertEquals(479, RtPathReservoirHistory
+                .GUIDE_BRANCH_RECEIVER_OWNER_WINNER_METADATA_REJECT_INDEX);
+        assertEquals(480,
+                RtPathReservoirHistory.GUIDE_BRANCH_RECEIVER_OWNER_WINNER_ACCEPTED_INDEX);
+        assertEquals(481,
+                RtPathReservoirHistory.GUIDE_BRANCH_RECEIVER_OWNER_WINNER_SELECTED_INDEX);
+        assertEquals(482,
+                RtPathReservoirHistory.GUIDE_BRANCH_RECEIVER_OWNER_WINNER_RETAINED_INDEX);
+        assertEquals(483,
+                RtPathReservoirHistory.GUIDE_BRANCH_RECEIVER_OWNER_WINNER_AGE_ONE_INDEX);
+        assertEquals(484,
+                RtPathReservoirHistory.GUIDE_BRANCH_RECEIVER_OWNER_WINNER_AGE_TWO_INDEX);
+        assertEquals(485,
+                RtPathReservoirHistory.GUIDE_BRANCH_RECEIVER_OWNER_WINNER_AGE_THREE_INDEX);
+        assertEquals(486, RtPathReservoirHistory
+                .GUIDE_BRANCH_RECEIVER_OWNER_WINNER_IDENTITY_SOURCE_INDEX);
+        assertEquals(487,
+                RtPathReservoirHistory.GUIDE_BRANCH_RECEIVER_OWNER_WINNER_MAPPED_SOURCE_INDEX);
+        assertEquals(488,
+                RtPathReservoirHistory.GUIDE_BRANCH_RECEIVER_OWNER_WINNER_ONE_SEGMENT_INDEX);
+        assertEquals(489,
+                RtPathReservoirHistory.GUIDE_BRANCH_RECEIVER_OWNER_WINNER_TWO_SEGMENT_INDEX);
+        assertEquals(490, RtPathReservoirHistory.GUIDE_BRANCH_RECEIVER_OWNER_DELTA_INDEX);
+        assertEquals(491, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
+        assertEquals(491 * Integer.BYTES,
                 RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_COUNTER_BYTES);
         assertEquals(32, RtPathReservoirHistory.SHIFTED_RECEIVER_GUIDE_STRIDE);
+        assertEquals(8, RtPathReservoirHistory.BRANCH_RECEIVER_OWNERSHIP_STRIDE);
         assertEquals(27_566_080L,
                 RtPathReservoirHistory.shiftedReceiverGuideBytes(1280, 673));
+        assertEquals(6_891_520L,
+                RtPathReservoirHistory.branchReceiverOwnershipBytes(1280, 673));
         assertEquals(160, PathSourceRootData.BYTE_SIZE);
         assertEquals(4096, RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_PAIR_CAPACITY);
         assertEquals(4096, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_DENSITY_PAIR_OFFSET);
@@ -2362,7 +2427,11 @@ final class RtPathSpatialReuseReferenceTest {
         assertEquals(352, RtPathReservoirHistory.PATH_BRANCH_AGED_STORAGE_CAPTURE_STRIDE);
         assertEquals(2 * 4096 * 352,
                 RtPathReservoirHistory.PATH_BRANCH_AGED_STORAGE_CAPTURE_BYTES);
-        assertEquals(4096 * 8 * Float.BYTES + 4 * 4096 * 384 + 2 * 4096 * 352,
+        assertEquals(16, RtPathReservoirHistory.PATH_BRANCH_RECEIVER_OWNER_CLAIM_STRIDE);
+        assertEquals(4 * 4096 * 16,
+                RtPathReservoirHistory.PATH_BRANCH_RECEIVER_OWNER_CLAIM_BYTES);
+        assertEquals(4096 * 8 * Float.BYTES + 4 * 4096 * 384 + 2 * 4096 * 352
+                        + 4 * 4096 * 16,
                 RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_PAIR_BYTES);
     }
 }
