@@ -757,6 +757,30 @@ throughput rejects were zero. Visibility was 205279 clear + 2 occluded; target a
 path had one segment. All printed deltas and gateDelta values were zero, with no Vulkan/device/GPU/
 shader error. The validation client was closed and no Java process remains.
 
+`RT path guide branch winner selection` continues directly from the valid winner weight. It reads
+only the current receiver reservoir's weight sum and computes the uncapped overflow-stable relative
+ratio; do not substitute the capped future weight sum as the denominator. Its deterministic
+diagnostic draw hashes the receiver pixel, previous-winner pixel, stored frame tag, winner priority
+and current frame. Neither the probability nor the draw mutates RNG, payload, history or estimator
+state.
+
+For a valid readback, weight ready must equal selection eligible and the mutually exclusive
+selection terminal partition. Valid zero/open/one probabilities must equal both the current-weight
+partition and Bernoulli eligible. Bernoulli eligible must equal selected + retained + invalid; after
+excluding invalid, it must equal the probability-boundary, previous-output, source-mapping and
+segment partitions. `violations[zero=0,one=0]` and every printed delta/gateDelta are mandatory.
+The counter buffer is 582 uints / 2328 B; allocation sizes, 688 B `WorldPush`, 120 B inline push
+constants and replay ABI 10 are unchanged.
+
+Fresh runtime validation produced 36 readbacks / 116200 ready winners. Selection probabilities
+were 28155 open + 88045 exact-one, with zero current rejects and zero invalid; current weights were
+87999 zero + 28201 positive. Bernoulli produced 105180 selected + 11020 retained, zero invalid and
+zero boundary violations. Previous output was 107039 selected + 9161 retained, original source was
+9595 identity + 106605 mapped, and all records used one segment. All deltas were zero, no Vulkan/
+GPU/shader error was logged, and the exact validation client was closed. The follow-on gate may
+compute selected/retained post-selection weights and caps in registers only; it must still not write
+winner scratch, committed path history or the ordinary estimator.
+
 For a fresh runtime check, use debug view 20 and inspect `run/logs/latest.log`. Normal operation
 requires `RT bring-up OK`, Vulkan, the intended NVIDIA device, exact zero-delta counter partitions,
 and no `DEVICE_LOST`, `VK_ERROR`, GPU fault or shader compilation error. Debug colors and sparse

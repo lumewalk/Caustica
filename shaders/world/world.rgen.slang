@@ -2543,6 +2543,72 @@ static void pathBranchWinnerPreviousReplayValidate() {
     InterlockedAdd(counters[replaySegments == 1u
             ? PATH_GUIDE_BRANCH_WINNER_DIRECT_ONE_SEGMENT_READY
             : PATH_GUIDE_BRANCH_WINNER_DIRECT_TWO_SEGMENT_READY], 1u);
+
+    // Audit only the uncapped relative selection ratio against the current receiver reservoir.
+    // The capped post-selection sum is intentionally not formed, and neither outcome is stored.
+    InterlockedAdd(counters[PATH_GUIDE_BRANCH_WINNER_SELECTION_ELIGIBLE], 1u);
+    PathReservoir current = ConstPtr<PathReservoir>(pc.pathReservoirAddr)[receiverPixelIndex];
+    float currentWeightSum = current.weights.x;
+    if (!isfinite(currentWeightSum) || currentWeightSum < 0.0) {
+        InterlockedAdd(counters[PATH_GUIDE_BRANCH_WINNER_SELECTION_CURRENT_REJECT], 1u);
+        return;
+    }
+    float selectionProbability = pathStableSelectionProbability(
+            currentWeightSum, mergeWeight);
+    bool selectionValid = isfinite(selectionProbability)
+            && selectionProbability >= 0.0 && selectionProbability <= 1.0;
+    InterlockedAdd(counters[!selectionValid
+            ? PATH_GUIDE_BRANCH_WINNER_SELECTION_PROBABILITY_INVALID
+            : selectionProbability == 0.0
+                    ? PATH_GUIDE_BRANCH_WINNER_SELECTION_PROBABILITY_ZERO
+                    : selectionProbability == 1.0
+                            ? PATH_GUIDE_BRANCH_WINNER_SELECTION_PROBABILITY_ONE
+                            : PATH_GUIDE_BRANCH_WINNER_SELECTION_PROBABILITY_OPEN], 1u);
+    if (!selectionValid) return;
+    InterlockedAdd(counters[currentWeightSum == 0.0
+            ? PATH_GUIDE_BRANCH_WINNER_SELECTION_CURRENT_ZERO
+            : PATH_GUIDE_BRANCH_WINNER_SELECTION_CURRENT_POSITIVE], 1u);
+
+    // The local draw is independent of the aged-ring entry hash. Bind it to both reprojected
+    // winner ownership and the current receiver/frame so unrelated winners cannot share a draw.
+    InterlockedAdd(counters[PATH_GUIDE_BRANCH_WINNER_BERNOULLI_ELIGIBLE], 1u);
+    uint bernoulliSeed = pathHash(receiverPixelIndex
+            ^ previousPixelIndex * 747796405u
+            ^ storedTag.x * 277803737u
+            ^ winnerPriority * 1597334677u
+            ^ worldPush.frameIndex * 2891336453u
+            ^ 0xD1B54A35u);
+    float bernoulliRandom = float(bernoulliSeed >> 8u) * (1.0 / 16777216.0);
+    bool bernoulliValid = isfinite(bernoulliRandom)
+            && bernoulliRandom >= 0.0 && bernoulliRandom < 1.0;
+    bool sourceSelected = bernoulliValid
+            && bernoulliRandom < selectionProbability;
+    InterlockedAdd(counters[!bernoulliValid
+            ? PATH_GUIDE_BRANCH_WINNER_BERNOULLI_INVALID
+            : sourceSelected
+                    ? PATH_GUIDE_BRANCH_WINNER_BERNOULLI_SELECTED
+                    : PATH_GUIDE_BRANCH_WINNER_BERNOULLI_RETAINED], 1u);
+    if (!bernoulliValid) return;
+    InterlockedAdd(counters[selectionProbability == 0.0
+            ? PATH_GUIDE_BRANCH_WINNER_BERNOULLI_PROBABILITY_ZERO
+            : selectionProbability == 1.0
+                    ? PATH_GUIDE_BRANCH_WINNER_BERNOULLI_PROBABILITY_ONE
+                    : PATH_GUIDE_BRANCH_WINNER_BERNOULLI_PROBABILITY_OPEN], 1u);
+    if (selectionProbability == 0.0 && sourceSelected) {
+        InterlockedAdd(counters[PATH_GUIDE_BRANCH_WINNER_BERNOULLI_ZERO_VIOLATION], 1u);
+    }
+    if (selectionProbability == 1.0 && !sourceSelected) {
+        InterlockedAdd(counters[PATH_GUIDE_BRANCH_WINNER_BERNOULLI_ONE_VIOLATION], 1u);
+    }
+    InterlockedAdd(counters[outputMappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION
+            ? PATH_GUIDE_BRANCH_WINNER_BERNOULLI_PREVIOUS_SELECTED
+            : PATH_GUIDE_BRANCH_WINNER_BERNOULLI_PREVIOUS_RETAINED], 1u);
+    InterlockedAdd(counters[sourceMappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION
+            ? PATH_GUIDE_BRANCH_WINNER_BERNOULLI_MAPPED_SOURCE
+            : PATH_GUIDE_BRANCH_WINNER_BERNOULLI_IDENTITY_SOURCE], 1u);
+    InterlockedAdd(counters[replaySegments == 1u
+            ? PATH_GUIDE_BRANCH_WINNER_BERNOULLI_ONE_SEGMENT
+            : PATH_GUIDE_BRANCH_WINNER_BERNOULLI_TWO_SEGMENT], 1u);
 }
 
 static bool pathReservoirBitsMatch(PathReservoir a, PathReservoir b) {

@@ -28,6 +28,9 @@ final class RtPathSpatialReuseReference {
     static final int BRANCH_BERNOULLI_ENTRY_MULTIPLIER = 747_796_405;
     static final int BRANCH_BERNOULLI_FRAME_MULTIPLIER = (int) 2_891_336_453L;
     static final int BRANCH_BERNOULLI_SALT = (int) 0x94D0_49BBL;
+    static final int BRANCH_WINNER_BERNOULLI_TAG_FRAME_MULTIPLIER = 277_803_737;
+    static final int BRANCH_WINNER_BERNOULLI_PRIORITY_MULTIPLIER = 1_597_334_677;
+    static final int BRANCH_WINNER_BERNOULLI_SALT = (int) 0xD1B5_4A35L;
     static final int BRANCH_RECEIVER_OWNER_INDEX_BITS = 14;
     static final int BRANCH_RECEIVER_OWNER_INDEX_MASK =
             (1 << BRANCH_RECEIVER_OWNER_INDEX_BITS) - 1;
@@ -2256,6 +2259,124 @@ final class RtPathSpatialReuseReference {
                         ? BranchDirectSourceCountOutcome.CAPPED
                         : BranchDirectSourceCountOutcome.UNCAPPED,
                 mergeWeight);
+    }
+
+    enum BranchWinnerDirectSelectionOutcome {
+        WEIGHT_REJECT,
+        CURRENT_REJECT,
+        ZERO,
+        OPEN,
+        ONE,
+        INVALID
+    }
+
+    record BranchWinnerDirectSelectionAudit(
+            BranchWinnerDirectSelectionOutcome selection,
+            BranchDirectCurrentWeightOutcome currentWeight,
+            double probability) {
+    }
+
+    /** CPU authority for winner selection using the uncapped overflow-stable relative ratio. */
+    static BranchWinnerDirectSelectionAudit branchWinnerDirectSelectionAudit(
+            BranchWinnerDirectWeightOutcome weightOutcome,
+            double currentWeightSum, double mergeWeight) {
+        boolean weightReady = weightOutcome == BranchWinnerDirectWeightOutcome.POSITIVE
+                || weightOutcome == BranchWinnerDirectWeightOutcome.ZERO;
+        if (!weightReady) {
+            return new BranchWinnerDirectSelectionAudit(
+                    BranchWinnerDirectSelectionOutcome.WEIGHT_REJECT,
+                    BranchDirectCurrentWeightOutcome.NOT_ELIGIBLE, 0.0);
+        }
+        if (!nonNegativeFinite(currentWeightSum)) {
+            return new BranchWinnerDirectSelectionAudit(
+                    BranchWinnerDirectSelectionOutcome.CURRENT_REJECT,
+                    BranchDirectCurrentWeightOutcome.NOT_ELIGIBLE, 0.0);
+        }
+        if (!nonNegativeFinite(mergeWeight)) {
+            return new BranchWinnerDirectSelectionAudit(
+                    BranchWinnerDirectSelectionOutcome.INVALID,
+                    BranchDirectCurrentWeightOutcome.NOT_ELIGIBLE, 0.0);
+        }
+
+        double probability;
+        if (mergeWeight == 0.0) {
+            probability = 0.0;
+        } else if (currentWeightSum <= mergeWeight) {
+            probability = 1.0 / (1.0 + currentWeightSum / mergeWeight);
+        } else {
+            double ratio = mergeWeight / currentWeightSum;
+            probability = ratio / (1.0 + ratio);
+        }
+        if (!Double.isFinite(probability) || probability < 0.0 || probability > 1.0) {
+            return new BranchWinnerDirectSelectionAudit(
+                    BranchWinnerDirectSelectionOutcome.INVALID,
+                    BranchDirectCurrentWeightOutcome.NOT_ELIGIBLE, 0.0);
+        }
+        return new BranchWinnerDirectSelectionAudit(
+                probability == 0.0
+                        ? BranchWinnerDirectSelectionOutcome.ZERO
+                        : probability == 1.0
+                                ? BranchWinnerDirectSelectionOutcome.ONE
+                                : BranchWinnerDirectSelectionOutcome.OPEN,
+                currentWeightSum == 0.0
+                        ? BranchDirectCurrentWeightOutcome.ZERO
+                        : BranchDirectCurrentWeightOutcome.POSITIVE,
+                probability);
+    }
+
+    record BranchWinnerDirectBernoulliAudit(
+            BranchDirectBernoulliOutcome outcome,
+            BranchDirectBernoulliBoundary boundary,
+            double random,
+            boolean zeroBoundaryViolation,
+            boolean oneBoundaryViolation) {
+    }
+
+    /** CPU mirror for the winner-owned deterministic diagnostic draw without reservoir mutation. */
+    static BranchWinnerDirectBernoulliAudit branchWinnerDirectBernoulliAudit(
+            BranchWinnerDirectSelectionAudit selectionAudit,
+            int receiverPixelIndex, int previousPixelIndex,
+            int winnerTagFrame, int winnerPriority, int frameIndex) {
+        boolean selectionReady = selectionAudit.selection()
+                == BranchWinnerDirectSelectionOutcome.ZERO
+                || selectionAudit.selection() == BranchWinnerDirectSelectionOutcome.OPEN
+                || selectionAudit.selection() == BranchWinnerDirectSelectionOutcome.ONE;
+        if (!selectionReady) {
+            return new BranchWinnerDirectBernoulliAudit(
+                    BranchDirectBernoulliOutcome.SELECTION_REJECT,
+                    BranchDirectBernoulliBoundary.NOT_ELIGIBLE, 0.0, false, false);
+        }
+        double probability = selectionAudit.probability();
+        if (!Double.isFinite(probability) || probability < 0.0 || probability > 1.0) {
+            return new BranchWinnerDirectBernoulliAudit(BranchDirectBernoulliOutcome.INVALID,
+                    BranchDirectBernoulliBoundary.NOT_ELIGIBLE, 0.0, false, false);
+        }
+
+        int mixedSeed = receiverPixelIndex
+                ^ previousPixelIndex * BRANCH_BERNOULLI_ENTRY_MULTIPLIER
+                ^ winnerTagFrame * BRANCH_WINNER_BERNOULLI_TAG_FRAME_MULTIPLIER
+                ^ winnerPriority * BRANCH_WINNER_BERNOULLI_PRIORITY_MULTIPLIER
+                ^ frameIndex * BRANCH_BERNOULLI_FRAME_MULTIPLIER
+                ^ BRANCH_WINNER_BERNOULLI_SALT;
+        int hashedSeed = RtPathReplayReference.pathHash(mixedSeed);
+        double random = (hashedSeed >>> 8) * (1.0 / 16_777_216.0);
+        if (!Double.isFinite(random) || random < 0.0 || random >= 1.0) {
+            return new BranchWinnerDirectBernoulliAudit(BranchDirectBernoulliOutcome.INVALID,
+                    BranchDirectBernoulliBoundary.NOT_ELIGIBLE, 0.0, false, false);
+        }
+
+        boolean selected = random < probability;
+        BranchDirectBernoulliBoundary boundary = probability == 0.0
+                ? BranchDirectBernoulliBoundary.ZERO
+                : probability == 1.0
+                        ? BranchDirectBernoulliBoundary.ONE
+                        : BranchDirectBernoulliBoundary.OPEN;
+        return new BranchWinnerDirectBernoulliAudit(
+                selected ? BranchDirectBernoulliOutcome.SELECTED
+                        : BranchDirectBernoulliOutcome.RETAINED,
+                boundary, random,
+                probability == 0.0 && selected,
+                probability == 1.0 && !selected);
     }
 
     /**

@@ -594,7 +594,32 @@ final class RtPathReservoirHistory {
     static final int GUIDE_BRANCH_WINNER_DIRECT_ONE_SEGMENT_READY_INDEX = 554;
     static final int GUIDE_BRANCH_WINNER_DIRECT_TWO_SEGMENT_READY_INDEX = 555;
     static final int GUIDE_BRANCH_WINNER_DIRECT_DELTA_INDEX = 556;
-    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 557;
+    static final int GUIDE_BRANCH_WINNER_SELECTION_ELIGIBLE_INDEX = 557;
+    static final int GUIDE_BRANCH_WINNER_SELECTION_CURRENT_REJECT_INDEX = 558;
+    static final int GUIDE_BRANCH_WINNER_SELECTION_PROBABILITY_ZERO_INDEX = 559;
+    static final int GUIDE_BRANCH_WINNER_SELECTION_PROBABILITY_OPEN_INDEX = 560;
+    static final int GUIDE_BRANCH_WINNER_SELECTION_PROBABILITY_ONE_INDEX = 561;
+    static final int GUIDE_BRANCH_WINNER_SELECTION_PROBABILITY_INVALID_INDEX = 562;
+    static final int GUIDE_BRANCH_WINNER_SELECTION_CURRENT_ZERO_INDEX = 563;
+    static final int GUIDE_BRANCH_WINNER_SELECTION_CURRENT_POSITIVE_INDEX = 564;
+    static final int GUIDE_BRANCH_WINNER_SELECTION_DELTA_INDEX = 565;
+    static final int GUIDE_BRANCH_WINNER_BERNOULLI_ELIGIBLE_INDEX = 566;
+    static final int GUIDE_BRANCH_WINNER_BERNOULLI_SELECTED_INDEX = 567;
+    static final int GUIDE_BRANCH_WINNER_BERNOULLI_RETAINED_INDEX = 568;
+    static final int GUIDE_BRANCH_WINNER_BERNOULLI_INVALID_INDEX = 569;
+    static final int GUIDE_BRANCH_WINNER_BERNOULLI_PROBABILITY_ZERO_INDEX = 570;
+    static final int GUIDE_BRANCH_WINNER_BERNOULLI_PROBABILITY_OPEN_INDEX = 571;
+    static final int GUIDE_BRANCH_WINNER_BERNOULLI_PROBABILITY_ONE_INDEX = 572;
+    static final int GUIDE_BRANCH_WINNER_BERNOULLI_ZERO_VIOLATION_INDEX = 573;
+    static final int GUIDE_BRANCH_WINNER_BERNOULLI_ONE_VIOLATION_INDEX = 574;
+    static final int GUIDE_BRANCH_WINNER_BERNOULLI_PREVIOUS_SELECTED_INDEX = 575;
+    static final int GUIDE_BRANCH_WINNER_BERNOULLI_PREVIOUS_RETAINED_INDEX = 576;
+    static final int GUIDE_BRANCH_WINNER_BERNOULLI_IDENTITY_SOURCE_INDEX = 577;
+    static final int GUIDE_BRANCH_WINNER_BERNOULLI_MAPPED_SOURCE_INDEX = 578;
+    static final int GUIDE_BRANCH_WINNER_BERNOULLI_ONE_SEGMENT_INDEX = 579;
+    static final int GUIDE_BRANCH_WINNER_BERNOULLI_TWO_SEGMENT_INDEX = 580;
+    static final int GUIDE_BRANCH_WINNER_BERNOULLI_DELTA_INDEX = 581;
+    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 582;
     static final int SHIFTED_RECEIVER_GUIDE_STRIDE = 8 * Float.BYTES;
     static final int BRANCH_RECEIVER_OWNERSHIP_STRIDE = 2 * Integer.BYTES;
     static final int BRANCH_CANDIDATE_TAG_STRIDE = 2 * Integer.BYTES;
@@ -2117,6 +2142,52 @@ final class RtPathReservoirHistory {
                     counters.get(GUIDE_BRANCH_WINNER_DIRECT_ONE_SEGMENT_READY_INDEX));
             long guideBranchWinnerDirectTwoSegmentReady = Integer.toUnsignedLong(
                     counters.get(GUIDE_BRANCH_WINNER_DIRECT_TWO_SEGMENT_READY_INDEX));
+            long guideBranchWinnerSelectionEligible = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_SELECTION_ELIGIBLE_INDEX));
+            long guideBranchWinnerSelectionCurrentReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_SELECTION_CURRENT_REJECT_INDEX));
+            long guideBranchWinnerSelectionProbabilityZero = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_SELECTION_PROBABILITY_ZERO_INDEX));
+            long guideBranchWinnerSelectionProbabilityOpen = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_SELECTION_PROBABILITY_OPEN_INDEX));
+            long guideBranchWinnerSelectionProbabilityOne = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_SELECTION_PROBABILITY_ONE_INDEX));
+            long guideBranchWinnerSelectionProbabilityInvalid = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_SELECTION_PROBABILITY_INVALID_INDEX));
+            long guideBranchWinnerSelectionCurrentZero = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_SELECTION_CURRENT_ZERO_INDEX));
+            long guideBranchWinnerSelectionCurrentPositive = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_SELECTION_CURRENT_POSITIVE_INDEX));
+            long guideBranchWinnerBernoulliEligible = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_BERNOULLI_ELIGIBLE_INDEX));
+            long guideBranchWinnerBernoulliSelected = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_BERNOULLI_SELECTED_INDEX));
+            long guideBranchWinnerBernoulliRetained = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_BERNOULLI_RETAINED_INDEX));
+            long guideBranchWinnerBernoulliInvalid = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_BERNOULLI_INVALID_INDEX));
+            long guideBranchWinnerBernoulliProbabilityZero = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_BERNOULLI_PROBABILITY_ZERO_INDEX));
+            long guideBranchWinnerBernoulliProbabilityOpen = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_BERNOULLI_PROBABILITY_OPEN_INDEX));
+            long guideBranchWinnerBernoulliProbabilityOne = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_BERNOULLI_PROBABILITY_ONE_INDEX));
+            long guideBranchWinnerBernoulliZeroViolation = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_BERNOULLI_ZERO_VIOLATION_INDEX));
+            long guideBranchWinnerBernoulliOneViolation = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_BERNOULLI_ONE_VIOLATION_INDEX));
+            long guideBranchWinnerBernoulliPreviousSelected = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_BERNOULLI_PREVIOUS_SELECTED_INDEX));
+            long guideBranchWinnerBernoulliPreviousRetained = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_BERNOULLI_PREVIOUS_RETAINED_INDEX));
+            long guideBranchWinnerBernoulliIdentitySource = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_BERNOULLI_IDENTITY_SOURCE_INDEX));
+            long guideBranchWinnerBernoulliMappedSource = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_BERNOULLI_MAPPED_SOURCE_INDEX));
+            long guideBranchWinnerBernoulliOneSegment = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_BERNOULLI_ONE_SEGMENT_INDEX));
+            long guideBranchWinnerBernoulliTwoSegment = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_BERNOULLI_TWO_SEGMENT_INDEX));
             long crossFrameReceiverReject = crossFrameReceiverSurfaceReject
                     + crossFrameReceiverSampleReject + crossFrameReceiverEdgeReject
                     + crossFrameReceiverTopologyReject + crossFrameReceiverDepthReject
@@ -3625,6 +3696,36 @@ final class RtPathReservoirHistory {
             long guideBranchWinnerDirectSegments =
                     guideBranchWinnerDirectOneSegmentReady
                             + guideBranchWinnerDirectTwoSegmentReady;
+            long guideBranchWinnerSelectionTerminal =
+                    guideBranchWinnerSelectionCurrentReject
+                            + guideBranchWinnerSelectionProbabilityZero
+                            + guideBranchWinnerSelectionProbabilityOpen
+                            + guideBranchWinnerSelectionProbabilityOne
+                            + guideBranchWinnerSelectionProbabilityInvalid;
+            long guideBranchWinnerSelectionReady =
+                    guideBranchWinnerSelectionProbabilityZero
+                            + guideBranchWinnerSelectionProbabilityOpen
+                            + guideBranchWinnerSelectionProbabilityOne;
+            long guideBranchWinnerSelectionCurrent =
+                    guideBranchWinnerSelectionCurrentZero
+                            + guideBranchWinnerSelectionCurrentPositive;
+            long guideBranchWinnerBernoulliTerminal =
+                    guideBranchWinnerBernoulliSelected
+                            + guideBranchWinnerBernoulliRetained
+                            + guideBranchWinnerBernoulliInvalid;
+            long guideBranchWinnerBernoulliProbability =
+                    guideBranchWinnerBernoulliProbabilityZero
+                            + guideBranchWinnerBernoulliProbabilityOpen
+                            + guideBranchWinnerBernoulliProbabilityOne;
+            long guideBranchWinnerBernoulliPrevious =
+                    guideBranchWinnerBernoulliPreviousSelected
+                            + guideBranchWinnerBernoulliPreviousRetained;
+            long guideBranchWinnerBernoulliSource =
+                    guideBranchWinnerBernoulliIdentitySource
+                            + guideBranchWinnerBernoulliMappedSource;
+            long guideBranchWinnerBernoulliSegments =
+                    guideBranchWinnerBernoulliOneSegment
+                            + guideBranchWinnerBernoulliTwoSegment;
             CausticaMod.LOGGER.info(
                     "RT path guide branch winner direct remap: "
                             + "replayAccepted={} remap[eligible={},guide={},edge={},geometry={},"
@@ -3691,6 +3792,55 @@ final class RtPathReservoirHistory {
                     guideBranchWinnerDirectOneSegmentReady,
                     guideBranchWinnerDirectTwoSegmentReady,
                     guideBranchWinnerDirectWeightReady - guideBranchWinnerDirectSegments);
+            long guideBranchWinnerBernoulliReady =
+                    guideBranchWinnerBernoulliEligible - guideBranchWinnerBernoulliInvalid;
+            CausticaMod.LOGGER.info(
+                    "RT path guide branch winner selection: weightReady={} "
+                            + "selection[eligible={},currentReject={},"
+                            + "probability[zero={},open={},one={},invalid={}],terminal={},"
+                            + "delta={},gateDelta={},current[zero={},positive={},delta={}]] "
+                            + "Bernoulli[eligible={},selected={},retained={},invalid={},"
+                            + "terminal={},delta={},gateDelta={},"
+                            + "probability[zero={},open={},one={},delta={}],"
+                            + "violations[zero={},one={}],"
+                            + "previous[selected={},retained={},delta={}],"
+                            + "source[identity={},mapped={},delta={}],"
+                            + "segments[one={},two={},delta={}]]",
+                    guideBranchWinnerDirectWeightReady,
+                    guideBranchWinnerSelectionEligible,
+                    guideBranchWinnerSelectionCurrentReject,
+                    guideBranchWinnerSelectionProbabilityZero,
+                    guideBranchWinnerSelectionProbabilityOpen,
+                    guideBranchWinnerSelectionProbabilityOne,
+                    guideBranchWinnerSelectionProbabilityInvalid,
+                    guideBranchWinnerSelectionTerminal,
+                    guideBranchWinnerSelectionEligible - guideBranchWinnerSelectionTerminal,
+                    guideBranchWinnerDirectWeightReady - guideBranchWinnerSelectionEligible,
+                    guideBranchWinnerSelectionCurrentZero,
+                    guideBranchWinnerSelectionCurrentPositive,
+                    guideBranchWinnerSelectionReady - guideBranchWinnerSelectionCurrent,
+                    guideBranchWinnerBernoulliEligible,
+                    guideBranchWinnerBernoulliSelected,
+                    guideBranchWinnerBernoulliRetained,
+                    guideBranchWinnerBernoulliInvalid,
+                    guideBranchWinnerBernoulliTerminal,
+                    guideBranchWinnerBernoulliEligible - guideBranchWinnerBernoulliTerminal,
+                    guideBranchWinnerSelectionReady - guideBranchWinnerBernoulliEligible,
+                    guideBranchWinnerBernoulliProbabilityZero,
+                    guideBranchWinnerBernoulliProbabilityOpen,
+                    guideBranchWinnerBernoulliProbabilityOne,
+                    guideBranchWinnerBernoulliReady - guideBranchWinnerBernoulliProbability,
+                    guideBranchWinnerBernoulliZeroViolation,
+                    guideBranchWinnerBernoulliOneViolation,
+                    guideBranchWinnerBernoulliPreviousSelected,
+                    guideBranchWinnerBernoulliPreviousRetained,
+                    guideBranchWinnerBernoulliReady - guideBranchWinnerBernoulliPrevious,
+                    guideBranchWinnerBernoulliIdentitySource,
+                    guideBranchWinnerBernoulliMappedSource,
+                    guideBranchWinnerBernoulliReady - guideBranchWinnerBernoulliSource,
+                    guideBranchWinnerBernoulliOneSegment,
+                    guideBranchWinnerBernoulliTwoSegment,
+                    guideBranchWinnerBernoulliReady - guideBranchWinnerBernoulliSegments);
             spatialDiagnosticViewPending = 0;
             return;
         }

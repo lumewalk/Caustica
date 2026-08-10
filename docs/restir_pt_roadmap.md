@@ -1009,6 +1009,30 @@ gate, count, branch, source and segment delta was zero; no Vulkan/device/GPU/sha
 logged. The next gate may audit the overflow-stable relative selection probability and Bernoulli
 partition against the current receiver reservoir, still without payload/history/estimator writes.
 
+That counter-only winner selection gate now reads the current receiver reservoir weight sum and
+evaluates the uncapped overflow-stable ratio through `pathStableSelectionProbability`. It never
+forms the capped post-selection sum. A separate deterministic diagnostic draw is bound to the
+current receiver pixel, reprojected previous-winner pixel, winner frame tag, owner priority and
+current frame. The draw partitions selected-source versus retained-current outcomes only in
+registers and counters; no RNG state, reservoir/root payload, winner slot, committed history or
+ordinary estimator is written.
+
+Twenty-five counters cover selection eligibility, current-weight validity, zero/open/one/invalid
+probabilities, Bernoulli selected/retained/invalid outcomes, exact zero/one boundary violations and
+the previous-output/source-mapping/segment partitions. The view-20 counter buffer is therefore
+582 uints / 2328 B. No GPU allocation, `WorldPush`, inline push-constant or replay ABI change was
+required.
+
+The gate passed 36 fresh Vulkan readbacks and 116200 weight-ready winners. Every winner reached a
+valid selection probability: 28155 open plus 88045 exact-one, with zero current rejects, zero or
+invalid probabilities and exact current-weight accounting (87999 zero plus 28201 positive). The
+diagnostic Bernoulli selected the previous source 105180 times and retained current 11020 times;
+invalid draws and zero/one boundary violations were zero. Previous output split into 107039
+selected plus 9161 retained, source ownership into 9595 identity plus 106605 mapped, and all paths
+had one segment. Every terminal, partition and gate delta was zero, and no Vulkan/device/GPU/shader
+failure was logged. The next gate may audit selected/retained post-selection arithmetic and caps in
+registers only; persistent history and the ordinary estimator remain blocked.
+
 ## Delivery Phases
 
 ### Phase 0 — Wavefront Integration Baseline
