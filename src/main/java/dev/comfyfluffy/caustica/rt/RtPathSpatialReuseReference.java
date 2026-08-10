@@ -1096,6 +1096,18 @@ final class RtPathSpatialReuseReference {
         RETAINED_ACCEPTED
     }
 
+    enum BranchWinnerPreviousReplayOutcome {
+        RECEIVER_REPROJECTION_REJECT,
+        PREVIOUS_EMPTY,
+        METADATA_REJECT,
+        RECEIVER_SURFACE_REJECT,
+        SOURCE_REPROJECTION_REJECT,
+        SOURCE_SURFACE_REJECT,
+        SOURCE_REPLAY_REJECT,
+        SELECTED_ACCEPTED,
+        RETAINED_ACCEPTED
+    }
+
     enum BranchCandidateRetentionOutcome {
         EMPTY,
         FUTURE_REJECT,
@@ -2067,6 +2079,45 @@ final class RtPathSpatialReuseReference {
         return outputMappingKind == MappingKind.DIFFUSE_RECONNECTION
                 ? BranchWinnerStorageOutcome.SELECTED_ACCEPTED
                 : BranchWinnerStorageOutcome.RETAINED_ACCEPTED;
+    }
+
+    /**
+     * Ordered CPU authority for the adjacent-frame winner replay diagnostic. The lifecycle gate is
+     * owned by the independent ping-pong state; an accepted record is still diagnostic-only.
+     */
+    static BranchWinnerPreviousReplayOutcome branchWinnerPreviousReplayOutcome(
+            boolean receiverReprojected, boolean previousPresent, boolean metadataValid,
+            boolean receiverSurfaceValid, boolean sourceReprojected,
+            boolean sourceSurfaceValid, boolean sourceReplayValid,
+            MappingKind outputMappingKind) {
+        if (!receiverReprojected) {
+            return BranchWinnerPreviousReplayOutcome.RECEIVER_REPROJECTION_REJECT;
+        }
+        if (!previousPresent) {
+            return BranchWinnerPreviousReplayOutcome.PREVIOUS_EMPTY;
+        }
+        if (!metadataValid) {
+            return BranchWinnerPreviousReplayOutcome.METADATA_REJECT;
+        }
+        if (!receiverSurfaceValid) {
+            return BranchWinnerPreviousReplayOutcome.RECEIVER_SURFACE_REJECT;
+        }
+        if (!sourceReprojected) {
+            return BranchWinnerPreviousReplayOutcome.SOURCE_REPROJECTION_REJECT;
+        }
+        if (!sourceSurfaceValid) {
+            return BranchWinnerPreviousReplayOutcome.SOURCE_SURFACE_REJECT;
+        }
+        if (!sourceReplayValid) {
+            return BranchWinnerPreviousReplayOutcome.SOURCE_REPLAY_REJECT;
+        }
+        if (outputMappingKind == null) {
+            throw new IllegalArgumentException(
+                    "accepted winner replay requires an output mapping kind");
+        }
+        return outputMappingKind == MappingKind.DIFFUSE_RECONNECTION
+                ? BranchWinnerPreviousReplayOutcome.SELECTED_ACCEPTED
+                : BranchWinnerPreviousReplayOutcome.RETAINED_ACCEPTED;
     }
 
     /**

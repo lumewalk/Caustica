@@ -706,6 +706,32 @@ retained, ages 1/2/3 were 10246/10164/10061, original source ownership was 2516 
 collisions, all fan-in two, so the exact-copy proof exercised the deterministic winner rather than
 only unique claims. No Vulkan/device/shader failure occurred and the validation client was closed.
 
+The follow-on winner replay gate replaces that single allocation with two independently owned
+352 B/pixel ping-pong slots. `RtPathReservoirHistory` exposes the previous slot only for an adjacent
+frame with matching generation and alternates slots independently from the branch scratch. The
+current slot is cleared immediately before receiver ownership; the previous slot is read first and
+is never modified. At 1280x673 the two slots total 606453760 bytes (578.36 MiB), and the complete
+lazy shifted diagnostic GPU group is approximately 1728.51 MiB. `WorldPush` remains 688 B because
+the previous-slot BDA occupies prior tail padding; counters are 528 uints / 2112 B, the diagnostic
+sample buffer remains 14.375 MiB, inline push constants remain 120 B and replay ABI remains 10.
+
+The log line `RT path guide branch winner previous replay` is the authority for this gate. Its
+`attempted` count must equal the sum of receiver-reprojection reject, empty, metadata reject,
+receiver-surface reject, source-reprojection reject, source-surface reject, source-replay reject,
+selected accepted and retained accepted. Accepted output must also equal both the identity/mapped
+source partition and the one/two-segment partition. Metadata reject and all printed deltas should
+remain zero in a stable world; strict surface/reprojection/replay rejects are fail-closed and may
+be non-zero during motion or scene changes. This diagnostic never performs another mapping,
+updates committed history or affects the ordinary estimator.
+
+The first fresh runtime proof used 27 readbacks at 569x320. Aggregate accounting was
+4916160 attempted = 4849114 empty + 97 receiver-reprojection rejects + 50 receiver-surface
+rejects + 52 source-reprojection rejects + 1 source-surface reject + 477 source-replay rejects +
+66369 accepted. Metadata rejects and terminal delta were zero. Accepted output was 60520 selected
++ 5849 retained, original-source ownership was 5329 identity + 61040 mapped, and all 66369 records
+had one replay segment; every printed partition delta was zero. No Vulkan/device/GPU/shader error
+was logged. Do not relax replay tolerance to absorb the explicit 477 fail-closed rejects.
+
 For a fresh runtime check, use debug view 20 and inspect `run/logs/latest.log`. Normal operation
 requires `RT bring-up OK`, Vulkan, the intended NVIDIA device, exact zero-delta counter partitions,
 and no `DEVICE_LOST`, `VK_ERROR`, GPU fault or shader compilation error. Debug colors and sparse

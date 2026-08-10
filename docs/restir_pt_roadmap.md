@@ -949,6 +949,39 @@ one-segment paths. This proves isolated current-frame winner storage only; persi
 reprojection and replay of this winner scratch remain the next required boundary before history
 integration.
 
+The winner scratch now has its own two-slot adjacent-frame lifecycle, independent from both the
+committed path history and the earlier branch-pair ping-pong. CPU ownership exposes a previous
+slot only when the path history also permits reuse, the frame is exactly adjacent, the 24-bit
+generation matches and read/write slots differ. Only the current slot is cleared. A second
+`WorldPush` BDA names the previous slot, but consumes existing tail padding so reflected
+`WorldPush` remains 688 bytes and replay ABI 10 remains unchanged.
+
+Before the current winner slot is cleared or written, a separate full-resolution view-20 dispatch
+reprojects each current receiver through `gMotion`, opens the previous dense tag, validates exact
+frame/generation/priority/output-mapping/source-mapping/segment ownership, reprojects the immutable
+source root independently, and repeats seeded source replay. Selected diffuse-reconnection output
+uses the mapping-source comparator; retained identity output uses the full exact replay comparator.
+Acceptance is partitioned by output branch, original source mapping and segment count. The pass
+never remaps the winner, uses a mapped output as another spatial source, writes either winner slot,
+commits path history or contributes to the estimator.
+
+Two 352 B/pixel winner slots total 606453760 bytes (578.36 MiB) at 1280x673, bringing the complete
+lazy shifted diagnostic GPU allocation group to approximately 1728.51 MiB. Counter storage is
+528 uints / 2112 B; the host-visible sample buffer remains 15073280 bytes (14.375 MiB), and all
+winner BDAs remain zero outside view 20. Runtime acceptance requires exact terminal, branch,
+source and segment accounting, zero lifecycle/metadata corruption and no Vulkan/GPU/shader fault.
+
+That one-frame gate passed 27 fresh Vulkan readbacks at 569x320. All 4916160 invocations reached
+exactly one terminal category: 4849114 empty, 97 receiver-reprojection rejects, 50 receiver-surface
+rejects, 52 source-reprojection rejects, 1 source-surface reject, 477 strict source-replay rejects
+and 66369 accepted records. Metadata rejects and terminal delta were zero. Acceptance split into
+60520 selected plus 5849 retained outputs, 5329 identity plus 61040 mapped original sources, and
+66369 one-segment plus zero two-segment paths; all three partition deltas were zero. The strict
+replay rejects remain visible and must not be hidden by tolerance changes. No Vulkan/device/GPU/
+shader failure occurred. The next boundary may recompute an original-root-to-current-receiver
+remap and fresh target/weight from this previous winner in registers only; it still may not compose
+the stored mapping, write committed history or affect the estimator.
+
 ## Delivery Phases
 
 ### Phase 0 — Wavefront Integration Baseline

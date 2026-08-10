@@ -939,6 +939,7 @@ public final class RtComposite {
         boolean previousShiftedSnapshot = false;
         boolean previousGuideScratch = false;
         RtPathReservoirHistory.BranchScratchFrame branchScratchFrame = null;
+        RtPathReservoirHistory.BranchScratchFrame branchWinnerScratchFrame = null;
         if (restirPt) {
             pathReservoirs.pollSpatialDiagnosticCounters(ctx, frameCounter);
             if (debugView == RtPathReservoirHistory.SHIFTED_RADIANCE_DEBUG_VIEW) {
@@ -948,6 +949,8 @@ public final class RtComposite {
                 previousGuideScratch = pathReservoirs.previousGuideScratchAvailable(
                         pathReservoirFrame, frameCounter);
                 branchScratchFrame = pathReservoirs.beginBranchScratch(
+                        pathReservoirFrame, frameCounter);
+                branchWinnerScratchFrame = pathReservoirs.beginBranchWinnerScratch(
                         pathReservoirFrame, frameCounter);
             }
         }
@@ -1108,7 +1111,11 @@ public final class RtComposite {
                     restirPt && debugView == RtPathReservoirHistory.SHIFTED_RADIANCE_DEBUG_VIEW
                             ? pathReservoirs.previousBranchScratchRootAddress(branchScratchFrame) : 0L,
                     restirPt && debugView == RtPathReservoirHistory.SHIFTED_RADIANCE_DEBUG_VIEW
-                            ? pathReservoirs.branchWinnerScratchAddress() : 0L
+                            ? pathReservoirs.branchWinnerScratchAddress(
+                                    branchWinnerScratchFrame) : 0L,
+                    restirPt && debugView == RtPathReservoirHistory.SHIFTED_RADIANCE_DEBUG_VIEW
+                            ? pathReservoirs.previousBranchWinnerScratchAddress(
+                                    branchWinnerScratchFrame) : 0L
             ).write(push);
             pushBuf.flush(0L, WORLD_PUSH_SIZE);
             // Upload any entity textures registered this frame into the bindless set before the trace.
@@ -1167,6 +1174,12 @@ public final class RtComposite {
                     && branchScratchFrame != null && branchScratchFrame.previousAvailable()) {
                 pathHistoryFlags |= RtPathReservoirHistory.GUIDE_BRANCH_PREVIOUS_AVAILABLE_FLAG;
             }
+            if (restirPt && debugView == RtPathReservoirHistory.SHIFTED_RADIANCE_DEBUG_VIEW
+                    && branchWinnerScratchFrame != null
+                    && branchWinnerScratchFrame.previousAvailable()) {
+                pathHistoryFlags |=
+                        RtPathReservoirHistory.GUIDE_BRANCH_WINNER_PREVIOUS_AVAILABLE_FLAG;
+            }
             WorldPushConstantsData worldConstants = new WorldPushConstantsData(
                     pushBuf.deviceAddress, terrain.tableAddress(), fe.geomTableAddr(),
                     RtMaterialRegistry.INSTANCE.tableAddress(),
@@ -1189,6 +1202,7 @@ public final class RtComposite {
             ByteBuffer branchAgedStorageValidatePushConstants = null;
             ByteBuffer branchReceiverOwnerValidatePushConstants = null;
             ByteBuffer branchWinnerStorageValidatePushConstants = null;
+            ByteBuffer branchWinnerPreviousReplayPushConstants = null;
             if (restirPt
                      && debugView == RtPathReservoirHistory.SHIFTED_RADIANCE_DEBUG_VIEW) {
                 guidePreviousReplayPushConstants =
@@ -1352,6 +1366,29 @@ public final class RtComposite {
                                         .GUIDE_BRANCH_WINNER_STORAGE_VALIDATE_PASS_FLAG,
                         worldConstants.historyGeneration())
                         .write(branchWinnerStorageValidatePushConstants);
+                branchWinnerPreviousReplayPushConstants =
+                        stack.malloc(WorldPushConstantsData.BYTE_SIZE);
+                new WorldPushConstantsData(
+                        worldConstants.worldPushAddr(),
+                        worldConstants.tableAddr(),
+                        worldConstants.entityTableAddr(),
+                        worldConstants.materialTableAddr(),
+                        worldConstants.lightBufAddr(),
+                        worldConstants.lightAliasAddr(),
+                        worldConstants.lightLocalAliasAddr(),
+                        worldConstants.lightGridCellAddr(),
+                        worldConstants.lightGridSpanAddr(),
+                        worldConstants.pathQueueAddr(),
+                        worldConstants.directReservoirAddr(),
+                        worldConstants.pathReservoirAddr(),
+                        worldConstants.pathReservoirPreviousAddr(),
+                        worldConstants.frameIndex(),
+                        worldConstants.debugView(),
+                        worldConstants.historyFlags()
+                                | RtPathReservoirHistory
+                                        .GUIDE_BRANCH_WINNER_PREVIOUS_REPLAY_PASS_FLAG,
+                        worldConstants.historyGeneration())
+                        .write(branchWinnerPreviousReplayPushConstants);
                 mappingReplayPushConstants =
                         stack.malloc(WorldPushConstantsData.BYTE_SIZE);
                 new WorldPushConstantsData(
@@ -1455,6 +1492,16 @@ public final class RtComposite {
                 VulkanCommandEncoder.memoryBarrier(cmd, stack);
                 if (debugView == RtPathReservoirHistory.SHIFTED_RADIANCE_DEBUG_VIEW) {
                     pathReservoirs.beginShiftedRadianceDiagnostics(cmd);
+                    if (branchWinnerScratchFrame.previousAvailable()) {
+                        try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd,
+                                     "path branch winner previous replay");
+                             RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage(
+                                     "frame.pathBranchWinnerPreviousReplay")) {
+                            active.trace(cmd, renderW, renderH,
+                                    branchWinnerPreviousReplayPushConstants, 1);
+                        }
+                        VulkanCommandEncoder.memoryBarrier(cmd, stack);
+                    }
                     pathReservoirs.beginCurrentBranchScratch(cmd, branchScratchFrame);
                     try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd,
                                  "path guide previous replay");
@@ -1492,7 +1539,8 @@ public final class RtComposite {
                                 branchAgeReplayPushConstants, 1);
                     }
                     VulkanCommandEncoder.memoryBarrier(cmd, stack);
-                    pathReservoirs.beginBranchWinnerScratch(cmd);
+                    pathReservoirs.beginCurrentBranchWinnerScratch(
+                            cmd, branchWinnerScratchFrame);
                     try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd,
                                  "path branch receiver ownership validate");
                          RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage(
@@ -1509,6 +1557,8 @@ public final class RtComposite {
                                 branchWinnerStorageValidatePushConstants, 1);
                     }
                     VulkanCommandEncoder.memoryBarrier(cmd, stack);
+                    pathReservoirs.commitBranchWinnerScratch(
+                            branchWinnerScratchFrame, pathReservoirFrame, frameCounter);
                     try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd,
                                  "path branch aged storage validate");
                          RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage(

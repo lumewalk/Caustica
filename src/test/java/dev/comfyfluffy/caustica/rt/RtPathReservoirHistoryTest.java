@@ -15,8 +15,8 @@ final class RtPathReservoirHistoryTest {
         assertEquals(176, PathReservoirData.BYTE_SIZE);
         assertEquals(176, RtPathReservoirHistory.BYTES_PER_RESERVOIR);
         assertEquals(688, WorldPushData.BYTE_SIZE);
-        assertEquals(513, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
-        assertEquals(2052, RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_COUNTER_BYTES);
+        assertEquals(528, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
+        assertEquals(2112, RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_COUNTER_BYTES);
         assertEquals(1 << 8, RtPathReservoirHistory.GUIDE_PREVIOUS_REPLAY_PASS_FLAG);
         assertEquals(1 << 9, RtPathReservoirHistory.GUIDE_PREVIOUS_AVAILABLE_FLAG);
         assertEquals(1 << 10, RtPathReservoirHistory.GUIDE_BRANCH_PREVIOUS_AVAILABLE_FLAG);
@@ -31,6 +31,10 @@ final class RtPathReservoirHistoryTest {
                 RtPathReservoirHistory.GUIDE_BRANCH_RECEIVER_OWNER_VALIDATE_PASS_FLAG);
         assertEquals(1 << 16,
                 RtPathReservoirHistory.GUIDE_BRANCH_WINNER_STORAGE_VALIDATE_PASS_FLAG);
+        assertEquals(1 << 17,
+                RtPathReservoirHistory.GUIDE_BRANCH_WINNER_PREVIOUS_AVAILABLE_FLAG);
+        assertEquals(1 << 18,
+                RtPathReservoirHistory.GUIDE_BRANCH_WINNER_PREVIOUS_REPLAY_PASS_FLAG);
     }
 
     @Test
@@ -92,6 +96,27 @@ final class RtPathReservoirHistoryTest {
     }
 
     @Test
+    void winnerScratchLifecycleIsIndependentFromBranchScratchLifecycle() {
+        var branch = new RtPathReservoirHistory.BranchScratchState();
+        var winner = new RtPathReservoirHistory.BranchScratchState();
+        var first = new RtPathReservoirHistory.Frame(7L, 0, -1, false);
+        var second = new RtPathReservoirHistory.Frame(7L, 1, 0, true);
+
+        var firstBranch = branch.begin(first, 10L);
+        branch.commit(firstBranch, 10L, first.generation());
+
+        assertTrue(branch.begin(second, 11L).previousAvailable());
+        assertFalse(winner.begin(second, 11L).previousAvailable());
+
+        var firstWinner = winner.begin(first, 10L);
+        winner.commit(firstWinner, 10L, first.generation());
+        var secondWinner = winner.begin(second, 11L);
+        assertTrue(secondWinner.previousAvailable());
+        assertEquals(firstWinner.writeSlot(), secondWinner.previousSlot());
+        assertEquals(1 - firstWinner.writeSlot(), secondWinner.writeSlot());
+    }
+
+    @Test
     void shiftedSnapshotRequiresOneFrameContinuityAndMatchingGeneration() {
         var snapshots = new RtPathReservoirHistory.ShiftedSnapshotState();
         var first = new RtPathReservoirHistory.Frame(7L, 0, -1, false);
@@ -113,8 +138,8 @@ final class RtPathReservoirHistoryTest {
         long perSlot = RtPathReservoirHistory.bytesPerSlot(1280, 673);
         assertEquals(151_613_440L, perSlot);
         assertEquals(303_226_880L, Math.multiplyExact(perSlot, 2L));
-        // View 20 lazily adds one separate full-record scratch. It is not one of the two committed
-        // history slots and cannot alias the persistent mapped snapshot that cross-frame replay reads.
+        // View 20 lazily adds two separate full-record winner slots. They are not committed history
+        // and cannot alias the persistent mapped snapshot that cross-frame replay reads.
         assertEquals(151_613_440L, RtPathReservoirHistory.bytesPerSlot(1280, 673));
         assertEquals(137_830_400L, Math.multiplyExact(1280L * 673L,
                 dev.comfyfluffy.caustica.rt.gen.PathSourceRootData.BYTE_SIZE));
@@ -123,6 +148,9 @@ final class RtPathReservoirHistoryTest {
         assertEquals(8, RtPathReservoirHistory.BRANCH_CANDIDATE_TAG_STRIDE);
         assertEquals(303_226_880L,
                 RtPathReservoirHistory.branchWinnerScratchBytes(1280, 673));
+        assertEquals(606_453_760L, Math.multiplyExact(
+                RtPathReservoirHistory.branchWinnerScratchBytes(1280, 673),
+                RtPathReservoirHistory.SLOT_COUNT));
         assertEquals(16, RtPathReservoirHistory.PATH_BRANCH_WINNER_TAG_STRIDE);
     }
 

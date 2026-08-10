@@ -512,7 +512,22 @@ public static const uint PATH_GUIDE_BRANCH_WINNER_STORAGE_MAPPED_SOURCE_ACCEPTED
 public static const uint PATH_GUIDE_BRANCH_WINNER_STORAGE_ONE_SEGMENT_ACCEPTED = 510u;
 public static const uint PATH_GUIDE_BRANCH_WINNER_STORAGE_TWO_SEGMENT_ACCEPTED = 511u;
 public static const uint PATH_GUIDE_BRANCH_WINNER_STORAGE_DELTA = 512u;
-public static const uint PATH_SHIFT_DIAGNOSTIC_COUNTER_COUNT = 513u;
+public static const uint PATH_GUIDE_BRANCH_WINNER_REPLAY_ATTEMPTED = 513u;
+public static const uint PATH_GUIDE_BRANCH_WINNER_REPLAY_RECEIVER_REPROJECTION_REJECT = 514u;
+public static const uint PATH_GUIDE_BRANCH_WINNER_REPLAY_EMPTY = 515u;
+public static const uint PATH_GUIDE_BRANCH_WINNER_REPLAY_METADATA_REJECT = 516u;
+public static const uint PATH_GUIDE_BRANCH_WINNER_REPLAY_RECEIVER_SURFACE_REJECT = 517u;
+public static const uint PATH_GUIDE_BRANCH_WINNER_REPLAY_SOURCE_REPROJECTION_REJECT = 518u;
+public static const uint PATH_GUIDE_BRANCH_WINNER_REPLAY_SOURCE_SURFACE_REJECT = 519u;
+public static const uint PATH_GUIDE_BRANCH_WINNER_REPLAY_SOURCE_REPLAY_REJECT = 520u;
+public static const uint PATH_GUIDE_BRANCH_WINNER_REPLAY_SELECTED_ACCEPTED = 521u;
+public static const uint PATH_GUIDE_BRANCH_WINNER_REPLAY_RETAINED_ACCEPTED = 522u;
+public static const uint PATH_GUIDE_BRANCH_WINNER_REPLAY_IDENTITY_SOURCE_ACCEPTED = 523u;
+public static const uint PATH_GUIDE_BRANCH_WINNER_REPLAY_MAPPED_SOURCE_ACCEPTED = 524u;
+public static const uint PATH_GUIDE_BRANCH_WINNER_REPLAY_ONE_SEGMENT_ACCEPTED = 525u;
+public static const uint PATH_GUIDE_BRANCH_WINNER_REPLAY_TWO_SEGMENT_ACCEPTED = 526u;
+public static const uint PATH_GUIDE_BRANCH_WINNER_REPLAY_DELTA = 527u;
+public static const uint PATH_SHIFT_DIAGNOSTIC_COUNTER_COUNT = 528u;
 public static const uint PATH_SHIFT_DIAGNOSTIC_PAIR_MASK = 3u;
 public static const uint PATH_SHIFT_DIAGNOSTIC_MERGE_PAIR_OFFSET =
         PATH_SPATIAL_DIAGNOSTIC_PAIR_CAPACITY * 2u;
@@ -626,6 +641,8 @@ public static const uint PATH_GUIDE_BRANCH_AGE_REPLAY_PASS_FLAG = 8192u;
 public static const uint PATH_GUIDE_BRANCH_AGED_STORAGE_VALIDATE_PASS_FLAG = 16384u;
 public static const uint PATH_GUIDE_BRANCH_RECEIVER_OWNER_VALIDATE_PASS_FLAG = 32768u;
 public static const uint PATH_GUIDE_BRANCH_WINNER_STORAGE_VALIDATE_PASS_FLAG = 65536u;
+public static const uint PATH_GUIDE_BRANCH_WINNER_PREVIOUS_AVAILABLE_FLAG = 131072u;
+public static const uint PATH_GUIDE_BRANCH_WINNER_PREVIOUS_REPLAY_PASS_FLAG = 262144u;
 // replayControl.y == 0 keeps a terminal sentinel outside the valid replay-segment domain. The
 // magic prevents a cleared or partially written record from being mistaken for an intentional
 // sample-copy terminal state.
