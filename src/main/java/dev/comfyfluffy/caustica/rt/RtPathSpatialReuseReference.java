@@ -2580,6 +2580,75 @@ final class RtPathSpatialReuseReference {
                 retainedPreserve, weights, metadata, sourceKey, sourceSelected);
     }
 
+    record BranchWinnerDirectPairAudit(
+            BranchDirectPairOutcome outcome,
+            BranchDirectLaneOutcome selectedKey,
+            BranchDirectLaneOutcome selectedRoot,
+            BranchDirectLaneOutcome retainedRoot) {
+    }
+
+    /** CPU mirror for current-frame root pairing after the previous-winner record gate. */
+    static BranchWinnerDirectPairAudit branchWinnerDirectPairAudit(
+            BranchDirectRecordOutcome recordOutcome,
+            boolean selectedKeyReady,
+            boolean selectedRootReady,
+            boolean retainedRootReady,
+            boolean rootChainValid,
+            boolean rootIdentityValid) {
+        if (recordOutcome == null) {
+            throw new IllegalArgumentException("winner pair audit requires a record outcome");
+        }
+        if (recordOutcome == BranchDirectRecordOutcome.EMPTY_READY) {
+            return branchWinnerDirectPairAuditResult(BranchDirectPairOutcome.EMPTY_READY,
+                    BranchDirectLaneOutcome.NOT_ELIGIBLE,
+                    BranchDirectLaneOutcome.NOT_ELIGIBLE,
+                    BranchDirectLaneOutcome.NOT_ELIGIBLE);
+        }
+        if (recordOutcome != BranchDirectRecordOutcome.SELECTED_READY
+                && recordOutcome != BranchDirectRecordOutcome.RETAINED_READY) {
+            return branchWinnerDirectPairAuditResult(BranchDirectPairOutcome.RECORD_REJECT,
+                    BranchDirectLaneOutcome.NOT_ELIGIBLE,
+                    BranchDirectLaneOutcome.NOT_ELIGIBLE,
+                    BranchDirectLaneOutcome.NOT_ELIGIBLE);
+        }
+
+        if (recordOutcome == BranchDirectRecordOutcome.SELECTED_READY) {
+            BranchDirectLaneOutcome key = selectedKeyReady
+                    ? BranchDirectLaneOutcome.READY : BranchDirectLaneOutcome.REJECT;
+            if (!selectedKeyReady) {
+                return branchWinnerDirectPairAuditResult(
+                        BranchDirectPairOutcome.SELECTED_KEY_REJECT, key,
+                        BranchDirectLaneOutcome.NOT_ELIGIBLE,
+                        BranchDirectLaneOutcome.NOT_ELIGIBLE);
+            }
+            boolean completeRoot = selectedRootReady && rootChainValid && rootIdentityValid;
+            return branchWinnerDirectPairAuditResult(
+                    completeRoot ? BranchDirectPairOutcome.SELECTED_READY
+                            : BranchDirectPairOutcome.SELECTED_ROOT_REJECT,
+                    key, completeRoot ? BranchDirectLaneOutcome.READY
+                            : BranchDirectLaneOutcome.REJECT,
+                    BranchDirectLaneOutcome.NOT_ELIGIBLE);
+        }
+
+        boolean completeRoot = retainedRootReady && rootChainValid && rootIdentityValid;
+        return branchWinnerDirectPairAuditResult(
+                completeRoot ? BranchDirectPairOutcome.RETAINED_READY
+                        : BranchDirectPairOutcome.RETAINED_ROOT_REJECT,
+                BranchDirectLaneOutcome.NOT_ELIGIBLE,
+                BranchDirectLaneOutcome.NOT_ELIGIBLE,
+                completeRoot ? BranchDirectLaneOutcome.READY
+                        : BranchDirectLaneOutcome.REJECT);
+    }
+
+    private static BranchWinnerDirectPairAudit branchWinnerDirectPairAuditResult(
+            BranchDirectPairOutcome outcome,
+            BranchDirectLaneOutcome selectedKey,
+            BranchDirectLaneOutcome selectedRoot,
+            BranchDirectLaneOutcome retainedRoot) {
+        return new BranchWinnerDirectPairAudit(
+                outcome, selectedKey, selectedRoot, retainedRoot);
+    }
+
     /**
      * Ordered CPU mirror for the post-barrier exact-lane validation sample. Reservoir and root
      * equality are bitwise requirements; acceptance remains diagnostic-only.

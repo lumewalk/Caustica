@@ -665,7 +665,28 @@ final class RtPathReservoirHistory {
     static final int GUIDE_BRANCH_WINNER_RECORD_ONE_SEGMENT_INDEX = 625;
     static final int GUIDE_BRANCH_WINNER_RECORD_TWO_SEGMENT_INDEX = 626;
     static final int GUIDE_BRANCH_WINNER_RECORD_DELTA_INDEX = 627;
-    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 628;
+    static final int GUIDE_BRANCH_WINNER_PAIR_ELIGIBLE_INDEX = 628;
+    static final int GUIDE_BRANCH_WINNER_PAIR_SELECTED_READY_INDEX = 629;
+    static final int GUIDE_BRANCH_WINNER_PAIR_SELECTED_REJECT_INDEX = 630;
+    static final int GUIDE_BRANCH_WINNER_PAIR_RETAINED_READY_INDEX = 631;
+    static final int GUIDE_BRANCH_WINNER_PAIR_RETAINED_REJECT_INDEX = 632;
+    static final int GUIDE_BRANCH_WINNER_PAIR_EMPTY_READY_INDEX = 633;
+    static final int GUIDE_BRANCH_WINNER_PAIR_SELECTED_KEY_READY_INDEX = 634;
+    static final int GUIDE_BRANCH_WINNER_PAIR_SELECTED_KEY_REJECT_INDEX = 635;
+    static final int GUIDE_BRANCH_WINNER_PAIR_SELECTED_ROOT_READY_INDEX = 636;
+    static final int GUIDE_BRANCH_WINNER_PAIR_SELECTED_ROOT_REJECT_INDEX = 637;
+    static final int GUIDE_BRANCH_WINNER_PAIR_RETAINED_ROOT_READY_INDEX = 638;
+    static final int GUIDE_BRANCH_WINNER_PAIR_RETAINED_ROOT_REJECT_INDEX = 639;
+    static final int GUIDE_BRANCH_WINNER_PAIR_ROOT_CHAIN_REJECT_INDEX = 640;
+    static final int GUIDE_BRANCH_WINNER_PAIR_ROOT_IDENTITY_REJECT_INDEX = 641;
+    static final int GUIDE_BRANCH_WINNER_PAIR_PREVIOUS_SELECTED_INDEX = 642;
+    static final int GUIDE_BRANCH_WINNER_PAIR_PREVIOUS_RETAINED_INDEX = 643;
+    static final int GUIDE_BRANCH_WINNER_PAIR_IDENTITY_SOURCE_INDEX = 644;
+    static final int GUIDE_BRANCH_WINNER_PAIR_MAPPED_SOURCE_INDEX = 645;
+    static final int GUIDE_BRANCH_WINNER_PAIR_ONE_SEGMENT_INDEX = 646;
+    static final int GUIDE_BRANCH_WINNER_PAIR_TWO_SEGMENT_INDEX = 647;
+    static final int GUIDE_BRANCH_WINNER_PAIR_DELTA_INDEX = 648;
+    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 649;
     static final int SHIFTED_RECEIVER_GUIDE_STRIDE = 8 * Float.BYTES;
     static final int BRANCH_RECEIVER_OWNERSHIP_STRIDE = 2 * Integer.BYTES;
     static final int BRANCH_CANDIDATE_TAG_STRIDE = 2 * Integer.BYTES;
@@ -2326,6 +2347,46 @@ final class RtPathReservoirHistory {
                     counters.get(GUIDE_BRANCH_WINNER_RECORD_ONE_SEGMENT_INDEX));
             long guideBranchWinnerRecordTwoSegment = Integer.toUnsignedLong(
                     counters.get(GUIDE_BRANCH_WINNER_RECORD_TWO_SEGMENT_INDEX));
+            long guideBranchWinnerPairEligible = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_PAIR_ELIGIBLE_INDEX));
+            long guideBranchWinnerPairSelectedReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_PAIR_SELECTED_READY_INDEX));
+            long guideBranchWinnerPairSelectedReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_PAIR_SELECTED_REJECT_INDEX));
+            long guideBranchWinnerPairRetainedReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_PAIR_RETAINED_READY_INDEX));
+            long guideBranchWinnerPairRetainedReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_PAIR_RETAINED_REJECT_INDEX));
+            long guideBranchWinnerPairEmptyReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_PAIR_EMPTY_READY_INDEX));
+            long guideBranchWinnerPairSelectedKeyReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_PAIR_SELECTED_KEY_READY_INDEX));
+            long guideBranchWinnerPairSelectedKeyReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_PAIR_SELECTED_KEY_REJECT_INDEX));
+            long guideBranchWinnerPairSelectedRootReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_PAIR_SELECTED_ROOT_READY_INDEX));
+            long guideBranchWinnerPairSelectedRootReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_PAIR_SELECTED_ROOT_REJECT_INDEX));
+            long guideBranchWinnerPairRetainedRootReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_PAIR_RETAINED_ROOT_READY_INDEX));
+            long guideBranchWinnerPairRetainedRootReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_PAIR_RETAINED_ROOT_REJECT_INDEX));
+            long guideBranchWinnerPairRootChainReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_PAIR_ROOT_CHAIN_REJECT_INDEX));
+            long guideBranchWinnerPairRootIdentityReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_PAIR_ROOT_IDENTITY_REJECT_INDEX));
+            long guideBranchWinnerPairPreviousSelected = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_PAIR_PREVIOUS_SELECTED_INDEX));
+            long guideBranchWinnerPairPreviousRetained = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_PAIR_PREVIOUS_RETAINED_INDEX));
+            long guideBranchWinnerPairIdentitySource = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_PAIR_IDENTITY_SOURCE_INDEX));
+            long guideBranchWinnerPairMappedSource = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_PAIR_MAPPED_SOURCE_INDEX));
+            long guideBranchWinnerPairOneSegment = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_PAIR_ONE_SEGMENT_INDEX));
+            long guideBranchWinnerPairTwoSegment = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_PAIR_TWO_SEGMENT_INDEX));
             long crossFrameReceiverReject = crossFrameReceiverSurfaceReject
                     + crossFrameReceiverSampleReject + crossFrameReceiverEdgeReject
                     + crossFrameReceiverTopologyReject + crossFrameReceiverDepthReject
@@ -4170,6 +4231,80 @@ final class RtPathReservoirHistory {
                     guideBranchWinnerRecordOneSegment,
                     guideBranchWinnerRecordTwoSegment,
                     guideBranchWinnerRecordReady - guideBranchWinnerRecordSegments);
+            long guideBranchWinnerPairSelected =
+                    guideBranchWinnerPairSelectedReady + guideBranchWinnerPairSelectedReject;
+            long guideBranchWinnerPairRetained =
+                    guideBranchWinnerPairRetainedReady + guideBranchWinnerPairRetainedReject;
+            long guideBranchWinnerPairTerminal =
+                    guideBranchWinnerPairSelected + guideBranchWinnerPairRetained;
+            long guideBranchWinnerPairReady =
+                    guideBranchWinnerPairSelectedReady + guideBranchWinnerPairRetainedReady;
+            long guideBranchWinnerPairSelectedKey =
+                    guideBranchWinnerPairSelectedKeyReady
+                            + guideBranchWinnerPairSelectedKeyReject;
+            long guideBranchWinnerPairSelectedRoot =
+                    guideBranchWinnerPairSelectedRootReady
+                            + guideBranchWinnerPairSelectedRootReject;
+            long guideBranchWinnerPairRetainedRoot =
+                    guideBranchWinnerPairRetainedRootReady
+                            + guideBranchWinnerPairRetainedRootReject;
+            long guideBranchWinnerPairPrevious =
+                    guideBranchWinnerPairPreviousSelected
+                            + guideBranchWinnerPairPreviousRetained;
+            long guideBranchWinnerPairSource =
+                    guideBranchWinnerPairIdentitySource
+                            + guideBranchWinnerPairMappedSource;
+            long guideBranchWinnerPairSegments =
+                    guideBranchWinnerPairOneSegment
+                            + guideBranchWinnerPairTwoSegment;
+            CausticaMod.LOGGER.info(
+                    "RT path guide branch winner pair: recordReady={} eligible={} "
+                            + "selected[ready={},reject={},terminal={},gateDelta={}] "
+                            + "retained[ready={},reject={},terminal={},gateDelta={}] "
+                            + "empty={} terminal={} delta={} gateDelta={} "
+                            + "lanes[key[ready={},reject={},delta={}],"
+                            + "selectedRoot[ready={},reject={},delta={}],"
+                            + "retainedRoot[ready={},reject={},delta={}]] "
+                            + "rootReject[chain={},identity={}] ready={} "
+                            + "previous[selected={},retained={},delta={}] "
+                            + "source[identity={},mapped={},delta={}] "
+                            + "segments[one={},two={},delta={}]",
+                    guideBranchWinnerRecordReady,
+                    guideBranchWinnerPairEligible,
+                    guideBranchWinnerPairSelectedReady,
+                    guideBranchWinnerPairSelectedReject,
+                    guideBranchWinnerPairSelected,
+                    guideBranchWinnerRecordSelectedReady - guideBranchWinnerPairSelected,
+                    guideBranchWinnerPairRetainedReady,
+                    guideBranchWinnerPairRetainedReject,
+                    guideBranchWinnerPairRetained,
+                    guideBranchWinnerRecordRetainedReady - guideBranchWinnerPairRetained,
+                    guideBranchWinnerPairEmptyReady,
+                    guideBranchWinnerPairTerminal,
+                    guideBranchWinnerPairEligible - guideBranchWinnerPairTerminal,
+                    guideBranchWinnerRecordReady - guideBranchWinnerPairEligible
+                            - guideBranchWinnerPairEmptyReady,
+                    guideBranchWinnerPairSelectedKeyReady,
+                    guideBranchWinnerPairSelectedKeyReject,
+                    guideBranchWinnerRecordSelectedReady - guideBranchWinnerPairSelectedKey,
+                    guideBranchWinnerPairSelectedRootReady,
+                    guideBranchWinnerPairSelectedRootReject,
+                    guideBranchWinnerPairSelectedKeyReady - guideBranchWinnerPairSelectedRoot,
+                    guideBranchWinnerPairRetainedRootReady,
+                    guideBranchWinnerPairRetainedRootReject,
+                    guideBranchWinnerRecordRetainedReady - guideBranchWinnerPairRetainedRoot,
+                    guideBranchWinnerPairRootChainReject,
+                    guideBranchWinnerPairRootIdentityReject,
+                    guideBranchWinnerPairReady,
+                    guideBranchWinnerPairPreviousSelected,
+                    guideBranchWinnerPairPreviousRetained,
+                    guideBranchWinnerPairReady - guideBranchWinnerPairPrevious,
+                    guideBranchWinnerPairIdentitySource,
+                    guideBranchWinnerPairMappedSource,
+                    guideBranchWinnerPairReady - guideBranchWinnerPairSource,
+                    guideBranchWinnerPairOneSegment,
+                    guideBranchWinnerPairTwoSegment,
+                    guideBranchWinnerPairReady - guideBranchWinnerPairSegments);
             spatialDiagnosticViewPending = 0;
             return;
         }

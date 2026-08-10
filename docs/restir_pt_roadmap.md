@@ -1068,8 +1068,8 @@ must remain identity mapped. Empty retained results remain explicit records with
 
 Twenty-five counters partition selected/retained/empty results, rewrite, selected-preserve,
 retained-preserve, source-key, weight and common-metadata lanes plus previous-output/source/segment
-ownership. Counter storage is 628 uints / 2512 B. No root pair is assembled and no allocation,
-`WorldPush`, replay ABI, scratch, committed history or estimator state changes.
+ownership. The follow-on pair gate adds 21 counters, taking storage to 649 uints / 2596 B. No
+allocation, `WorldPush`, replay ABI, scratch, committed history or estimator state changes.
 
 Runtime produced 15 non-zero readbacks / 169988 post-selection-ready outcomes; one separate zero
 readback occurred during a render-size reset and was excluded from the aggregate. The record gate
@@ -1081,6 +1081,21 @@ one segment. Every terminal, lane, ownership and gate delta was zero, with no Vu
 shader failure. Preserve tolerances must not be loosened to hide the two safe rejects. The next gate
 may pair each accepted non-empty record with its current-frame `PathSourceRoot` in registers only;
 storage, committed history and the ordinary estimator remain blocked.
+
+That current-frame root pair is now assembled and validated in registers. Selected output keeps the
+immutable previous winner root, replaces its source/receiver guide surfaces with the independently
+reprojected current guides, and advances both packed queue origins exactly once by `-camDelta`.
+Retained output captures the current queue root fresh. Both branches require a finite root, an exact
+one- or two-segment chain and matching current source/receiver identities; empty output explicitly
+carries no root. The pair is not replayed or written by this gate.
+
+Fresh Vulkan validation produced 18 readbacks / 100967 non-empty record-ready outcomes. All 91637
+selected and 9330 retained pairs were ready; selected key, selected root, retained root, chain and
+identity rejects were zero. Accepted provenance split into 93310 previous-selected + 7657 previous-
+retained winners and 7778 identity + 93189 mapped original sources. Runtime exercised 100967 one-
+segment and zero two-segment roots. Every printed delta/gateDelta was zero and no Vulkan/device/GPU/
+shader failure occurred. The next gate may replay each just-assembled pair directly from its own
+current-frame root, still register/counter-only; all storage/history/estimator writes remain blocked.
 
 ## Delivery Phases
 

@@ -815,7 +815,8 @@ empty terminal partition. Rewrite, selected-preserve and source-key lane partiti
 selected population; retained-preserve equals the non-empty retained population; weights and common
 metadata each equal all non-empty records. Accepted record count must equal previous-output,
 source-mapping and segment partitions. Every printed delta/gateDelta must be zero. The counter
-buffer is 628 uints / 2512 B, with all allocation and ABI sizes unchanged.
+buffer for this and the follow-on root-pair gate is 649 uints / 2596 B, with all allocation and ABI
+sizes unchanged.
 
 Fresh runtime validation produced 15 non-zero readbacks / 169988 eligible records, plus one excluded
 zero readback during resize/reset. Results were 155362 selected-ready, 14622 retained-ready, 2
@@ -825,6 +826,19 @@ previous-retained and 11805 identity + 158181 mapped original sources; every acc
 one segment. All deltas were zero and no Vulkan/GPU/shader error occurred. Keep the two preserve
 rejects fail-closed. The next gate may construct the matching source root in registers; no storage,
 history or estimator write is authorized.
+
+`RT path guide branch winner pair` validates that register reservoir against its current-frame
+`PathSourceRoot`. Selected records must have a ready current source key, exact selected-root
+construction, valid segment chain and matching current source/receiver identities. Retained records
+must capture a fresh current queue root and pass the same chain/identity checks. Valid accounting
+requires `recordReady == eligible + empty`, `eligible == selected terminal + retained terminal`, each
+root/key lane to cover its eligible branch exactly, and accepted count to equal previous-output,
+source-mapping and segment partitions. All reported deltas must be zero.
+
+The reference quick-play produced 18 readbacks / 100967 eligible pairs: 91637 selected-ready + 9330
+retained-ready, with zero key/root/chain/identity rejects and exact ownership/segment accounting.
+The client was then closed and no Java process remained. This gate performs no pair replay or write;
+the next allowed step is direct register-only replay from the newly assembled root.
 
 For a fresh runtime check, use debug view 20 and inspect `run/logs/latest.log`. Normal operation
 requires `RT bring-up OK`, Vulkan, the intended NVIDIA device, exact zero-delta counter partitions,
