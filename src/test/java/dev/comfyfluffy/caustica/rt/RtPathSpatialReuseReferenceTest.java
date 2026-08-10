@@ -1862,6 +1862,51 @@ final class RtPathSpatialReuseReferenceTest {
     }
 
     @Test
+    void branchWinnerRecordSeparatesRewrittenPreservedAndValidatedLanes() {
+        var selected = RtPathSpatialReuseReference.BranchDirectPostSelectionOutcome.SELECTED_READY;
+        var retained = RtPathSpatialReuseReference.BranchDirectPostSelectionOutcome.RETAINED_READY;
+        var ready = RtPathSpatialReuseReference.BranchDirectLaneOutcome.READY;
+        var reject = RtPathSpatialReuseReference.BranchDirectLaneOutcome.REJECT;
+        var notEligible = RtPathSpatialReuseReference.BranchDirectLaneOutcome.NOT_ELIGIBLE;
+
+        assertEquals(new RtPathSpatialReuseReference.BranchWinnerDirectRecordAudit(
+                        RtPathSpatialReuseReference.BranchDirectRecordOutcome.SELECTED_READY,
+                        ready, ready, notEligible, ready, ready, ready, true),
+                RtPathSpatialReuseReference.branchWinnerDirectRecordAudit(
+                        selected, false, true, true, false, true, true, true));
+        assertEquals(new RtPathSpatialReuseReference.BranchWinnerDirectRecordAudit(
+                        RtPathSpatialReuseReference.BranchDirectRecordOutcome.SELECTED_REJECT,
+                        ready, ready, notEligible, ready, ready, reject, true),
+                RtPathSpatialReuseReference.branchWinnerDirectRecordAudit(
+                        selected, false, true, true, false, true, true, false));
+        assertEquals(RtPathSpatialReuseReference.BranchDirectRecordOutcome.SELECTED_REJECT,
+                RtPathSpatialReuseReference.branchWinnerDirectRecordAudit(
+                        selected, false, false, true, false, true, true, true).outcome());
+
+        assertEquals(new RtPathSpatialReuseReference.BranchWinnerDirectRecordAudit(
+                        RtPathSpatialReuseReference.BranchDirectRecordOutcome.RETAINED_READY,
+                        notEligible, notEligible, ready, ready, ready, notEligible, false),
+                RtPathSpatialReuseReference.branchWinnerDirectRecordAudit(
+                        retained, false, false, false, true, true, true, false));
+        assertEquals(new RtPathSpatialReuseReference.BranchWinnerDirectRecordAudit(
+                        RtPathSpatialReuseReference.BranchDirectRecordOutcome.RETAINED_REJECT,
+                        notEligible, notEligible, ready, ready, reject, notEligible, false),
+                RtPathSpatialReuseReference.branchWinnerDirectRecordAudit(
+                        retained, false, false, false, true, true, false, true));
+
+        assertEquals(RtPathSpatialReuseReference.BranchDirectRecordOutcome.EMPTY_READY,
+                RtPathSpatialReuseReference.branchWinnerDirectRecordAudit(
+                        retained, true, false, false, false, false, false, false).outcome());
+        assertEquals(RtPathSpatialReuseReference.BranchDirectRecordOutcome.SELECTED_REJECT,
+                RtPathSpatialReuseReference.branchWinnerDirectRecordAudit(
+                        selected, true, false, false, false, false, false, false).outcome());
+        assertEquals(RtPathSpatialReuseReference.BranchDirectRecordOutcome.POST_SELECTION_REJECT,
+                RtPathSpatialReuseReference.branchWinnerDirectRecordAudit(
+                        RtPathSpatialReuseReference.BranchDirectPostSelectionOutcome.NEXT_REJECT,
+                        false, true, true, true, true, true, true).outcome());
+    }
+
+    @Test
     void pairedMomentsExposeCovarianceAndCorrelationWithoutBatchStorage() {
         var moments = new RtPathSpatialReuseReference.PairMoments();
         moments.add(1.0, 2.0);
@@ -2909,8 +2954,56 @@ final class RtPathSpatialReuseReferenceTest {
                 RtPathReservoirHistory.GUIDE_BRANCH_WINNER_POST_SELECTION_TWO_SEGMENT_INDEX);
         assertEquals(602,
                 RtPathReservoirHistory.GUIDE_BRANCH_WINNER_POST_SELECTION_DELTA_INDEX);
-        assertEquals(603, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
-        assertEquals(603 * Integer.BYTES,
+        assertEquals(603, RtPathReservoirHistory.GUIDE_BRANCH_WINNER_RECORD_ELIGIBLE_INDEX);
+        assertEquals(604,
+                RtPathReservoirHistory.GUIDE_BRANCH_WINNER_RECORD_SELECTED_READY_INDEX);
+        assertEquals(605,
+                RtPathReservoirHistory.GUIDE_BRANCH_WINNER_RECORD_SELECTED_REJECT_INDEX);
+        assertEquals(606,
+                RtPathReservoirHistory.GUIDE_BRANCH_WINNER_RECORD_RETAINED_READY_INDEX);
+        assertEquals(607,
+                RtPathReservoirHistory.GUIDE_BRANCH_WINNER_RECORD_RETAINED_REJECT_INDEX);
+        assertEquals(608,
+                RtPathReservoirHistory.GUIDE_BRANCH_WINNER_RECORD_EMPTY_READY_INDEX);
+        assertEquals(609, RtPathReservoirHistory
+                .GUIDE_BRANCH_WINNER_RECORD_SELECTED_REWRITE_READY_INDEX);
+        assertEquals(610, RtPathReservoirHistory
+                .GUIDE_BRANCH_WINNER_RECORD_SELECTED_REWRITE_REJECT_INDEX);
+        assertEquals(611, RtPathReservoirHistory
+                .GUIDE_BRANCH_WINNER_RECORD_SELECTED_PRESERVE_READY_INDEX);
+        assertEquals(612, RtPathReservoirHistory
+                .GUIDE_BRANCH_WINNER_RECORD_SELECTED_PRESERVE_REJECT_INDEX);
+        assertEquals(613, RtPathReservoirHistory
+                .GUIDE_BRANCH_WINNER_RECORD_RETAINED_PRESERVE_READY_INDEX);
+        assertEquals(614, RtPathReservoirHistory
+                .GUIDE_BRANCH_WINNER_RECORD_RETAINED_PRESERVE_REJECT_INDEX);
+        assertEquals(615,
+                RtPathReservoirHistory.GUIDE_BRANCH_WINNER_RECORD_WEIGHTS_READY_INDEX);
+        assertEquals(616,
+                RtPathReservoirHistory.GUIDE_BRANCH_WINNER_RECORD_WEIGHTS_REJECT_INDEX);
+        assertEquals(617,
+                RtPathReservoirHistory.GUIDE_BRANCH_WINNER_RECORD_METADATA_READY_INDEX);
+        assertEquals(618,
+                RtPathReservoirHistory.GUIDE_BRANCH_WINNER_RECORD_METADATA_REJECT_INDEX);
+        assertEquals(619,
+                RtPathReservoirHistory.GUIDE_BRANCH_WINNER_RECORD_SOURCE_KEY_READY_INDEX);
+        assertEquals(620,
+                RtPathReservoirHistory.GUIDE_BRANCH_WINNER_RECORD_SOURCE_KEY_REJECT_INDEX);
+        assertEquals(621,
+                RtPathReservoirHistory.GUIDE_BRANCH_WINNER_RECORD_PREVIOUS_SELECTED_INDEX);
+        assertEquals(622,
+                RtPathReservoirHistory.GUIDE_BRANCH_WINNER_RECORD_PREVIOUS_RETAINED_INDEX);
+        assertEquals(623,
+                RtPathReservoirHistory.GUIDE_BRANCH_WINNER_RECORD_IDENTITY_SOURCE_INDEX);
+        assertEquals(624,
+                RtPathReservoirHistory.GUIDE_BRANCH_WINNER_RECORD_MAPPED_SOURCE_INDEX);
+        assertEquals(625,
+                RtPathReservoirHistory.GUIDE_BRANCH_WINNER_RECORD_ONE_SEGMENT_INDEX);
+        assertEquals(626,
+                RtPathReservoirHistory.GUIDE_BRANCH_WINNER_RECORD_TWO_SEGMENT_INDEX);
+        assertEquals(627, RtPathReservoirHistory.GUIDE_BRANCH_WINNER_RECORD_DELTA_INDEX);
+        assertEquals(628, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
+        assertEquals(628 * Integer.BYTES,
                 RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_COUNTER_BYTES);
         assertEquals(32, RtPathReservoirHistory.SHIFTED_RECEIVER_GUIDE_STRIDE);
         assertEquals(8, RtPathReservoirHistory.BRANCH_RECEIVER_OWNERSHIP_STRIDE);

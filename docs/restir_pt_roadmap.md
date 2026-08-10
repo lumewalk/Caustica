@@ -1057,6 +1057,31 @@ GPU/shader failure. The next gate may assemble the complete selected/retained re
 registers and validate its lane policy, still without a root pair, scratch/history write or
 ordinary-estimator contribution.
 
+The next gate now assembles that complete reservoir record in registers. A selected previous
+winner rewrites current receiver radiance/target, direct Jacobian, receiver PDF/throughput,
+reconnection metadata, current generation and the independently reprojected current source key.
+It preserves the immutable source proposal components, seeds, replay control, topology and source
+identity. A retained outcome preserves every current sample lane bit-for-bit and replaces only the
+proven post-selection weight lane. Both non-empty branches run the common sample-metadata validator;
+selected output additionally runs the exact mapping-source replay comparator, while retained output
+must remain identity mapped. Empty retained results remain explicit records with no metadata claim.
+
+Twenty-five counters partition selected/retained/empty results, rewrite, selected-preserve,
+retained-preserve, source-key, weight and common-metadata lanes plus previous-output/source/segment
+ownership. Counter storage is 628 uints / 2512 B. No root pair is assembled and no allocation,
+`WorldPush`, replay ABI, scratch, committed history or estimator state changes.
+
+Runtime produced 15 non-zero readbacks / 169988 post-selection-ready outcomes; one separate zero
+readback occurred during a render-size reset and was excluded from the aggregate. The record gate
+accepted 155362 selected + 14622 retained + 2 empty records. Two selected records failed the strict
+preserve lane and were rejected explicitly; rewrite, source-key, retained-preserve, weight and
+common-metadata rejects were zero. The 169986 accepted records split into 157843 previous-selected
++ 12143 previous-retained ownership and 11805 identity + 158181 mapped original sources; all used
+one segment. Every terminal, lane, ownership and gate delta was zero, with no Vulkan/device/GPU/
+shader failure. Preserve tolerances must not be loosened to hide the two safe rejects. The next gate
+may pair each accepted non-empty record with its current-frame `PathSourceRoot` in registers only;
+storage, committed history and the ordinary estimator remain blocked.
+
 ## Delivery Phases
 
 ### Phase 0 — Wavefront Integration Baseline

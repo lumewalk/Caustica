@@ -803,6 +803,29 @@ GPU/shader error was logged, and the client was closed with no Java process rema
 gate may assemble and validate only the future reservoir record in registers; root pairing,
 scratch/history storage and ordinary-estimator use remain forbidden.
 
+`RT path guide branch winner record` assembles the full future reservoir only in registers.
+Selected output rewrites receiver-dependent lanes and the already independently reprojected source
+key, while preserving source proposal/replay lanes. Retained output preserves current sample
+metadata exactly. The common metadata validator is mandatory for both non-empty branches; selected
+records must also pass the mapping-source replay comparator, and retained records must remain
+identity mapped. The local record must never be written by this gate.
+
+Valid accounting requires post-selection ready to equal record eligible and its selected/retained/
+empty terminal partition. Rewrite, selected-preserve and source-key lane partitions each equal the
+selected population; retained-preserve equals the non-empty retained population; weights and common
+metadata each equal all non-empty records. Accepted record count must equal previous-output,
+source-mapping and segment partitions. Every printed delta/gateDelta must be zero. The counter
+buffer is 628 uints / 2512 B, with all allocation and ABI sizes unchanged.
+
+Fresh runtime validation produced 15 non-zero readbacks / 169988 eligible records, plus one excluded
+zero readback during resize/reset. Results were 155362 selected-ready, 14622 retained-ready, 2
+empty-ready and 2 explicit selected preserve-lane rejects. Rewrite, source-key, retained-preserve,
+weight and metadata rejects were zero. Accepted ownership was 157843 previous-selected + 12143
+previous-retained and 11805 identity + 158181 mapped original sources; every accepted record used
+one segment. All deltas were zero and no Vulkan/GPU/shader error occurred. Keep the two preserve
+rejects fail-closed. The next gate may construct the matching source root in registers; no storage,
+history or estimator write is authorized.
+
 For a fresh runtime check, use debug view 20 and inspect `run/logs/latest.log`. Normal operation
 requires `RT bring-up OK`, Vulkan, the intended NVIDIA device, exact zero-delta counter partitions,
 and no `DEVICE_LOST`, `VK_ERROR`, GPU fault or shader compilation error. Debug colors and sparse

@@ -640,7 +640,32 @@ final class RtPathReservoirHistory {
     static final int GUIDE_BRANCH_WINNER_POST_SELECTION_ONE_SEGMENT_INDEX = 600;
     static final int GUIDE_BRANCH_WINNER_POST_SELECTION_TWO_SEGMENT_INDEX = 601;
     static final int GUIDE_BRANCH_WINNER_POST_SELECTION_DELTA_INDEX = 602;
-    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 603;
+    static final int GUIDE_BRANCH_WINNER_RECORD_ELIGIBLE_INDEX = 603;
+    static final int GUIDE_BRANCH_WINNER_RECORD_SELECTED_READY_INDEX = 604;
+    static final int GUIDE_BRANCH_WINNER_RECORD_SELECTED_REJECT_INDEX = 605;
+    static final int GUIDE_BRANCH_WINNER_RECORD_RETAINED_READY_INDEX = 606;
+    static final int GUIDE_BRANCH_WINNER_RECORD_RETAINED_REJECT_INDEX = 607;
+    static final int GUIDE_BRANCH_WINNER_RECORD_EMPTY_READY_INDEX = 608;
+    static final int GUIDE_BRANCH_WINNER_RECORD_SELECTED_REWRITE_READY_INDEX = 609;
+    static final int GUIDE_BRANCH_WINNER_RECORD_SELECTED_REWRITE_REJECT_INDEX = 610;
+    static final int GUIDE_BRANCH_WINNER_RECORD_SELECTED_PRESERVE_READY_INDEX = 611;
+    static final int GUIDE_BRANCH_WINNER_RECORD_SELECTED_PRESERVE_REJECT_INDEX = 612;
+    static final int GUIDE_BRANCH_WINNER_RECORD_RETAINED_PRESERVE_READY_INDEX = 613;
+    static final int GUIDE_BRANCH_WINNER_RECORD_RETAINED_PRESERVE_REJECT_INDEX = 614;
+    static final int GUIDE_BRANCH_WINNER_RECORD_WEIGHTS_READY_INDEX = 615;
+    static final int GUIDE_BRANCH_WINNER_RECORD_WEIGHTS_REJECT_INDEX = 616;
+    static final int GUIDE_BRANCH_WINNER_RECORD_METADATA_READY_INDEX = 617;
+    static final int GUIDE_BRANCH_WINNER_RECORD_METADATA_REJECT_INDEX = 618;
+    static final int GUIDE_BRANCH_WINNER_RECORD_SOURCE_KEY_READY_INDEX = 619;
+    static final int GUIDE_BRANCH_WINNER_RECORD_SOURCE_KEY_REJECT_INDEX = 620;
+    static final int GUIDE_BRANCH_WINNER_RECORD_PREVIOUS_SELECTED_INDEX = 621;
+    static final int GUIDE_BRANCH_WINNER_RECORD_PREVIOUS_RETAINED_INDEX = 622;
+    static final int GUIDE_BRANCH_WINNER_RECORD_IDENTITY_SOURCE_INDEX = 623;
+    static final int GUIDE_BRANCH_WINNER_RECORD_MAPPED_SOURCE_INDEX = 624;
+    static final int GUIDE_BRANCH_WINNER_RECORD_ONE_SEGMENT_INDEX = 625;
+    static final int GUIDE_BRANCH_WINNER_RECORD_TWO_SEGMENT_INDEX = 626;
+    static final int GUIDE_BRANCH_WINNER_RECORD_DELTA_INDEX = 627;
+    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 628;
     static final int SHIFTED_RECEIVER_GUIDE_STRIDE = 8 * Float.BYTES;
     static final int BRANCH_RECEIVER_OWNERSHIP_STRIDE = 2 * Integer.BYTES;
     static final int BRANCH_CANDIDATE_TAG_STRIDE = 2 * Integer.BYTES;
@@ -2253,6 +2278,54 @@ final class RtPathReservoirHistory {
                     counters.get(GUIDE_BRANCH_WINNER_POST_SELECTION_ONE_SEGMENT_INDEX));
             long guideBranchWinnerPostSelectionTwoSegment = Integer.toUnsignedLong(
                     counters.get(GUIDE_BRANCH_WINNER_POST_SELECTION_TWO_SEGMENT_INDEX));
+            long guideBranchWinnerRecordEligible = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_RECORD_ELIGIBLE_INDEX));
+            long guideBranchWinnerRecordSelectedReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_RECORD_SELECTED_READY_INDEX));
+            long guideBranchWinnerRecordSelectedReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_RECORD_SELECTED_REJECT_INDEX));
+            long guideBranchWinnerRecordRetainedReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_RECORD_RETAINED_READY_INDEX));
+            long guideBranchWinnerRecordRetainedReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_RECORD_RETAINED_REJECT_INDEX));
+            long guideBranchWinnerRecordEmptyReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_RECORD_EMPTY_READY_INDEX));
+            long guideBranchWinnerRecordSelectedRewriteReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_RECORD_SELECTED_REWRITE_READY_INDEX));
+            long guideBranchWinnerRecordSelectedRewriteReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_RECORD_SELECTED_REWRITE_REJECT_INDEX));
+            long guideBranchWinnerRecordSelectedPreserveReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_RECORD_SELECTED_PRESERVE_READY_INDEX));
+            long guideBranchWinnerRecordSelectedPreserveReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_RECORD_SELECTED_PRESERVE_REJECT_INDEX));
+            long guideBranchWinnerRecordRetainedPreserveReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_RECORD_RETAINED_PRESERVE_READY_INDEX));
+            long guideBranchWinnerRecordRetainedPreserveReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_RECORD_RETAINED_PRESERVE_REJECT_INDEX));
+            long guideBranchWinnerRecordWeightsReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_RECORD_WEIGHTS_READY_INDEX));
+            long guideBranchWinnerRecordWeightsReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_RECORD_WEIGHTS_REJECT_INDEX));
+            long guideBranchWinnerRecordMetadataReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_RECORD_METADATA_READY_INDEX));
+            long guideBranchWinnerRecordMetadataReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_RECORD_METADATA_REJECT_INDEX));
+            long guideBranchWinnerRecordSourceKeyReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_RECORD_SOURCE_KEY_READY_INDEX));
+            long guideBranchWinnerRecordSourceKeyReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_RECORD_SOURCE_KEY_REJECT_INDEX));
+            long guideBranchWinnerRecordPreviousSelected = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_RECORD_PREVIOUS_SELECTED_INDEX));
+            long guideBranchWinnerRecordPreviousRetained = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_RECORD_PREVIOUS_RETAINED_INDEX));
+            long guideBranchWinnerRecordIdentitySource = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_RECORD_IDENTITY_SOURCE_INDEX));
+            long guideBranchWinnerRecordMappedSource = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_RECORD_MAPPED_SOURCE_INDEX));
+            long guideBranchWinnerRecordOneSegment = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_RECORD_ONE_SEGMENT_INDEX));
+            long guideBranchWinnerRecordTwoSegment = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_RECORD_TWO_SEGMENT_INDEX));
             long crossFrameReceiverReject = crossFrameReceiverSurfaceReject
                     + crossFrameReceiverSampleReject + crossFrameReceiverEdgeReject
                     + crossFrameReceiverTopologyReject + crossFrameReceiverDepthReject
@@ -3826,6 +3899,47 @@ final class RtPathReservoirHistory {
             long guideBranchWinnerPostSelectionSegments =
                     guideBranchWinnerPostSelectionOneSegment
                             + guideBranchWinnerPostSelectionTwoSegment;
+            long guideBranchWinnerRecordSelected =
+                    guideBranchWinnerRecordSelectedReady
+                            + guideBranchWinnerRecordSelectedReject;
+            long guideBranchWinnerRecordRetained =
+                    guideBranchWinnerRecordRetainedReady
+                            + guideBranchWinnerRecordRetainedReject;
+            long guideBranchWinnerRecordTerminal =
+                    guideBranchWinnerRecordSelected
+                            + guideBranchWinnerRecordRetained
+                            + guideBranchWinnerRecordEmptyReady;
+            long guideBranchWinnerRecordReady =
+                    guideBranchWinnerRecordSelectedReady
+                            + guideBranchWinnerRecordRetainedReady
+                            + guideBranchWinnerRecordEmptyReady;
+            long guideBranchWinnerRecordSelectedRewrite =
+                    guideBranchWinnerRecordSelectedRewriteReady
+                            + guideBranchWinnerRecordSelectedRewriteReject;
+            long guideBranchWinnerRecordSelectedPreserve =
+                    guideBranchWinnerRecordSelectedPreserveReady
+                            + guideBranchWinnerRecordSelectedPreserveReject;
+            long guideBranchWinnerRecordRetainedPreserve =
+                    guideBranchWinnerRecordRetainedPreserveReady
+                            + guideBranchWinnerRecordRetainedPreserveReject;
+            long guideBranchWinnerRecordWeights =
+                    guideBranchWinnerRecordWeightsReady
+                            + guideBranchWinnerRecordWeightsReject;
+            long guideBranchWinnerRecordMetadata =
+                    guideBranchWinnerRecordMetadataReady
+                            + guideBranchWinnerRecordMetadataReject;
+            long guideBranchWinnerRecordSourceKey =
+                    guideBranchWinnerRecordSourceKeyReady
+                            + guideBranchWinnerRecordSourceKeyReject;
+            long guideBranchWinnerRecordPrevious =
+                    guideBranchWinnerRecordPreviousSelected
+                            + guideBranchWinnerRecordPreviousRetained;
+            long guideBranchWinnerRecordSource =
+                    guideBranchWinnerRecordIdentitySource
+                            + guideBranchWinnerRecordMappedSource;
+            long guideBranchWinnerRecordSegments =
+                    guideBranchWinnerRecordOneSegment
+                            + guideBranchWinnerRecordTwoSegment;
             CausticaMod.LOGGER.info(
                     "RT path guide branch winner direct remap: "
                             + "replayAccepted={} remap[eligible={},guide={},edge={},geometry={},"
@@ -3994,6 +4108,68 @@ final class RtPathReservoirHistory {
                     guideBranchWinnerPostSelectionTwoSegment,
                     guideBranchWinnerPostSelectionReady
                             - guideBranchWinnerPostSelectionSegments);
+            long guideBranchWinnerRecordNonEmpty =
+                    guideBranchWinnerRecordSelected + guideBranchWinnerRecordRetained;
+            CausticaMod.LOGGER.info(
+                    "RT path guide branch winner record: postReady={} eligible={} "
+                            + "selected[ready={},reject={},terminal={},gateDelta={}] "
+                            + "retained[ready={},reject={},terminal={},gateDelta={}] "
+                            + "empty={} terminal={} delta={} gateDelta={} "
+                            + "lanes[rewrite[ready={},reject={},delta={}],"
+                            + "selectedPreserve[ready={},reject={},delta={}],"
+                            + "sourceKey[ready={},reject={},delta={}],"
+                            + "retainedPreserve[ready={},reject={},delta={}],"
+                            + "weights[ready={},reject={},delta={}],"
+                            + "metadata[ready={},reject={},delta={}]] "
+                            + "ready={} previous[selected={},retained={},delta={}] "
+                            + "source[identity={},mapped={},delta={}] "
+                            + "segments[one={},two={},delta={}]",
+                    guideBranchWinnerPostSelectionReady,
+                    guideBranchWinnerRecordEligible,
+                    guideBranchWinnerRecordSelectedReady,
+                    guideBranchWinnerRecordSelectedReject,
+                    guideBranchWinnerRecordSelected,
+                    guideBranchWinnerPostSelectionSelectedReady
+                            - guideBranchWinnerRecordSelected,
+                    guideBranchWinnerRecordRetainedReady,
+                    guideBranchWinnerRecordRetainedReject,
+                    guideBranchWinnerRecordRetained,
+                    guideBranchWinnerPostSelectionRetainedReady
+                            - guideBranchWinnerRecordRetained
+                            - guideBranchWinnerRecordEmptyReady,
+                    guideBranchWinnerRecordEmptyReady,
+                    guideBranchWinnerRecordTerminal,
+                    guideBranchWinnerRecordEligible - guideBranchWinnerRecordTerminal,
+                    guideBranchWinnerPostSelectionReady - guideBranchWinnerRecordEligible,
+                    guideBranchWinnerRecordSelectedRewriteReady,
+                    guideBranchWinnerRecordSelectedRewriteReject,
+                    guideBranchWinnerRecordSelected - guideBranchWinnerRecordSelectedRewrite,
+                    guideBranchWinnerRecordSelectedPreserveReady,
+                    guideBranchWinnerRecordSelectedPreserveReject,
+                    guideBranchWinnerRecordSelected - guideBranchWinnerRecordSelectedPreserve,
+                    guideBranchWinnerRecordSourceKeyReady,
+                    guideBranchWinnerRecordSourceKeyReject,
+                    guideBranchWinnerRecordSelected - guideBranchWinnerRecordSourceKey,
+                    guideBranchWinnerRecordRetainedPreserveReady,
+                    guideBranchWinnerRecordRetainedPreserveReject,
+                    guideBranchWinnerRecordRetained
+                            - guideBranchWinnerRecordRetainedPreserve,
+                    guideBranchWinnerRecordWeightsReady,
+                    guideBranchWinnerRecordWeightsReject,
+                    guideBranchWinnerRecordNonEmpty - guideBranchWinnerRecordWeights,
+                    guideBranchWinnerRecordMetadataReady,
+                    guideBranchWinnerRecordMetadataReject,
+                    guideBranchWinnerRecordNonEmpty - guideBranchWinnerRecordMetadata,
+                    guideBranchWinnerRecordReady,
+                    guideBranchWinnerRecordPreviousSelected,
+                    guideBranchWinnerRecordPreviousRetained,
+                    guideBranchWinnerRecordReady - guideBranchWinnerRecordPrevious,
+                    guideBranchWinnerRecordIdentitySource,
+                    guideBranchWinnerRecordMappedSource,
+                    guideBranchWinnerRecordReady - guideBranchWinnerRecordSource,
+                    guideBranchWinnerRecordOneSegment,
+                    guideBranchWinnerRecordTwoSegment,
+                    guideBranchWinnerRecordReady - guideBranchWinnerRecordSegments);
             spatialDiagnosticViewPending = 0;
             return;
         }
