@@ -2184,6 +2184,7 @@ static void pathBranchWinnerPreviousReplayValidate() {
             || (pc.historyFlags
                     & PATH_GUIDE_BRANCH_WINNER_PREVIOUS_AVAILABLE_FLAG) == 0u
             || worldPush.pathShiftDiagnosticCounterAddr == 0u
+            || worldPush.pathShiftReceiverGuideAddr == 0u
             || worldPush.pathShiftBranchWinnerPreviousAddr == 0u) {
         return;
     }
@@ -2362,6 +2363,186 @@ static void pathBranchWinnerPreviousReplayValidate() {
     InterlockedAdd(counters[replaySegments == 1u
             ? PATH_GUIDE_BRANCH_WINNER_REPLAY_ONE_SEGMENT_ACCEPTED
             : PATH_GUIDE_BRANCH_WINNER_REPLAY_TWO_SEGMENT_ACCEPTED], 1u);
+
+    // Rebuild the direct immutable-original-source -> current-receiver shift in registers. The
+    // previous winner's mapping descriptor and proposalShift Jacobian are deliberately ignored:
+    // replay supplies the original source edge, while the current receiver guide supplies a fresh
+    // diffuse density and throughput. This cannot turn a mapped winner into another spatial source.
+    InterlockedAdd(counters[PATH_GUIDE_BRANCH_WINNER_DIRECT_REMAP_ELIGIBLE], 1u);
+    uint receiverPixelIndex = pixel.y * dimensions.x + pixel.x;
+    ConstPtr<float4> receiverGuides =
+            ConstPtr<float4>(worldPush.pathShiftReceiverGuideAddr);
+    float4 receiverGuide = receiverGuides[receiverPixelIndex * 2u];
+    float4 receiverRayOrigin = receiverGuides[receiverPixelIndex * 2u + 1u];
+    float receiverNormalLength = length(receiverNormalRoughness.xyz);
+    uint receiverMaterialIdentity = uint(max(receiverPositionMaterial.w, 0.0));
+    uint sourceMaterialIdentity = uint(max(root.sourcePositionMaterial.w, 0.0));
+    uint receiverMaterial = receiverMaterialModel(receiverMaterialIdentity);
+    bool receiverGuideValid = all(isfinite(receiverGuide))
+            && all(isfinite(receiverRayOrigin))
+            && all(receiverGuide.xyz >= float3(0.0))
+            && receiverGuide.w > 0.0 && receiverGuide.w <= 1.0
+            && receiverRayOrigin.w == 1.0
+            && receiverNormalLength >= 0.5
+            && (receiverMaterial == MATERIAL_OPAQUE
+                    || receiverMaterial == MATERIAL_PARTICLE)
+            && receiverMaterialIdentity == sourceMaterialIdentity;
+    if (!receiverGuideValid) {
+        InterlockedAdd(counters[
+                PATH_GUIDE_BRANCH_WINNER_DIRECT_REMAP_GUIDE_REJECT], 1u);
+        return;
+    }
+
+    float sharedNormalLength = length(replay.reconnectionNormal);
+    bool edgeValid = replay.reconnectionValid != 0u
+            && replay.reconnectionDepth == 1u
+            && replay.reconnectionEventKind == PATH_RECONNECTION_EVENT_DIFFUSE
+            && replay.reconnectionSourcePdf > 0.0
+            && all(isfinite(replay.reconnectionVertex))
+            && all(isfinite(replay.reconnectionNormal))
+            && all(isfinite(replay.reconnectionThroughput))
+            && sharedNormalLength >= 0.5;
+    if (!edgeValid) {
+        InterlockedAdd(counters[
+                PATH_GUIDE_BRANCH_WINNER_DIRECT_REMAP_EDGE_REJECT], 1u);
+        return;
+    }
+
+    float4 currentSourcePositionMaterial = root.sourcePositionMaterial;
+    currentSourcePositionMaterial.xyz += retainedRebase;
+    float3 sharedVertex = replay.reconnectionVertex;
+    float3 sourceEdge = sharedVertex - currentSourcePositionMaterial.xyz;
+    float3 receiverEdge = sharedVertex - receiverPositionMaterial.xyz;
+    float sourceDistance = length(sourceEdge);
+    float receiverDistance = length(receiverEdge);
+    bool geometryValid = sourceDistance > 1.0e-4 && receiverDistance > 1.0e-4;
+    float geometryJacobian = 0.0;
+    if (geometryValid) {
+        float3 sharedNormal = replay.reconnectionNormal / sharedNormalLength;
+        float sourceCosine = abs(dot(sharedNormal, -sourceEdge / sourceDistance));
+        float receiverCosine = abs(dot(sharedNormal, receiverEdge / receiverDistance));
+        geometryJacobian = receiverCosine * sourceDistance * sourceDistance
+                / max(sourceCosine * receiverDistance * receiverDistance, 1.0e-8);
+        geometryValid = sourceCosine > 0.0 && receiverCosine > 0.0
+                && isfinite(geometryJacobian) && geometryJacobian > 0.0;
+    }
+    if (!geometryValid) {
+        InterlockedAdd(counters[
+                PATH_GUIDE_BRANCH_WINNER_DIRECT_REMAP_GEOMETRY_REJECT], 1u);
+        return;
+    }
+
+    float3 receiverNormal = receiverNormalRoughness.xyz / receiverNormalLength;
+    float3 receiverSampledEdge = sharedVertex - receiverRayOrigin.xyz;
+    float receiverPdf = receiverGuide.w
+            * pathMappingDiffuseDensity(receiverNormal, receiverSampledEdge);
+    float sourcePdf = replay.reconnectionSourcePdf;
+    float directPssJacobian = geometryJacobian * receiverPdf / sourcePdf;
+    bool pdfValid = isfinite(receiverPdf) && receiverPdf > 0.0
+            && isfinite(sourcePdf) && sourcePdf > 0.0
+            && isfinite(directPssJacobian) && directPssJacobian > 0.0;
+    if (!pdfValid) {
+        InterlockedAdd(counters[
+                PATH_GUIDE_BRANCH_WINNER_DIRECT_REMAP_PDF_REJECT], 1u);
+        return;
+    }
+
+    float3 sourceRadiance = replay.canonicalRadiance;
+    float3 sourceThroughput = replay.reconnectionThroughput;
+    float3 receiverThroughput = receiverGuide.xyz / receiverGuide.w;
+    bool invalidSourceChannel = any(sourceRadiance > float3(0.0)
+            && sourceThroughput <= float3(0.0));
+    float3 throughputRatio = float3(
+            pathMappingThroughputRatio(sourceThroughput.x, receiverThroughput.x),
+            pathMappingThroughputRatio(sourceThroughput.y, receiverThroughput.y),
+            pathMappingThroughputRatio(sourceThroughput.z, receiverThroughput.z));
+    float3 shiftedRadiance = sourceRadiance * throughputRatio;
+    bool throughputValid = !invalidSourceChannel
+            && all(isfinite(sourceRadiance)) && all(sourceRadiance >= float3(0.0))
+            && all(isfinite(sourceThroughput)) && all(sourceThroughput >= float3(0.0))
+            && all(isfinite(receiverThroughput)) && all(receiverThroughput >= float3(0.0))
+            && all(isfinite(throughputRatio)) && all(throughputRatio >= float3(0.0))
+            && all(isfinite(shiftedRadiance)) && all(shiftedRadiance >= float3(0.0));
+    if (!throughputValid) {
+        InterlockedAdd(counters[
+                PATH_GUIDE_BRANCH_WINNER_DIRECT_REMAP_THROUGHPUT_REJECT], 1u);
+        return;
+    }
+    InterlockedAdd(counters[PATH_GUIDE_BRANCH_WINNER_DIRECT_REMAP_READY], 1u);
+
+    // Use the production shadow query from the exact current biased receiver origin. Occlusion is
+    // a valid zero-target result. Arithmetic failure terminates before target/weight admission.
+    InterlockedAdd(counters[PATH_GUIDE_BRANCH_WINNER_DIRECT_VISIBILITY_ELIGIBLE], 1u);
+    float3 toShared = sharedVertex - receiverRayOrigin.xyz;
+    float visibilityDistance = length(toShared);
+    if (!isfinite(visibilityDistance) || visibilityDistance <= 1.0e-4) {
+        InterlockedAdd(counters[
+                PATH_GUIDE_BRANCH_WINNER_DIRECT_VISIBILITY_INVALID], 1u);
+        return;
+    }
+    VisibilityResult directVisibility = visibility(receiverRayOrigin.xyz,
+            toShared / visibilityDistance, visibilityDistance * 0.999);
+    float3 transmittance = directVisibility.transmittance;
+    bool visibilityValid = all(isfinite(transmittance))
+            && all(transmittance >= float3(0.0))
+            && all(transmittance <= float3(1.0));
+    InterlockedAdd(counters[!visibilityValid
+            ? PATH_GUIDE_BRANCH_WINNER_DIRECT_VISIBILITY_INVALID
+            : max(transmittance.x, max(transmittance.y, transmittance.z)) <= 0.0
+                    ? PATH_GUIDE_BRANCH_WINNER_DIRECT_VISIBILITY_OCCLUDED
+                    : all(transmittance == float3(1.0))
+                            ? PATH_GUIDE_BRANCH_WINNER_DIRECT_VISIBILITY_CLEAR
+                            : PATH_GUIDE_BRANCH_WINNER_DIRECT_VISIBILITY_TINTED], 1u);
+    if (!visibilityValid) return;
+
+    InterlockedAdd(counters[PATH_GUIDE_BRANCH_WINNER_DIRECT_TARGET_ELIGIBLE], 1u);
+    float3 visibleRadiance = shiftedRadiance * transmittance;
+    float shiftedTarget = pathLuminance(visibleRadiance);
+    bool targetValid = all(isfinite(visibleRadiance))
+            && all(visibleRadiance >= float3(0.0))
+            && isfinite(shiftedTarget) && shiftedTarget >= 0.0;
+    InterlockedAdd(counters[!targetValid
+            ? PATH_GUIDE_BRANCH_WINNER_DIRECT_TARGET_INVALID
+            : shiftedTarget > 0.0
+                    ? PATH_GUIDE_BRANCH_WINNER_DIRECT_TARGET_POSITIVE
+                    : PATH_GUIDE_BRANCH_WINNER_DIRECT_TARGET_ZERO], 1u);
+    if (!targetValid) return;
+
+    // GRIS weight uses only the freshly reconstructed target/Jacobian plus stored final weight and
+    // capped source M. The previous winner's mapping Jacobian is never read or multiplied here.
+    InterlockedAdd(counters[PATH_GUIDE_BRANCH_WINNER_DIRECT_WEIGHT_ELIGIBLE], 1u);
+    float sourceFinalWeight = stored.weights.z;
+    float sourceEffectiveCount = stored.weights.y;
+    float sourceCount = min(sourceEffectiveCount, PATH_TEMPORAL_MAX_SOURCE_COUNT);
+    bool weightTermsValid = isfinite(shiftedTarget) && shiftedTarget >= 0.0
+            && isfinite(sourceFinalWeight) && sourceFinalWeight >= 0.0
+            && isfinite(sourceEffectiveCount) && sourceEffectiveCount >= 0.0
+            && isfinite(directPssJacobian) && directPssJacobian > 0.0;
+    float mergeWeight = 0.0;
+    if (weightTermsValid) {
+        mergeWeight = shiftedTarget * sourceFinalWeight * sourceCount * directPssJacobian;
+    }
+    bool weightValid = weightTermsValid
+            && isfinite(mergeWeight) && mergeWeight >= 0.0;
+    InterlockedAdd(counters[!weightValid
+            ? PATH_GUIDE_BRANCH_WINNER_DIRECT_WEIGHT_INVALID
+            : mergeWeight > 0.0
+                    ? PATH_GUIDE_BRANCH_WINNER_DIRECT_WEIGHT_POSITIVE
+                    : PATH_GUIDE_BRANCH_WINNER_DIRECT_WEIGHT_ZERO], 1u);
+    if (!weightValid) return;
+
+    InterlockedAdd(counters[sourceEffectiveCount > PATH_TEMPORAL_MAX_SOURCE_COUNT
+            ? PATH_GUIDE_BRANCH_WINNER_DIRECT_WEIGHT_COUNT_CAPPED
+            : PATH_GUIDE_BRANCH_WINNER_DIRECT_WEIGHT_COUNT_UNCAPPED], 1u);
+    InterlockedAdd(counters[outputMappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION
+            ? PATH_GUIDE_BRANCH_WINNER_DIRECT_SELECTED_READY
+            : PATH_GUIDE_BRANCH_WINNER_DIRECT_RETAINED_READY], 1u);
+    InterlockedAdd(counters[sourceMappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION
+            ? PATH_GUIDE_BRANCH_WINNER_DIRECT_MAPPED_SOURCE_READY
+            : PATH_GUIDE_BRANCH_WINNER_DIRECT_IDENTITY_SOURCE_READY], 1u);
+    InterlockedAdd(counters[replaySegments == 1u
+            ? PATH_GUIDE_BRANCH_WINNER_DIRECT_ONE_SEGMENT_READY
+            : PATH_GUIDE_BRANCH_WINNER_DIRECT_TWO_SEGMENT_READY], 1u);
 }
 
 static bool pathReservoirBitsMatch(PathReservoir a, PathReservoir b) {

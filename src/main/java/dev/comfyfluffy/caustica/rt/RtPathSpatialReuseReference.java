@@ -2120,6 +2120,144 @@ final class RtPathSpatialReuseReference {
                 : BranchWinnerPreviousReplayOutcome.RETAINED_ACCEPTED;
     }
 
+    enum BranchWinnerDirectRemapOutcome {
+        PREVIOUS_REPLAY_REJECT,
+        GUIDE_REJECT,
+        EDGE_REJECT,
+        GEOMETRY_REJECT,
+        PDF_REJECT,
+        THROUGHPUT_REJECT,
+        READY
+    }
+
+    /** Ordered CPU mirror for the previous-winner original-root pre-visibility remap. */
+    static BranchWinnerDirectRemapOutcome branchWinnerDirectRemapOutcome(
+            BranchWinnerPreviousReplayOutcome replayOutcome,
+            boolean receiverGuideValid, boolean sourceEdgeValid, boolean geometryValid,
+            boolean pdfValid, boolean throughputValid) {
+        boolean replayAccepted = replayOutcome
+                == BranchWinnerPreviousReplayOutcome.SELECTED_ACCEPTED
+                || replayOutcome == BranchWinnerPreviousReplayOutcome.RETAINED_ACCEPTED;
+        if (!replayAccepted) {
+            return BranchWinnerDirectRemapOutcome.PREVIOUS_REPLAY_REJECT;
+        }
+        if (!receiverGuideValid) {
+            return BranchWinnerDirectRemapOutcome.GUIDE_REJECT;
+        }
+        if (!sourceEdgeValid) {
+            return BranchWinnerDirectRemapOutcome.EDGE_REJECT;
+        }
+        if (!geometryValid) {
+            return BranchWinnerDirectRemapOutcome.GEOMETRY_REJECT;
+        }
+        if (!pdfValid) {
+            return BranchWinnerDirectRemapOutcome.PDF_REJECT;
+        }
+        if (!throughputValid) {
+            return BranchWinnerDirectRemapOutcome.THROUGHPUT_REJECT;
+        }
+        return BranchWinnerDirectRemapOutcome.READY;
+    }
+
+    enum BranchWinnerDirectVisibilityOutcome {
+        DIRECT_REMAP_REJECT,
+        CLEAR,
+        TINTED,
+        OCCLUDED,
+        INVALID
+    }
+
+    enum BranchWinnerDirectTargetOutcome {
+        NOT_ELIGIBLE,
+        POSITIVE,
+        ZERO,
+        INVALID
+    }
+
+    record BranchWinnerDirectTargetAudit(
+            BranchWinnerDirectVisibilityOutcome visibility,
+            BranchWinnerDirectTargetOutcome target) {
+    }
+
+    /** CPU mirror for production visibility and shifted target from a ready previous winner. */
+    static BranchWinnerDirectTargetAudit branchWinnerDirectTargetAudit(
+            boolean directRemapReady, boolean visibilityArithmeticValid,
+            boolean anyTransmission, boolean fullyClear,
+            boolean targetArithmeticValid, boolean positiveTarget) {
+        if (!directRemapReady) {
+            return new BranchWinnerDirectTargetAudit(
+                    BranchWinnerDirectVisibilityOutcome.DIRECT_REMAP_REJECT,
+                    BranchWinnerDirectTargetOutcome.NOT_ELIGIBLE);
+        }
+        if (!visibilityArithmeticValid) {
+            return new BranchWinnerDirectTargetAudit(
+                    BranchWinnerDirectVisibilityOutcome.INVALID,
+                    BranchWinnerDirectTargetOutcome.NOT_ELIGIBLE);
+        }
+        BranchWinnerDirectVisibilityOutcome visibility = !anyTransmission
+                ? BranchWinnerDirectVisibilityOutcome.OCCLUDED
+                : fullyClear
+                        ? BranchWinnerDirectVisibilityOutcome.CLEAR
+                        : BranchWinnerDirectVisibilityOutcome.TINTED;
+        BranchWinnerDirectTargetOutcome target = !targetArithmeticValid
+                ? BranchWinnerDirectTargetOutcome.INVALID
+                : positiveTarget
+                        ? BranchWinnerDirectTargetOutcome.POSITIVE
+                        : BranchWinnerDirectTargetOutcome.ZERO;
+        return new BranchWinnerDirectTargetAudit(visibility, target);
+    }
+
+    enum BranchWinnerDirectWeightOutcome {
+        TARGET_REJECT,
+        POSITIVE,
+        ZERO,
+        INVALID
+    }
+
+    record BranchWinnerDirectWeightAudit(
+            BranchWinnerDirectWeightOutcome weight,
+            BranchDirectSourceCountOutcome sourceCount,
+            double mergeWeight) {
+    }
+
+    /**
+     * CPU mirror for the previous-winner GRIS weight. No previous mapping Jacobian is an input:
+     * callers must provide only the directly recomputed original-root-to-current-receiver value.
+     */
+    static BranchWinnerDirectWeightAudit branchWinnerDirectWeightAudit(
+            boolean targetReady, double shiftedTarget, double sourceFinalWeight,
+            double sourceEffectiveCount, double directPssJacobian) {
+        if (!targetReady) {
+            return new BranchWinnerDirectWeightAudit(
+                    BranchWinnerDirectWeightOutcome.TARGET_REJECT,
+                    BranchDirectSourceCountOutcome.NOT_ELIGIBLE, 0.0);
+        }
+        boolean termsValid = nonNegativeFinite(shiftedTarget)
+                && nonNegativeFinite(sourceFinalWeight)
+                && nonNegativeFinite(sourceEffectiveCount)
+                && positiveFinite(directPssJacobian);
+        if (!termsValid) {
+            return new BranchWinnerDirectWeightAudit(BranchWinnerDirectWeightOutcome.INVALID,
+                    BranchDirectSourceCountOutcome.NOT_ELIGIBLE, 0.0);
+        }
+        double sourceCount = Math.min(sourceEffectiveCount, MAX_SPATIAL_SOURCE_COUNT);
+        double mergeWeight = shiftedTarget * sourceFinalWeight;
+        mergeWeight *= sourceCount;
+        mergeWeight *= directPssJacobian;
+        if (!Double.isFinite(mergeWeight) || mergeWeight < 0.0) {
+            return new BranchWinnerDirectWeightAudit(BranchWinnerDirectWeightOutcome.INVALID,
+                    BranchDirectSourceCountOutcome.NOT_ELIGIBLE, 0.0);
+        }
+        return new BranchWinnerDirectWeightAudit(
+                mergeWeight > 0.0
+                        ? BranchWinnerDirectWeightOutcome.POSITIVE
+                        : BranchWinnerDirectWeightOutcome.ZERO,
+                sourceEffectiveCount > MAX_SPATIAL_SOURCE_COUNT
+                        ? BranchDirectSourceCountOutcome.CAPPED
+                        : BranchDirectSourceCountOutcome.UNCAPPED,
+                mergeWeight);
+    }
+
     /**
      * Ordered CPU mirror for the post-barrier exact-lane validation sample. Reservoir and root
      * equality are bitwise requirements; acceptance remains diagnostic-only.

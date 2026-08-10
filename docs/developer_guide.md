@@ -732,6 +732,31 @@ rejects + 52 source-reprojection rejects + 1 source-surface reject + 477 source-
 had one replay segment; every printed partition delta was zero. No Vulkan/device/GPU/shader error
 was logged. Do not relax replay tolerance to absorb the explicit 477 fail-closed rejects.
 
+`RT path guide branch winner direct remap` is the next register/counter-only gate. It runs only
+after a previous winner passed receiver/source reprojection and seeded replay. `remap` recomputes
+current receiver guide validity, the replayed diffuse second-hit edge, geometry ratio, receiver/
+source directional-PDF ratio, direct PSS Jacobian and receiver/source throughput ratio. `visibility`
+uses the production shadow query; valid occlusion advances to a zero `target`. `weight` evaluates
+the fresh shifted target against stored final weight and `min(sourceM, 8)`. The stored mapping
+Jacobian is intentionally absent from the expression.
+
+For a valid readback, replay accepted must equal remap eligible; each remap/visibility/target/weight
+eligible count must equal its mutually exclusive terminal categories; remap ready must equal
+visibility eligible; valid visibility must equal target eligible; target ready must equal weight
+eligible; and weight ready must equal each M-cap, output-branch, source-mapping and segment
+partition. Every printed delta and gateDelta should be zero. Edge rejects are expected for paths
+without the supported continuous diffuse reconnection edge. The counter buffer is 557 uints /
+2228 B; memory allocations, 688 B `WorldPush`, 120 B inline push constants and replay ABI 10 are
+unchanged. No selection, RNG or payload/history/estimator write occurs.
+
+Fresh runtime validation produced 23 readbacks: 209380 replay-accepted winners entered remap,
+4099 unsupported edges rejected explicitly and 205281 reached ready. Guide/geometry/PDF/
+throughput rejects were zero. Visibility was 205279 clear + 2 occluded; target and weight were
+205279 positive + 2 zero, with zero invalid. M was uncapped for all 205281 weights. Output was
+190021 selected + 15260 retained, original source was 15435 identity + 189846 mapped, and every
+path had one segment. All printed deltas and gateDelta values were zero, with no Vulkan/device/GPU/
+shader error. The validation client was closed and no Java process remains.
+
 For a fresh runtime check, use debug view 20 and inspect `run/logs/latest.log`. Normal operation
 requires `RT bring-up OK`, Vulkan, the intended NVIDIA device, exact zero-delta counter partitions,
 and no `DEVICE_LOST`, `VK_ERROR`, GPU fault or shader compilation error. Debug colors and sparse

@@ -982,6 +982,33 @@ shader failure occurred. The next boundary may recompute an original-root-to-cur
 remap and fresh target/weight from this previous winner in registers only; it still may not compose
 the stored mapping, write committed history or affect the estimator.
 
+The follow-on counter-only gate now performs that direct reconstruction immediately after exact
+previous-winner replay. It reads the current receiver guide and the fresh replay aggregate,
+requires a continuous diffuse second-hit edge, rebuilds the solid-angle geometry ratio and current
+receiver/source directional-PDF ratio, and forms one direct PSS Jacobian. It replaces the original
+first-edge throughput with the current receiver throughput, traces production visibility, derives
+the shifted target and evaluates
+`shiftedTarget * sourceFinalWeight * min(sourceM, 8) * directPssJacobian`.
+
+The stored winner mapping descriptor is used only for output/source accounting. Its previous
+Jacobian is never read or composed, and the immutable original root remains the replay authority.
+The gate stops before selection: it consumes no Bernoulli RNG and writes no reservoir, root,
+winner slot, committed history or estimator state. Twenty-nine additional counters partition
+remap, visibility, target, weight, M cap, output branch, original source mapping and segment count;
+the view-20 counter buffer is therefore 557 uints / 2228 B. All other allocations, `WorldPush`,
+inline push constants and replay ABI remain unchanged.
+
+The gate passed 23 fresh Vulkan readbacks. All 209380 replay-accepted previous winners entered the
+direct remap; 4099 records without the supported diffuse edge were rejected explicitly and the
+remaining 205281 became remap-ready. Guide, geometry, PDF and throughput rejects were zero.
+Production visibility classified 205279 clear plus 2 occluded, with zero tinted or invalid; target
+and weight matched that partition exactly as 205279 positive plus 2 zero and zero invalid. All
+205281 valid weights had uncapped M. Output split into 190021 selected plus 15260 retained, source
+ownership into 15435 identity plus 189846 mapped, and all paths had one segment. Every terminal,
+gate, count, branch, source and segment delta was zero; no Vulkan/device/GPU/shader failure was
+logged. The next gate may audit the overflow-stable relative selection probability and Bernoulli
+partition against the current receiver reservoir, still without payload/history/estimator writes.
+
 ## Delivery Phases
 
 ### Phase 0 — Wavefront Integration Baseline

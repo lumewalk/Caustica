@@ -565,7 +565,36 @@ final class RtPathReservoirHistory {
     static final int GUIDE_BRANCH_WINNER_REPLAY_ONE_SEGMENT_ACCEPTED_INDEX = 525;
     static final int GUIDE_BRANCH_WINNER_REPLAY_TWO_SEGMENT_ACCEPTED_INDEX = 526;
     static final int GUIDE_BRANCH_WINNER_REPLAY_DELTA_INDEX = 527;
-    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 528;
+    static final int GUIDE_BRANCH_WINNER_DIRECT_REMAP_ELIGIBLE_INDEX = 528;
+    static final int GUIDE_BRANCH_WINNER_DIRECT_REMAP_GUIDE_REJECT_INDEX = 529;
+    static final int GUIDE_BRANCH_WINNER_DIRECT_REMAP_EDGE_REJECT_INDEX = 530;
+    static final int GUIDE_BRANCH_WINNER_DIRECT_REMAP_GEOMETRY_REJECT_INDEX = 531;
+    static final int GUIDE_BRANCH_WINNER_DIRECT_REMAP_PDF_REJECT_INDEX = 532;
+    static final int GUIDE_BRANCH_WINNER_DIRECT_REMAP_THROUGHPUT_REJECT_INDEX = 533;
+    static final int GUIDE_BRANCH_WINNER_DIRECT_REMAP_READY_INDEX = 534;
+    static final int GUIDE_BRANCH_WINNER_DIRECT_VISIBILITY_ELIGIBLE_INDEX = 535;
+    static final int GUIDE_BRANCH_WINNER_DIRECT_VISIBILITY_CLEAR_INDEX = 536;
+    static final int GUIDE_BRANCH_WINNER_DIRECT_VISIBILITY_TINTED_INDEX = 537;
+    static final int GUIDE_BRANCH_WINNER_DIRECT_VISIBILITY_OCCLUDED_INDEX = 538;
+    static final int GUIDE_BRANCH_WINNER_DIRECT_VISIBILITY_INVALID_INDEX = 539;
+    static final int GUIDE_BRANCH_WINNER_DIRECT_TARGET_ELIGIBLE_INDEX = 540;
+    static final int GUIDE_BRANCH_WINNER_DIRECT_TARGET_POSITIVE_INDEX = 541;
+    static final int GUIDE_BRANCH_WINNER_DIRECT_TARGET_ZERO_INDEX = 542;
+    static final int GUIDE_BRANCH_WINNER_DIRECT_TARGET_INVALID_INDEX = 543;
+    static final int GUIDE_BRANCH_WINNER_DIRECT_WEIGHT_ELIGIBLE_INDEX = 544;
+    static final int GUIDE_BRANCH_WINNER_DIRECT_WEIGHT_POSITIVE_INDEX = 545;
+    static final int GUIDE_BRANCH_WINNER_DIRECT_WEIGHT_ZERO_INDEX = 546;
+    static final int GUIDE_BRANCH_WINNER_DIRECT_WEIGHT_INVALID_INDEX = 547;
+    static final int GUIDE_BRANCH_WINNER_DIRECT_WEIGHT_COUNT_UNCAPPED_INDEX = 548;
+    static final int GUIDE_BRANCH_WINNER_DIRECT_WEIGHT_COUNT_CAPPED_INDEX = 549;
+    static final int GUIDE_BRANCH_WINNER_DIRECT_SELECTED_READY_INDEX = 550;
+    static final int GUIDE_BRANCH_WINNER_DIRECT_RETAINED_READY_INDEX = 551;
+    static final int GUIDE_BRANCH_WINNER_DIRECT_IDENTITY_SOURCE_READY_INDEX = 552;
+    static final int GUIDE_BRANCH_WINNER_DIRECT_MAPPED_SOURCE_READY_INDEX = 553;
+    static final int GUIDE_BRANCH_WINNER_DIRECT_ONE_SEGMENT_READY_INDEX = 554;
+    static final int GUIDE_BRANCH_WINNER_DIRECT_TWO_SEGMENT_READY_INDEX = 555;
+    static final int GUIDE_BRANCH_WINNER_DIRECT_DELTA_INDEX = 556;
+    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 557;
     static final int SHIFTED_RECEIVER_GUIDE_STRIDE = 8 * Float.BYTES;
     static final int BRANCH_RECEIVER_OWNERSHIP_STRIDE = 2 * Integer.BYTES;
     static final int BRANCH_CANDIDATE_TAG_STRIDE = 2 * Integer.BYTES;
@@ -2032,6 +2061,62 @@ final class RtPathReservoirHistory {
                     counters.get(GUIDE_BRANCH_WINNER_REPLAY_ONE_SEGMENT_ACCEPTED_INDEX));
             long guideBranchWinnerReplayTwoSegmentAccepted = Integer.toUnsignedLong(
                     counters.get(GUIDE_BRANCH_WINNER_REPLAY_TWO_SEGMENT_ACCEPTED_INDEX));
+            long guideBranchWinnerDirectRemapEligible = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_DIRECT_REMAP_ELIGIBLE_INDEX));
+            long guideBranchWinnerDirectRemapGuideReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_DIRECT_REMAP_GUIDE_REJECT_INDEX));
+            long guideBranchWinnerDirectRemapEdgeReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_DIRECT_REMAP_EDGE_REJECT_INDEX));
+            long guideBranchWinnerDirectRemapGeometryReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_DIRECT_REMAP_GEOMETRY_REJECT_INDEX));
+            long guideBranchWinnerDirectRemapPdfReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_DIRECT_REMAP_PDF_REJECT_INDEX));
+            long guideBranchWinnerDirectRemapThroughputReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_DIRECT_REMAP_THROUGHPUT_REJECT_INDEX));
+            long guideBranchWinnerDirectRemapReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_DIRECT_REMAP_READY_INDEX));
+            long guideBranchWinnerDirectVisibilityEligible = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_DIRECT_VISIBILITY_ELIGIBLE_INDEX));
+            long guideBranchWinnerDirectVisibilityClear = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_DIRECT_VISIBILITY_CLEAR_INDEX));
+            long guideBranchWinnerDirectVisibilityTinted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_DIRECT_VISIBILITY_TINTED_INDEX));
+            long guideBranchWinnerDirectVisibilityOccluded = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_DIRECT_VISIBILITY_OCCLUDED_INDEX));
+            long guideBranchWinnerDirectVisibilityInvalid = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_DIRECT_VISIBILITY_INVALID_INDEX));
+            long guideBranchWinnerDirectTargetEligible = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_DIRECT_TARGET_ELIGIBLE_INDEX));
+            long guideBranchWinnerDirectTargetPositive = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_DIRECT_TARGET_POSITIVE_INDEX));
+            long guideBranchWinnerDirectTargetZero = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_DIRECT_TARGET_ZERO_INDEX));
+            long guideBranchWinnerDirectTargetInvalid = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_DIRECT_TARGET_INVALID_INDEX));
+            long guideBranchWinnerDirectWeightEligible = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_DIRECT_WEIGHT_ELIGIBLE_INDEX));
+            long guideBranchWinnerDirectWeightPositive = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_DIRECT_WEIGHT_POSITIVE_INDEX));
+            long guideBranchWinnerDirectWeightZero = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_DIRECT_WEIGHT_ZERO_INDEX));
+            long guideBranchWinnerDirectWeightInvalid = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_DIRECT_WEIGHT_INVALID_INDEX));
+            long guideBranchWinnerDirectWeightCountUncapped = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_DIRECT_WEIGHT_COUNT_UNCAPPED_INDEX));
+            long guideBranchWinnerDirectWeightCountCapped = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_DIRECT_WEIGHT_COUNT_CAPPED_INDEX));
+            long guideBranchWinnerDirectSelectedReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_DIRECT_SELECTED_READY_INDEX));
+            long guideBranchWinnerDirectRetainedReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_DIRECT_RETAINED_READY_INDEX));
+            long guideBranchWinnerDirectIdentitySourceReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_DIRECT_IDENTITY_SOURCE_READY_INDEX));
+            long guideBranchWinnerDirectMappedSourceReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_DIRECT_MAPPED_SOURCE_READY_INDEX));
+            long guideBranchWinnerDirectOneSegmentReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_DIRECT_ONE_SEGMENT_READY_INDEX));
+            long guideBranchWinnerDirectTwoSegmentReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_DIRECT_TWO_SEGMENT_READY_INDEX));
             long crossFrameReceiverReject = crossFrameReceiverSurfaceReject
                     + crossFrameReceiverSampleReject + crossFrameReceiverEdgeReject
                     + crossFrameReceiverTopologyReject + crossFrameReceiverDepthReject
@@ -3499,6 +3584,113 @@ final class RtPathReservoirHistory {
                     guideBranchWinnerReplayAccepted - guideBranchWinnerReplaySegments,
                     guideBranchWinnerReplayTerminal,
                     guideBranchWinnerReplayAttempted - guideBranchWinnerReplayTerminal);
+            long guideBranchWinnerDirectRemapTerminal =
+                    guideBranchWinnerDirectRemapGuideReject
+                            + guideBranchWinnerDirectRemapEdgeReject
+                            + guideBranchWinnerDirectRemapGeometryReject
+                            + guideBranchWinnerDirectRemapPdfReject
+                            + guideBranchWinnerDirectRemapThroughputReject
+                            + guideBranchWinnerDirectRemapReady;
+            long guideBranchWinnerDirectVisibilityTerminal =
+                    guideBranchWinnerDirectVisibilityClear
+                            + guideBranchWinnerDirectVisibilityTinted
+                            + guideBranchWinnerDirectVisibilityOccluded
+                            + guideBranchWinnerDirectVisibilityInvalid;
+            long guideBranchWinnerDirectVisibilityValid =
+                    guideBranchWinnerDirectVisibilityTerminal
+                            - guideBranchWinnerDirectVisibilityInvalid;
+            long guideBranchWinnerDirectTargetTerminal =
+                    guideBranchWinnerDirectTargetPositive
+                            + guideBranchWinnerDirectTargetZero
+                            + guideBranchWinnerDirectTargetInvalid;
+            long guideBranchWinnerDirectTargetReady =
+                    guideBranchWinnerDirectTargetPositive
+                            + guideBranchWinnerDirectTargetZero;
+            long guideBranchWinnerDirectWeightTerminal =
+                    guideBranchWinnerDirectWeightPositive
+                            + guideBranchWinnerDirectWeightZero
+                            + guideBranchWinnerDirectWeightInvalid;
+            long guideBranchWinnerDirectWeightReady =
+                    guideBranchWinnerDirectWeightPositive
+                            + guideBranchWinnerDirectWeightZero;
+            long guideBranchWinnerDirectCount =
+                    guideBranchWinnerDirectWeightCountUncapped
+                            + guideBranchWinnerDirectWeightCountCapped;
+            long guideBranchWinnerDirectBranch =
+                    guideBranchWinnerDirectSelectedReady
+                            + guideBranchWinnerDirectRetainedReady;
+            long guideBranchWinnerDirectSource =
+                    guideBranchWinnerDirectIdentitySourceReady
+                            + guideBranchWinnerDirectMappedSourceReady;
+            long guideBranchWinnerDirectSegments =
+                    guideBranchWinnerDirectOneSegmentReady
+                            + guideBranchWinnerDirectTwoSegmentReady;
+            CausticaMod.LOGGER.info(
+                    "RT path guide branch winner direct remap: "
+                            + "replayAccepted={} remap[eligible={},guide={},edge={},geometry={},"
+                            + "pdf={},throughput={},ready={},terminal={},delta={},gateDelta={}] "
+                            + "visibility[eligible={},clear={},tinted={},occluded={},invalid={},"
+                            + "terminal={},delta={},gateDelta={}] "
+                            + "target[eligible={},positive={},zero={},invalid={},terminal={},"
+                            + "delta={},gateDelta={}] "
+                            + "weight[eligible={},positive={},zero={},invalid={},terminal={},"
+                            + "delta={},gateDelta={},count[uncapped={},capped={},delta={}],"
+                            + "branch[selected={},retained={},delta={}],"
+                            + "source[identity={},mapped={},delta={}],"
+                            + "segments[one={},two={},delta={}]]",
+                    guideBranchWinnerReplayAccepted,
+                    guideBranchWinnerDirectRemapEligible,
+                    guideBranchWinnerDirectRemapGuideReject,
+                    guideBranchWinnerDirectRemapEdgeReject,
+                    guideBranchWinnerDirectRemapGeometryReject,
+                    guideBranchWinnerDirectRemapPdfReject,
+                    guideBranchWinnerDirectRemapThroughputReject,
+                    guideBranchWinnerDirectRemapReady,
+                    guideBranchWinnerDirectRemapTerminal,
+                    guideBranchWinnerDirectRemapEligible
+                            - guideBranchWinnerDirectRemapTerminal,
+                    guideBranchWinnerReplayAccepted
+                            - guideBranchWinnerDirectRemapEligible,
+                    guideBranchWinnerDirectVisibilityEligible,
+                    guideBranchWinnerDirectVisibilityClear,
+                    guideBranchWinnerDirectVisibilityTinted,
+                    guideBranchWinnerDirectVisibilityOccluded,
+                    guideBranchWinnerDirectVisibilityInvalid,
+                    guideBranchWinnerDirectVisibilityTerminal,
+                    guideBranchWinnerDirectVisibilityEligible
+                            - guideBranchWinnerDirectVisibilityTerminal,
+                    guideBranchWinnerDirectRemapReady
+                            - guideBranchWinnerDirectVisibilityEligible,
+                    guideBranchWinnerDirectTargetEligible,
+                    guideBranchWinnerDirectTargetPositive,
+                    guideBranchWinnerDirectTargetZero,
+                    guideBranchWinnerDirectTargetInvalid,
+                    guideBranchWinnerDirectTargetTerminal,
+                    guideBranchWinnerDirectTargetEligible
+                            - guideBranchWinnerDirectTargetTerminal,
+                    guideBranchWinnerDirectVisibilityValid
+                            - guideBranchWinnerDirectTargetEligible,
+                    guideBranchWinnerDirectWeightEligible,
+                    guideBranchWinnerDirectWeightPositive,
+                    guideBranchWinnerDirectWeightZero,
+                    guideBranchWinnerDirectWeightInvalid,
+                    guideBranchWinnerDirectWeightTerminal,
+                    guideBranchWinnerDirectWeightEligible
+                            - guideBranchWinnerDirectWeightTerminal,
+                    guideBranchWinnerDirectTargetReady
+                            - guideBranchWinnerDirectWeightEligible,
+                    guideBranchWinnerDirectWeightCountUncapped,
+                    guideBranchWinnerDirectWeightCountCapped,
+                    guideBranchWinnerDirectWeightReady - guideBranchWinnerDirectCount,
+                    guideBranchWinnerDirectSelectedReady,
+                    guideBranchWinnerDirectRetainedReady,
+                    guideBranchWinnerDirectWeightReady - guideBranchWinnerDirectBranch,
+                    guideBranchWinnerDirectIdentitySourceReady,
+                    guideBranchWinnerDirectMappedSourceReady,
+                    guideBranchWinnerDirectWeightReady - guideBranchWinnerDirectSource,
+                    guideBranchWinnerDirectOneSegmentReady,
+                    guideBranchWinnerDirectTwoSegmentReady,
+                    guideBranchWinnerDirectWeightReady - guideBranchWinnerDirectSegments);
             spatialDiagnosticViewPending = 0;
             return;
         }
