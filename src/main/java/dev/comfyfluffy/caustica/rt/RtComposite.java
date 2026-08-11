@@ -1204,6 +1204,7 @@ public final class RtComposite {
             ByteBuffer branchWinnerStorageValidatePushConstants = null;
             ByteBuffer branchWinnerPreviousReplayPushConstants = null;
             ByteBuffer branchWinnerPairStorageValidatePushConstants = null;
+            ByteBuffer branchWinnerCandidateOwnerValidatePushConstants = null;
             if (restirPt
                      && debugView == RtPathReservoirHistory.SHIFTED_RADIANCE_DEBUG_VIEW) {
                 guidePreviousReplayPushConstants =
@@ -1413,6 +1414,29 @@ public final class RtComposite {
                                         .GUIDE_BRANCH_WINNER_PAIR_STORAGE_VALIDATE_PASS_FLAG,
                         worldConstants.historyGeneration())
                         .write(branchWinnerPairStorageValidatePushConstants);
+                branchWinnerCandidateOwnerValidatePushConstants =
+                        stack.malloc(WorldPushConstantsData.BYTE_SIZE);
+                new WorldPushConstantsData(
+                        worldConstants.worldPushAddr(),
+                        worldConstants.tableAddr(),
+                        worldConstants.entityTableAddr(),
+                        worldConstants.materialTableAddr(),
+                        worldConstants.lightBufAddr(),
+                        worldConstants.lightAliasAddr(),
+                        worldConstants.lightLocalAliasAddr(),
+                        worldConstants.lightGridCellAddr(),
+                        worldConstants.lightGridSpanAddr(),
+                        worldConstants.pathQueueAddr(),
+                        worldConstants.directReservoirAddr(),
+                        worldConstants.pathReservoirAddr(),
+                        worldConstants.pathReservoirPreviousAddr(),
+                        worldConstants.frameIndex(),
+                        worldConstants.debugView(),
+                        worldConstants.historyFlags()
+                                | RtPathReservoirHistory
+                                        .GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_VALIDATE_PASS_FLAG,
+                        worldConstants.historyGeneration())
+                        .write(branchWinnerCandidateOwnerValidatePushConstants);
                 mappingReplayPushConstants =
                         stack.malloc(WorldPushConstantsData.BYTE_SIZE);
                 new WorldPushConstantsData(
@@ -1517,6 +1541,8 @@ public final class RtComposite {
                 if (debugView == RtPathReservoirHistory.SHIFTED_RADIANCE_DEBUG_VIEW) {
                     pathReservoirs.beginShiftedRadianceDiagnostics(cmd);
                     if (branchWinnerScratchFrame.previousAvailable()) {
+                        pathReservoirs.beginCurrentBranchWinnerCandidateOwnership(
+                                cmd, branchWinnerScratchFrame);
                         try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd,
                                      "path branch winner previous replay");
                              RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage(
@@ -1532,6 +1558,14 @@ public final class RtComposite {
                             active.trace(cmd,
                                     RtPathReservoirHistory.PATH_BRANCH_SCRATCH_CAPTURE_CAPACITY,
                                     1, branchWinnerPairStorageValidatePushConstants, 1);
+                        }
+                        VulkanCommandEncoder.memoryBarrier(cmd, stack);
+                        try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd,
+                                     "path branch winner candidate owner validate");
+                             RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage(
+                                     "frame.pathBranchWinnerCandidateOwnerValidate")) {
+                            active.trace(cmd, renderW, renderH,
+                                    branchWinnerCandidateOwnerValidatePushConstants, 1);
                         }
                         VulkanCommandEncoder.memoryBarrier(cmd, stack);
                     }

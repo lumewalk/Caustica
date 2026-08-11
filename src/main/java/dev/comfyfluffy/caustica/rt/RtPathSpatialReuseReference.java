@@ -1111,6 +1111,13 @@ final class RtPathSpatialReuseReference {
         RETAINED_ACCEPTED
     }
 
+    enum BranchWinnerCandidateOwnerOutcome {
+        EMPTY,
+        METADATA_REJECT,
+        SELECTED_ACCEPTED,
+        RETAINED_ACCEPTED
+    }
+
     enum BranchCandidateRetentionOutcome {
         EMPTY,
         FUTURE_REJECT,
@@ -2716,6 +2723,30 @@ final class RtPathSpatialReuseReference {
         return outputMappingKind == MappingKind.DIFFUSE_RECONNECTION
                 ? BranchAgedStorageOutcome.SELECTED_ACCEPTED
                 : BranchAgedStorageOutcome.RETAINED_ACCEPTED;
+    }
+
+    /**
+     * CPU mirror for the temporary dense candidate-owner tag. The receiver index is the unique
+     * storage owner; payload remains in registers and all provenance fields must be explicit.
+     */
+    static BranchWinnerCandidateOwnerOutcome branchWinnerCandidateOwnerOutcome(
+            boolean empty, boolean metadataMatches, boolean receiverIndexMatches,
+            MappingKind sourceMappingKind, MappingKind outputMappingKind,
+            MappingKind previousOutputMappingKind, int segmentCount) {
+        if (empty) {
+            return BranchWinnerCandidateOwnerOutcome.EMPTY;
+        }
+        boolean metadataValid = metadataMatches && receiverIndexMatches
+                && sourceMappingKind != null
+                && outputMappingKind != null
+                && previousOutputMappingKind != null
+                && (segmentCount == 1 || segmentCount == 2);
+        if (!metadataValid) {
+            return BranchWinnerCandidateOwnerOutcome.METADATA_REJECT;
+        }
+        return outputMappingKind == MappingKind.DIFFUSE_RECONNECTION
+                ? BranchWinnerCandidateOwnerOutcome.SELECTED_ACCEPTED
+                : BranchWinnerCandidateOwnerOutcome.RETAINED_ACCEPTED;
     }
 
     /**

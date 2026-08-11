@@ -45,6 +45,7 @@ final class RtPathReservoirHistory {
     static final int GUIDE_BRANCH_WINNER_PREVIOUS_AVAILABLE_FLAG = 1 << 17;
     static final int GUIDE_BRANCH_WINNER_PREVIOUS_REPLAY_PASS_FLAG = 1 << 18;
     static final int GUIDE_BRANCH_WINNER_PAIR_STORAGE_VALIDATE_PASS_FLAG = 1 << 19;
+    static final int GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_VALIDATE_PASS_FLAG = 1 << 20;
     static final int SPATIAL_DIAGNOSTIC_CATEGORY_COUNT = 9;
     static final int SPATIAL_DIAGNOSTIC_STRICT_PAIR_CURSOR_INDEX =
             SPATIAL_DIAGNOSTIC_CATEGORY_COUNT;
@@ -720,7 +721,21 @@ final class RtPathReservoirHistory {
     static final int GUIDE_BRANCH_WINNER_PAIR_STORAGE_ONE_SEGMENT_INDEX = 679;
     static final int GUIDE_BRANCH_WINNER_PAIR_STORAGE_TWO_SEGMENT_INDEX = 680;
     static final int GUIDE_BRANCH_WINNER_PAIR_STORAGE_DELTA_INDEX = 681;
-    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 682;
+    static final int GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_WRITE_ELIGIBLE_INDEX = 682;
+    static final int GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_WRITE_COMPLETED_INDEX = 683;
+    static final int GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_VALIDATE_ATTEMPTED_INDEX = 684;
+    static final int GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_EMPTY_INDEX = 685;
+    static final int GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_METADATA_REJECT_INDEX = 686;
+    static final int GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_ACCEPTED_INDEX = 687;
+    static final int GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_SELECTED_INDEX = 688;
+    static final int GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_RETAINED_INDEX = 689;
+    static final int GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_PREVIOUS_SELECTED_INDEX = 690;
+    static final int GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_PREVIOUS_RETAINED_INDEX = 691;
+    static final int GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_IDENTITY_SOURCE_INDEX = 692;
+    static final int GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_MAPPED_SOURCE_INDEX = 693;
+    static final int GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_ONE_SEGMENT_INDEX = 694;
+    static final int GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_TWO_SEGMENT_INDEX = 695;
+    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 696;
     static final int SHIFTED_RECEIVER_GUIDE_STRIDE = 8 * Float.BYTES;
     static final int BRANCH_RECEIVER_OWNERSHIP_STRIDE = 2 * Integer.BYTES;
     static final int BRANCH_CANDIDATE_TAG_STRIDE = 2 * Integer.BYTES;
@@ -1142,6 +1157,25 @@ final class RtPathReservoirHistory {
             throw new IllegalStateException("Branch winner scratch used before allocation");
         }
         VK10.vkCmdFillBuffer(cmd, scratch.handle, 0L, scratch.size, 0);
+        try (var stack = org.lwjgl.system.MemoryStack.stackPush()) {
+            VulkanCommandEncoder.memoryBarrier(cmd, stack);
+        }
+    }
+
+    void beginCurrentBranchWinnerCandidateOwnership(
+            VkCommandBuffer cmd, BranchScratchFrame frame) {
+        if (frame == null || !frame.previousAvailable()) {
+            throw new IllegalArgumentException(
+                    "previous branch winner is required for candidate ownership");
+        }
+        RtBuffer scratch = branchWinnerScratch[frame.writeSlot()];
+        if (scratch == null) {
+            throw new IllegalStateException("Branch winner scratch used before allocation");
+        }
+        long tagOffset = branchWinnerTagOffsetBytes(width, height);
+        long tagBytes = Math.multiplyExact(Math.multiplyExact((long) width, height),
+                PATH_BRANCH_WINNER_TAG_STRIDE);
+        VK10.vkCmdFillBuffer(cmd, scratch.handle, tagOffset, tagBytes, 0);
         try (var stack = org.lwjgl.system.MemoryStack.stackPush()) {
             VulkanCommandEncoder.memoryBarrier(cmd, stack);
         }
@@ -2483,6 +2517,36 @@ final class RtPathReservoirHistory {
                     counters.get(GUIDE_BRANCH_WINNER_PAIR_STORAGE_ONE_SEGMENT_INDEX));
             long guideBranchWinnerPairStorageTwoSegment = Integer.toUnsignedLong(
                     counters.get(GUIDE_BRANCH_WINNER_PAIR_STORAGE_TWO_SEGMENT_INDEX));
+            long guideBranchWinnerCandidateOwnerWriteEligible = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_WRITE_ELIGIBLE_INDEX));
+            long guideBranchWinnerCandidateOwnerWriteCompleted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_WRITE_COMPLETED_INDEX));
+            long guideBranchWinnerCandidateOwnerValidateAttempted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_VALIDATE_ATTEMPTED_INDEX));
+            long guideBranchWinnerCandidateOwnerEmpty = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_EMPTY_INDEX));
+            long guideBranchWinnerCandidateOwnerMetadataReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_METADATA_REJECT_INDEX));
+            long guideBranchWinnerCandidateOwnerAccepted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_ACCEPTED_INDEX));
+            long guideBranchWinnerCandidateOwnerSelected = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_SELECTED_INDEX));
+            long guideBranchWinnerCandidateOwnerRetained = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_RETAINED_INDEX));
+            long guideBranchWinnerCandidateOwnerPreviousSelected = Integer.toUnsignedLong(
+                    counters.get(
+                            GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_PREVIOUS_SELECTED_INDEX));
+            long guideBranchWinnerCandidateOwnerPreviousRetained = Integer.toUnsignedLong(
+                    counters.get(
+                            GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_PREVIOUS_RETAINED_INDEX));
+            long guideBranchWinnerCandidateOwnerIdentitySource = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_IDENTITY_SOURCE_INDEX));
+            long guideBranchWinnerCandidateOwnerMappedSource = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_MAPPED_SOURCE_INDEX));
+            long guideBranchWinnerCandidateOwnerOneSegment = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_ONE_SEGMENT_INDEX));
+            long guideBranchWinnerCandidateOwnerTwoSegment = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_TWO_SEGMENT_INDEX));
             long crossFrameReceiverReject = crossFrameReceiverSurfaceReject
                     + crossFrameReceiverSampleReject + crossFrameReceiverEdgeReject
                     + crossFrameReceiverTopologyReject + crossFrameReceiverDepthReject
@@ -4540,6 +4604,63 @@ final class RtPathReservoirHistory {
                     guideBranchWinnerPairStorageTwoSegment,
                     guideBranchWinnerPairStoragePairAccepted
                             - guideBranchWinnerPairStorageSegments);
+            long guideBranchWinnerCandidateOwnerValidationTerminal =
+                    guideBranchWinnerCandidateOwnerEmpty
+                            + guideBranchWinnerCandidateOwnerMetadataReject
+                            + guideBranchWinnerCandidateOwnerAccepted;
+            long guideBranchWinnerCandidateOwnerBranch =
+                    guideBranchWinnerCandidateOwnerSelected
+                            + guideBranchWinnerCandidateOwnerRetained;
+            long guideBranchWinnerCandidateOwnerPrevious =
+                    guideBranchWinnerCandidateOwnerPreviousSelected
+                            + guideBranchWinnerCandidateOwnerPreviousRetained;
+            long guideBranchWinnerCandidateOwnerSource =
+                    guideBranchWinnerCandidateOwnerIdentitySource
+                            + guideBranchWinnerCandidateOwnerMappedSource;
+            long guideBranchWinnerCandidateOwnerSegments =
+                    guideBranchWinnerCandidateOwnerOneSegment
+                            + guideBranchWinnerCandidateOwnerTwoSegment;
+            CausticaMod.LOGGER.info(
+                    "RT path guide branch winner candidate owner: replayAccepted={} "
+                            + "write[eligible={},completed={},delta={},gateDelta={}] "
+                            + "validate[attempted={},empty={},metadataReject={},accepted={},"
+                            + "terminal={},delta={},gateDelta={}] "
+                            + "branch[selected={},retained={},delta={}] "
+                            + "previous[selected={},retained={},delta={}] "
+                            + "source[identity={},mapped={},delta={}] "
+                            + "segments[one={},two={},delta={}]",
+                    guideBranchWinnerPairReplayAccepted,
+                    guideBranchWinnerCandidateOwnerWriteEligible,
+                    guideBranchWinnerCandidateOwnerWriteCompleted,
+                    guideBranchWinnerCandidateOwnerWriteEligible
+                            - guideBranchWinnerCandidateOwnerWriteCompleted,
+                    guideBranchWinnerPairReplayAccepted
+                            - guideBranchWinnerCandidateOwnerWriteEligible,
+                    guideBranchWinnerCandidateOwnerValidateAttempted,
+                    guideBranchWinnerCandidateOwnerEmpty,
+                    guideBranchWinnerCandidateOwnerMetadataReject,
+                    guideBranchWinnerCandidateOwnerAccepted,
+                    guideBranchWinnerCandidateOwnerValidationTerminal,
+                    guideBranchWinnerCandidateOwnerValidateAttempted
+                            - guideBranchWinnerCandidateOwnerValidationTerminal,
+                    guideBranchWinnerCandidateOwnerWriteCompleted
+                            - guideBranchWinnerCandidateOwnerAccepted,
+                    guideBranchWinnerCandidateOwnerSelected,
+                    guideBranchWinnerCandidateOwnerRetained,
+                    guideBranchWinnerCandidateOwnerAccepted
+                            - guideBranchWinnerCandidateOwnerBranch,
+                    guideBranchWinnerCandidateOwnerPreviousSelected,
+                    guideBranchWinnerCandidateOwnerPreviousRetained,
+                    guideBranchWinnerCandidateOwnerAccepted
+                            - guideBranchWinnerCandidateOwnerPrevious,
+                    guideBranchWinnerCandidateOwnerIdentitySource,
+                    guideBranchWinnerCandidateOwnerMappedSource,
+                    guideBranchWinnerCandidateOwnerAccepted
+                            - guideBranchWinnerCandidateOwnerSource,
+                    guideBranchWinnerCandidateOwnerOneSegment,
+                    guideBranchWinnerCandidateOwnerTwoSegment,
+                    guideBranchWinnerCandidateOwnerAccepted
+                            - guideBranchWinnerCandidateOwnerSegments);
             spatialDiagnosticViewPending = 0;
             return;
         }
@@ -4669,6 +4790,15 @@ final class RtPathReservoirHistory {
         return Math.multiplyExact(pixelCount,
                 (long) PathReservoirData.BYTE_SIZE + PathSourceRootData.BYTE_SIZE
                         + PATH_BRANCH_WINNER_TAG_STRIDE);
+    }
+
+    static long branchWinnerTagOffsetBytes(int width, int height) {
+        if (width <= 0 || height <= 0) {
+            throw new IllegalArgumentException("Branch winner-tag extent must be positive");
+        }
+        long pixelCount = Math.multiplyExact((long) width, height);
+        return Math.multiplyExact(pixelCount,
+                (long) PathReservoirData.BYTE_SIZE + PathSourceRootData.BYTE_SIZE);
     }
 
     static long branchCandidateTagBytes(int width, int height) {

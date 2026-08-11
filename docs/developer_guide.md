@@ -873,6 +873,21 @@ tree was closed. This proves only bounded device storage equality. Before any de
 define its ownership, clear/reset, generation and adjacent-frame lifetime contract; committed path
 history and the ordinary estimator are still forbidden.
 
+`RT path guide branch winner candidate owner` audits that ownership contract without adding a
+buffer. The current winner write slot differs from the adjacent previous read slot. Before replay,
+only its 16 B/pixel tag tail is cleared; replay-approved output writes one tag at its own current
+receiver index. The tag binds frame, 24-bit generation, receiver index, source/new-output/previous-
+output mapping kinds and one/two-segment replay ownership. A full-resolution validator consumes the
+tags before `beginCurrentBranchWinnerScratch` clears the complete slot for the existing aged-winner
+pass. Do not move this validation after that clear or write payload before a separate storage gate.
+
+Valid accounting requires replay accepted = write eligible = write completed = validate accepted;
+validate attempted = empty + metadata reject + accepted; every accepted count must equal its branch,
+previous-output, source-mapping and segment partitions. All deltas must be zero. The reference run
+covered 8 full-screen readbacks / 7372800 attempted slots: 88355 tags accepted, 7284445 empty, zero
+metadata rejects and zero deltas. Counter storage is 696 uints / 2784 B; allocations, `WorldPush`,
+inline push constants and replay ABI are unchanged. The client was closed with no Java processes.
+
 For a fresh runtime check, use debug view 20 and inspect `run/logs/latest.log`. Normal operation
 requires `RT bring-up OK`, Vulkan, the intended NVIDIA device, exact zero-delta counter partitions,
 and no `DEVICE_LOST`, `VK_ERROR`, GPU fault or shader compilation error. Debug colors and sparse

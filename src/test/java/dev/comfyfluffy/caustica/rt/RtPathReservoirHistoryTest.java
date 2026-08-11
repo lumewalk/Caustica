@@ -15,8 +15,8 @@ final class RtPathReservoirHistoryTest {
         assertEquals(176, PathReservoirData.BYTE_SIZE);
         assertEquals(176, RtPathReservoirHistory.BYTES_PER_RESERVOIR);
         assertEquals(688, WorldPushData.BYTE_SIZE);
-        assertEquals(682, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
-        assertEquals(2728, RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_COUNTER_BYTES);
+        assertEquals(696, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
+        assertEquals(2784, RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_COUNTER_BYTES);
         assertEquals(1 << 8, RtPathReservoirHistory.GUIDE_PREVIOUS_REPLAY_PASS_FLAG);
         assertEquals(1 << 9, RtPathReservoirHistory.GUIDE_PREVIOUS_AVAILABLE_FLAG);
         assertEquals(1 << 10, RtPathReservoirHistory.GUIDE_BRANCH_PREVIOUS_AVAILABLE_FLAG);
@@ -37,6 +37,8 @@ final class RtPathReservoirHistoryTest {
                 RtPathReservoirHistory.GUIDE_BRANCH_WINNER_PREVIOUS_REPLAY_PASS_FLAG);
         assertEquals(1 << 19,
                 RtPathReservoirHistory.GUIDE_BRANCH_WINNER_PAIR_STORAGE_VALIDATE_PASS_FLAG);
+        assertEquals(1 << 20,
+                RtPathReservoirHistory.GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_VALIDATE_PASS_FLAG);
     }
 
     @Test
@@ -154,6 +156,8 @@ final class RtPathReservoirHistoryTest {
                 RtPathReservoirHistory.branchWinnerScratchBytes(1280, 673),
                 RtPathReservoirHistory.SLOT_COUNT));
         assertEquals(16, RtPathReservoirHistory.PATH_BRANCH_WINNER_TAG_STRIDE);
+        assertEquals(289_443_840L,
+                RtPathReservoirHistory.branchWinnerTagOffsetBytes(1280, 673));
     }
 
     @Test

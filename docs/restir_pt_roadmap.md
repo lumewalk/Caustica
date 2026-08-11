@@ -1126,6 +1126,25 @@ the exact 4096-record capacity. No Vulkan/device/GPU/shader failure occurred. Th
 to define dense current-candidate ownership, reset and lifetime semantics before allocating or
 writing any persistent candidate slot; committed history and the ordinary estimator remain blocked.
 
+Dense current-candidate ownership is now proven without allocating another full-resolution slot.
+Before previous-winner replay, only the 16 B/pixel tag tail of the current winner write slot is
+cleared. Every replay-approved invocation owns its current receiver index directly and writes a
+frame/generation/receiver/control tag containing source mapping, new output mapping, previous output
+mapping and replay segment count. A separate full-resolution pass validates all tags before the
+existing aged-winner clear destroys this temporary lifetime and reuses the slot normally. The
+previous winner slot remains read-only throughout, and no reservoir/root payload is written by this
+gate. Fourteen counters bring storage to 696 uints / 2784 B; all GPU allocations, the 688 B
+`WorldPush`, 120 B inline push constants and replay ABI 10 remain unchanged.
+
+Eight full-screen Vulkan readbacks validated 7372800 receiver slots. Exactly 88355 replay-approved
+pairs wrote and validated 88355 owner tags; the remaining 7284445 slots were cleanly empty.
+Metadata rejects and every write, validation, branch, previous-output, source-mapping and segment
+delta were zero. No Vulkan/device/GPU/shader failure occurred. The next safe gate may write the
+replay-approved pair payload into this same temporary current slot, compare bounded dense samples
+against the existing exact expected captures after a barrier, and then let the aged-winner clear
+destroy it. The write must still not survive the frame, become committed history or reach the
+ordinary estimator.
+
 ## Delivery Phases
 
 ### Phase 0 — Wavefront Integration Baseline

@@ -2029,6 +2029,40 @@ final class RtPathSpatialReuseReferenceTest {
     }
 
     @Test
+    void branchWinnerCandidateOwnerBindsReceiverAndCompleteProvenance() {
+        var identity = RtPathSpatialReuseReference.MappingKind.IDENTITY;
+        var mapped = RtPathSpatialReuseReference.MappingKind.DIFFUSE_RECONNECTION;
+
+        assertEquals(RtPathSpatialReuseReference.BranchWinnerCandidateOwnerOutcome.EMPTY,
+                RtPathSpatialReuseReference.branchWinnerCandidateOwnerOutcome(
+                        true, false, false, null, null, null, 0));
+        assertEquals(
+                RtPathSpatialReuseReference.BranchWinnerCandidateOwnerOutcome.SELECTED_ACCEPTED,
+                RtPathSpatialReuseReference.branchWinnerCandidateOwnerOutcome(
+                        false, true, true, identity, mapped, identity, 1));
+        assertEquals(
+                RtPathSpatialReuseReference.BranchWinnerCandidateOwnerOutcome.RETAINED_ACCEPTED,
+                RtPathSpatialReuseReference.branchWinnerCandidateOwnerOutcome(
+                        false, true, true, mapped, identity, mapped, 2));
+        assertEquals(
+                RtPathSpatialReuseReference.BranchWinnerCandidateOwnerOutcome.METADATA_REJECT,
+                RtPathSpatialReuseReference.branchWinnerCandidateOwnerOutcome(
+                        false, false, true, identity, mapped, identity, 1));
+        assertEquals(
+                RtPathSpatialReuseReference.BranchWinnerCandidateOwnerOutcome.METADATA_REJECT,
+                RtPathSpatialReuseReference.branchWinnerCandidateOwnerOutcome(
+                        false, true, false, identity, mapped, identity, 1));
+        assertEquals(
+                RtPathSpatialReuseReference.BranchWinnerCandidateOwnerOutcome.METADATA_REJECT,
+                RtPathSpatialReuseReference.branchWinnerCandidateOwnerOutcome(
+                        false, true, true, identity, mapped, null, 1));
+        assertEquals(
+                RtPathSpatialReuseReference.BranchWinnerCandidateOwnerOutcome.METADATA_REJECT,
+                RtPathSpatialReuseReference.branchWinnerCandidateOwnerOutcome(
+                        false, true, true, identity, mapped, identity, 3));
+    }
+
+    @Test
     void pairedMomentsExposeCovarianceAndCorrelationWithoutBatchStorage() {
         var moments = new RtPathSpatialReuseReference.PairMoments();
         moments.add(1.0, 2.0);
@@ -3230,8 +3264,36 @@ final class RtPathSpatialReuseReferenceTest {
                 .GUIDE_BRANCH_WINNER_PAIR_STORAGE_TWO_SEGMENT_INDEX);
         assertEquals(681,
                 RtPathReservoirHistory.GUIDE_BRANCH_WINNER_PAIR_STORAGE_DELTA_INDEX);
-        assertEquals(682, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
-        assertEquals(682 * Integer.BYTES,
+        assertEquals(682, RtPathReservoirHistory
+                .GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_WRITE_ELIGIBLE_INDEX);
+        assertEquals(683, RtPathReservoirHistory
+                .GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_WRITE_COMPLETED_INDEX);
+        assertEquals(684, RtPathReservoirHistory
+                .GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_VALIDATE_ATTEMPTED_INDEX);
+        assertEquals(685,
+                RtPathReservoirHistory.GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_EMPTY_INDEX);
+        assertEquals(686, RtPathReservoirHistory
+                .GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_METADATA_REJECT_INDEX);
+        assertEquals(687,
+                RtPathReservoirHistory.GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_ACCEPTED_INDEX);
+        assertEquals(688,
+                RtPathReservoirHistory.GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_SELECTED_INDEX);
+        assertEquals(689,
+                RtPathReservoirHistory.GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_RETAINED_INDEX);
+        assertEquals(690, RtPathReservoirHistory
+                .GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_PREVIOUS_SELECTED_INDEX);
+        assertEquals(691, RtPathReservoirHistory
+                .GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_PREVIOUS_RETAINED_INDEX);
+        assertEquals(692, RtPathReservoirHistory
+                .GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_IDENTITY_SOURCE_INDEX);
+        assertEquals(693, RtPathReservoirHistory
+                .GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_MAPPED_SOURCE_INDEX);
+        assertEquals(694, RtPathReservoirHistory
+                .GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_ONE_SEGMENT_INDEX);
+        assertEquals(695, RtPathReservoirHistory
+                .GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_TWO_SEGMENT_INDEX);
+        assertEquals(696, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
+        assertEquals(696 * Integer.BYTES,
                 RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_COUNTER_BYTES);
         assertEquals(32, RtPathReservoirHistory.SHIFTED_RECEIVER_GUIDE_STRIDE);
         assertEquals(8, RtPathReservoirHistory.BRANCH_RECEIVER_OWNERSHIP_STRIDE);

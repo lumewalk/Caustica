@@ -2019,6 +2019,73 @@ static void pathBranchWinnerPairStorageValidate() {
             : PATH_GUIDE_BRANCH_WINNER_PAIR_STORAGE_TWO_SEGMENT], 1u);
 }
 
+// Metadata-only proof for the future dense current-candidate slot. The previous-winner dispatch
+// owns exactly one invocation per current receiver, so no atomic ownership arbitration is needed.
+// Only the tag tail of the current winner write slot is touched; it is cleared before this pass,
+// validated here, then cleared again by the existing aged-winner lifetime before payload writes.
+static void pathBranchWinnerCandidateOwnerValidate() {
+    if (pc.debugView != PATH_SHIFTED_RADIANCE_DEBUG_VIEW
+            || (pc.historyFlags
+                    & PATH_GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_VALIDATE_PASS_FLAG) == 0u
+            || worldPush.pathShiftDiagnosticCounterAddr == 0u
+            || worldPush.pathShiftBranchWinnerScratchAddr == 0u) {
+        return;
+    }
+    uint2 pixel = DispatchRaysIndex().xy;
+    uint2 dimensions = DispatchRaysDimensions().xy;
+    uint pixelIndex = pixel.y * dimensions.x + pixel.x;
+    uint pixelCount = dimensions.x * dimensions.y;
+    DevicePtr<uint> counters = DevicePtr<uint>(worldPush.pathShiftDiagnosticCounterAddr);
+    InterlockedAdd(counters[
+            PATH_GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_VALIDATE_ATTEMPTED], 1u);
+
+    ConstPtr<uint4> tags = ConstPtr<uint4>(pathBranchWinnerTagAddress(
+            worldPush.pathShiftBranchWinnerScratchAddr, pixelCount));
+    uint4 tag = tags[pixelIndex];
+    if (all(tag == uint4(0u))) {
+        InterlockedAdd(counters[
+                PATH_GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_EMPTY], 1u);
+        return;
+    }
+
+    uint sourceMappingKind = tag.w & 0xFFu;
+    uint outputMappingKind = (tag.w >> 8u) & 0xFFu;
+    uint previousOutputMappingKind = (tag.w >> 16u) & 0xFFu;
+    uint replaySegments = (tag.w >> 24u) & 0xFFu;
+    uint currentGeneration = pc.historyGeneration & PATH_GENERATION_MASK;
+    bool metadataValid = tag.x == worldPush.frameIndex
+            && tag.y == currentGeneration
+            && tag.z == pixelIndex
+            && (sourceMappingKind == PATH_MAPPING_IDENTITY
+                    || sourceMappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION)
+            && (outputMappingKind == PATH_MAPPING_IDENTITY
+                    || outputMappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION)
+            && (previousOutputMappingKind == PATH_MAPPING_IDENTITY
+                    || previousOutputMappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION)
+            && (replaySegments == 1u || replaySegments == MAX_PATH_SEGMENTS);
+    if (!metadataValid) {
+        InterlockedAdd(counters[
+                PATH_GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_METADATA_REJECT], 1u);
+        return;
+    }
+
+    InterlockedAdd(counters[
+            PATH_GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_ACCEPTED], 1u);
+    InterlockedAdd(counters[outputMappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION
+            ? PATH_GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_SELECTED
+            : PATH_GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_RETAINED], 1u);
+    InterlockedAdd(counters[
+            previousOutputMappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION
+                    ? PATH_GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_PREVIOUS_SELECTED
+                    : PATH_GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_PREVIOUS_RETAINED], 1u);
+    InterlockedAdd(counters[sourceMappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION
+            ? PATH_GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_MAPPED_SOURCE
+            : PATH_GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_IDENTITY_SOURCE], 1u);
+    InterlockedAdd(counters[replaySegments == 1u
+            ? PATH_GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_ONE_SEGMENT
+            : PATH_GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_TWO_SEGMENT], 1u);
+}
+
 static void pathBranchReceiverOwnerValidate() {
     if (pc.debugView != PATH_SHIFTED_RADIANCE_DEBUG_VIEW
             || (pc.historyFlags & PATH_GUIDE_BRANCH_RECEIVER_OWNER_VALIDATE_PASS_FLAG) == 0u
@@ -2300,6 +2367,7 @@ static void pathBranchWinnerPreviousReplayValidate() {
             || worldPush.pathShiftDiagnosticCounterAddr == 0u
             || worldPush.pathShiftDiagnosticPairAddr == 0u
             || worldPush.pathShiftReceiverGuideAddr == 0u
+            || worldPush.pathShiftBranchWinnerScratchAddr == 0u
             || worldPush.pathShiftBranchWinnerPreviousAddr == 0u) {
         return;
     }
@@ -3145,6 +3213,22 @@ static void pathBranchWinnerPreviousReplayValidate() {
                 InterlockedAdd(counters[pairedSegments == 1u
                         ? PATH_GUIDE_BRANCH_WINNER_PAIR_REPLAY_ONE_SEGMENT
                         : PATH_GUIDE_BRANCH_WINNER_PAIR_REPLAY_TWO_SEGMENT], 1u);
+
+                // One invocation owns this current receiver index. Store only the candidate-owner
+                // tag; the reservoir/root remain registers and the later aged-winner clear removes
+                // this temporary tag before that slot receives its normal payload.
+                InterlockedAdd(counters[
+                        PATH_GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_WRITE_ELIGIBLE], 1u);
+                DevicePtr<uint4> candidateOwnerTags = DevicePtr<uint4>(
+                        pathBranchWinnerTagAddress(
+                                worldPush.pathShiftBranchWinnerScratchAddr, pixelCount));
+                candidateOwnerTags[receiverPixelIndex] = uint4(
+                        worldPush.frameIndex, currentGeneration, receiverPixelIndex,
+                        pathBranchWinnerPairStorageControl(
+                                sourceMappingKind, pathMappingKind(branchRecord),
+                                outputMappingKind, pairedSegments));
+                InterlockedAdd(counters[
+                        PATH_GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_WRITE_COMPLETED], 1u);
 
                 // First device-storage proof for the newly merged current-frame pair. Expected
                 // and stored copies share the bounded capture arrays only until the immediate
@@ -5660,6 +5744,11 @@ public void pathGuideScratchValidate() {
 [shader("raygeneration")]
 void main() {
     worldPush = ConstPtr<WorldPush>(pc.worldPushAddr)[0];
+    if ((pc.historyFlags
+            & PATH_GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_VALIDATE_PASS_FLAG) != 0u) {
+        pathBranchWinnerCandidateOwnerValidate();
+        return;
+    }
     if ((pc.historyFlags
             & PATH_GUIDE_BRANCH_WINNER_PAIR_STORAGE_VALIDATE_PASS_FLAG) != 0u) {
         pathBranchWinnerPairStorageValidate();
