@@ -1230,6 +1230,7 @@ public final class RtComposite {
             ByteBuffer branchWinnerPreviousReplayPushConstants = null;
             ByteBuffer branchWinnerPairStorageValidatePushConstants = null;
             ByteBuffer branchWinnerCandidateOwnerValidatePushConstants = null;
+            ByteBuffer branchCandidateArbitrationPushConstants = null;
             if (restirPt
                      && debugView == RtPathReservoirHistory.SHIFTED_RADIANCE_DEBUG_VIEW) {
                 guidePreviousReplayPushConstants =
@@ -1462,6 +1463,29 @@ public final class RtComposite {
                                         .GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_VALIDATE_PASS_FLAG,
                         worldConstants.historyGeneration())
                         .write(branchWinnerCandidateOwnerValidatePushConstants);
+                branchCandidateArbitrationPushConstants =
+                        stack.malloc(WorldPushConstantsData.BYTE_SIZE);
+                new WorldPushConstantsData(
+                        worldConstants.worldPushAddr(),
+                        worldConstants.tableAddr(),
+                        worldConstants.entityTableAddr(),
+                        worldConstants.materialTableAddr(),
+                        worldConstants.lightBufAddr(),
+                        worldConstants.lightAliasAddr(),
+                        worldConstants.lightLocalAliasAddr(),
+                        worldConstants.lightGridCellAddr(),
+                        worldConstants.lightGridSpanAddr(),
+                        worldConstants.pathQueueAddr(),
+                        worldConstants.directReservoirAddr(),
+                        worldConstants.pathReservoirAddr(),
+                        worldConstants.pathReservoirPreviousAddr(),
+                        worldConstants.frameIndex(),
+                        worldConstants.debugView(),
+                        worldConstants.historyFlags()
+                                | RtPathReservoirHistory
+                                        .GUIDE_BRANCH_CANDIDATE_ARBITRATION_PASS_FLAG,
+                        worldConstants.historyGeneration())
+                        .write(branchCandidateArbitrationPushConstants);
                 mappingReplayPushConstants =
                         stack.malloc(WorldPushConstantsData.BYTE_SIZE);
                 new WorldPushConstantsData(
@@ -1567,9 +1591,11 @@ public final class RtComposite {
                     pathReservoirs.beginShiftedRadianceDiagnostics(
                             cmd, VIEW20_FULL_AUDIT);
                     if (VIEW20_FULL_AUDIT) {
+                        // Always clear the temporary fresh-candidate tags. With no adjacent winner,
+                        // arbitration must observe clean emptiness rather than an older slot lifetime.
+                        pathReservoirs.beginCurrentBranchWinnerCandidateOwnership(
+                                cmd, branchWinnerScratchFrame);
                         if (branchWinnerScratchFrame.previousAvailable()) {
-                            pathReservoirs.beginCurrentBranchWinnerCandidateOwnership(
-                                    cmd, branchWinnerScratchFrame);
                             try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd,
                                          "path branch winner previous replay");
                                  RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage(
@@ -1631,6 +1657,14 @@ public final class RtComposite {
                                     RtPathReservoirHistory.PATH_BRANCH_SCRATCH_CAPTURE_CAPACITY,
                                     RtPathReservoirHistory.PATH_BRANCH_CANDIDATE_HISTORY_SLOT_COUNT,
                                     branchAgeReplayPushConstants, 1);
+                        }
+                        VulkanCommandEncoder.memoryBarrier(cmd, stack);
+                        try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd,
+                                     "path branch candidate arbitration");
+                             RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage(
+                                     "frame.pathBranchCandidateArbitration")) {
+                            active.trace(cmd, renderW, renderH,
+                                    branchCandidateArbitrationPushConstants, 1);
                         }
                         VulkanCommandEncoder.memoryBarrier(cmd, stack);
                         pathReservoirs.beginCurrentBranchWinnerScratch(

@@ -1,5 +1,6 @@
 param(
-	[switch]$FrameStats
+	[switch]$FrameStats,
+	[switch]$View20FullAudit
 )
 
 $ErrorActionPreference = "Stop"
@@ -14,6 +15,10 @@ try {
 		Write-Host "Caustica frame statistics are enabled."
 	}
 	$javaToolOptions += " -Dcaustica.rt.frameStats=$($FrameStats.IsPresent.ToString().ToLowerInvariant())"
+	if ($View20FullAudit) {
+		Write-Host "Caustica debug view 20 full audit is enabled."
+		$javaToolOptions += " -Dcaustica.rt.view20FullAudit=true"
+	}
 	$env:JAVA_TOOL_OPTIONS = $javaToolOptions
 	.\gradlew.bat --no-daemon runClient --args="--renderDebugLabels --graphicsBackend VULKAN"
 	if ($LASTEXITCODE -ne 0) {

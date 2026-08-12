@@ -911,12 +911,25 @@ RTX 5060 Ti full-screen responsiveness improved from about 1 FPS with the comple
 benchmark.
 
 The original proof workload is retained behind the startup property
-`-Dcaustica.rt.view20FullAudit=true`. `full audit` performs the multiple full-resolution replay/
+`-Dcaustica.rt.view20FullAudit=true`. The supported project entry point is
+`./runClient.ps1 -View20FullAudit`; the script appends the property to its intentionally rebuilt
+`JAVA_TOOL_OPTIONS`. Supplying the environment variable before the script is not sufficient because
+the script replaces it. `full audit` performs the multiple full-resolution replay/
 validation passes, device barriers, readback waits and temporary full-payload writes needed for
 counter evidence. Use only enough frames to obtain a clean readback, then close the client. The log
 must say either `RT debug view 20 mode: visual` or `full audit`; never use the latter for manual scene
 navigation. Both modes remain view-20-only, and ordinary rendering receives zero diagnostic scratch
 addresses.
+
+`RT path guide branch candidate arbitration` is the counter-only fresh-versus-aged ownership gate.
+It runs after aged claims exist but before the temporary fresh payload is cleared. A valid adjacent-
+frame fresh output always wins a collision; aged output is used only when fresh is absent. This
+prevents two correlated merges that both consumed the current reservoir from being combined
+implicitly. Correctness requires attempted to equal all mutually exclusive terminal categories,
+chosen to equal fresh-only + aged-only + both, and every branch/source/segment/aged-age delta to be
+zero. The reference full-audit readback classified 861440 pixels: 845993 empty, 3652 fresh-only,
+4003 aged-only and 7792 collisions won by fresh. Both metadata rejects and all deltas were zero.
+The pass writes no payload, tag, history or estimator state.
 
 For a fresh runtime check, use debug view 20 and inspect `run/logs/latest.log`. Normal operation
 requires `RT bring-up OK`, Vulkan, the intended NVIDIA device, exact zero-delta counter partitions,

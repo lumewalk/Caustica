@@ -46,6 +46,7 @@ final class RtPathReservoirHistory {
     static final int GUIDE_BRANCH_WINNER_PREVIOUS_REPLAY_PASS_FLAG = 1 << 18;
     static final int GUIDE_BRANCH_WINNER_PAIR_STORAGE_VALIDATE_PASS_FLAG = 1 << 19;
     static final int GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_VALIDATE_PASS_FLAG = 1 << 20;
+    static final int GUIDE_BRANCH_CANDIDATE_ARBITRATION_PASS_FLAG = 1 << 21;
     static final int SPATIAL_DIAGNOSTIC_CATEGORY_COUNT = 9;
     static final int SPATIAL_DIAGNOSTIC_STRICT_PAIR_CURSOR_INDEX =
             SPATIAL_DIAGNOSTIC_CATEGORY_COUNT;
@@ -753,7 +754,25 @@ final class RtPathReservoirHistory {
     static final int GUIDE_BRANCH_WINNER_DENSE_PAYLOAD_MAPPED_SOURCE_INDEX = 711;
     static final int GUIDE_BRANCH_WINNER_DENSE_PAYLOAD_ONE_SEGMENT_INDEX = 712;
     static final int GUIDE_BRANCH_WINNER_DENSE_PAYLOAD_TWO_SEGMENT_INDEX = 713;
-    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 714;
+    static final int GUIDE_BRANCH_CANDIDATE_ARBITRATION_ATTEMPTED_INDEX = 714;
+    static final int GUIDE_BRANCH_CANDIDATE_ARBITRATION_NONE_INDEX = 715;
+    static final int GUIDE_BRANCH_CANDIDATE_ARBITRATION_FRESH_ONLY_INDEX = 716;
+    static final int GUIDE_BRANCH_CANDIDATE_ARBITRATION_AGED_ONLY_INDEX = 717;
+    static final int GUIDE_BRANCH_CANDIDATE_ARBITRATION_BOTH_FRESH_WINS_INDEX = 718;
+    static final int GUIDE_BRANCH_CANDIDATE_ARBITRATION_FRESH_METADATA_REJECT_INDEX = 719;
+    static final int GUIDE_BRANCH_CANDIDATE_ARBITRATION_AGED_METADATA_REJECT_INDEX = 720;
+    static final int GUIDE_BRANCH_CANDIDATE_ARBITRATION_CHOSEN_FRESH_INDEX = 721;
+    static final int GUIDE_BRANCH_CANDIDATE_ARBITRATION_CHOSEN_AGED_INDEX = 722;
+    static final int GUIDE_BRANCH_CANDIDATE_ARBITRATION_CHOSEN_SELECTED_INDEX = 723;
+    static final int GUIDE_BRANCH_CANDIDATE_ARBITRATION_CHOSEN_RETAINED_INDEX = 724;
+    static final int GUIDE_BRANCH_CANDIDATE_ARBITRATION_CHOSEN_IDENTITY_SOURCE_INDEX = 725;
+    static final int GUIDE_BRANCH_CANDIDATE_ARBITRATION_CHOSEN_MAPPED_SOURCE_INDEX = 726;
+    static final int GUIDE_BRANCH_CANDIDATE_ARBITRATION_CHOSEN_ONE_SEGMENT_INDEX = 727;
+    static final int GUIDE_BRANCH_CANDIDATE_ARBITRATION_CHOSEN_TWO_SEGMENT_INDEX = 728;
+    static final int GUIDE_BRANCH_CANDIDATE_ARBITRATION_AGED_AGE_ONE_INDEX = 729;
+    static final int GUIDE_BRANCH_CANDIDATE_ARBITRATION_AGED_AGE_TWO_INDEX = 730;
+    static final int GUIDE_BRANCH_CANDIDATE_ARBITRATION_AGED_AGE_THREE_INDEX = 731;
+    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 732;
     static final int SHIFTED_RECEIVER_GUIDE_STRIDE = 8 * Float.BYTES;
     static final int BRANCH_RECEIVER_OWNERSHIP_STRIDE = 2 * Integer.BYTES;
     static final int BRANCH_CANDIDATE_TAG_STRIDE = 2 * Integer.BYTES;
@@ -1184,9 +1203,9 @@ final class RtPathReservoirHistory {
 
     void beginCurrentBranchWinnerCandidateOwnership(
             VkCommandBuffer cmd, BranchScratchFrame frame) {
-        if (frame == null || !frame.previousAvailable()) {
+        if (frame == null) {
             throw new IllegalArgumentException(
-                    "previous branch winner is required for candidate ownership");
+                    "branch winner frame is required for candidate ownership");
         }
         RtBuffer scratch = branchWinnerScratch[frame.writeSlot()];
         if (scratch == null) {
@@ -2606,6 +2625,46 @@ final class RtPathReservoirHistory {
                     counters.get(GUIDE_BRANCH_WINNER_DENSE_PAYLOAD_ONE_SEGMENT_INDEX));
             long guideBranchWinnerDensePayloadTwoSegment = Integer.toUnsignedLong(
                     counters.get(GUIDE_BRANCH_WINNER_DENSE_PAYLOAD_TWO_SEGMENT_INDEX));
+            long guideBranchCandidateArbitrationAttempted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_CANDIDATE_ARBITRATION_ATTEMPTED_INDEX));
+            long guideBranchCandidateArbitrationNone = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_CANDIDATE_ARBITRATION_NONE_INDEX));
+            long guideBranchCandidateArbitrationFreshOnly = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_CANDIDATE_ARBITRATION_FRESH_ONLY_INDEX));
+            long guideBranchCandidateArbitrationAgedOnly = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_CANDIDATE_ARBITRATION_AGED_ONLY_INDEX));
+            long guideBranchCandidateArbitrationBothFreshWins = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_CANDIDATE_ARBITRATION_BOTH_FRESH_WINS_INDEX));
+            long guideBranchCandidateArbitrationFreshMetadataReject = Integer.toUnsignedLong(
+                    counters.get(
+                            GUIDE_BRANCH_CANDIDATE_ARBITRATION_FRESH_METADATA_REJECT_INDEX));
+            long guideBranchCandidateArbitrationAgedMetadataReject = Integer.toUnsignedLong(
+                    counters.get(
+                            GUIDE_BRANCH_CANDIDATE_ARBITRATION_AGED_METADATA_REJECT_INDEX));
+            long guideBranchCandidateArbitrationChosenFresh = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_CANDIDATE_ARBITRATION_CHOSEN_FRESH_INDEX));
+            long guideBranchCandidateArbitrationChosenAged = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_CANDIDATE_ARBITRATION_CHOSEN_AGED_INDEX));
+            long guideBranchCandidateArbitrationChosenSelected = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_CANDIDATE_ARBITRATION_CHOSEN_SELECTED_INDEX));
+            long guideBranchCandidateArbitrationChosenRetained = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_CANDIDATE_ARBITRATION_CHOSEN_RETAINED_INDEX));
+            long guideBranchCandidateArbitrationChosenIdentitySource = Integer.toUnsignedLong(
+                    counters.get(
+                            GUIDE_BRANCH_CANDIDATE_ARBITRATION_CHOSEN_IDENTITY_SOURCE_INDEX));
+            long guideBranchCandidateArbitrationChosenMappedSource = Integer.toUnsignedLong(
+                    counters.get(
+                            GUIDE_BRANCH_CANDIDATE_ARBITRATION_CHOSEN_MAPPED_SOURCE_INDEX));
+            long guideBranchCandidateArbitrationChosenOneSegment = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_CANDIDATE_ARBITRATION_CHOSEN_ONE_SEGMENT_INDEX));
+            long guideBranchCandidateArbitrationChosenTwoSegment = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_CANDIDATE_ARBITRATION_CHOSEN_TWO_SEGMENT_INDEX));
+            long guideBranchCandidateArbitrationAgedAgeOne = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_CANDIDATE_ARBITRATION_AGED_AGE_ONE_INDEX));
+            long guideBranchCandidateArbitrationAgedAgeTwo = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_CANDIDATE_ARBITRATION_AGED_AGE_TWO_INDEX));
+            long guideBranchCandidateArbitrationAgedAgeThree = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_CANDIDATE_ARBITRATION_AGED_AGE_THREE_INDEX));
             long crossFrameReceiverReject = crossFrameReceiverSurfaceReject
                     + crossFrameReceiverSampleReject + crossFrameReceiverEdgeReject
                     + crossFrameReceiverTopologyReject + crossFrameReceiverDepthReject
@@ -4795,6 +4854,74 @@ final class RtPathReservoirHistory {
                     guideBranchWinnerDensePayloadTwoSegment,
                     guideBranchWinnerDensePayloadPairAccepted
                             - guideBranchWinnerDensePayloadSegments);
+            long guideBranchCandidateArbitrationTerminal =
+                    guideBranchCandidateArbitrationNone
+                            + guideBranchCandidateArbitrationFreshOnly
+                            + guideBranchCandidateArbitrationAgedOnly
+                            + guideBranchCandidateArbitrationBothFreshWins
+                            + guideBranchCandidateArbitrationFreshMetadataReject
+                            + guideBranchCandidateArbitrationAgedMetadataReject;
+            long guideBranchCandidateArbitrationPopulation =
+                    guideBranchCandidateArbitrationFreshOnly
+                            + guideBranchCandidateArbitrationAgedOnly
+                            + guideBranchCandidateArbitrationBothFreshWins;
+            long guideBranchCandidateArbitrationChosen =
+                    guideBranchCandidateArbitrationChosenFresh
+                            + guideBranchCandidateArbitrationChosenAged;
+            long guideBranchCandidateArbitrationBranch =
+                    guideBranchCandidateArbitrationChosenSelected
+                            + guideBranchCandidateArbitrationChosenRetained;
+            long guideBranchCandidateArbitrationSource =
+                    guideBranchCandidateArbitrationChosenIdentitySource
+                            + guideBranchCandidateArbitrationChosenMappedSource;
+            long guideBranchCandidateArbitrationSegments =
+                    guideBranchCandidateArbitrationChosenOneSegment
+                            + guideBranchCandidateArbitrationChosenTwoSegment;
+            long guideBranchCandidateArbitrationAgedAges =
+                    guideBranchCandidateArbitrationAgedAgeOne
+                            + guideBranchCandidateArbitrationAgedAgeTwo
+                            + guideBranchCandidateArbitrationAgedAgeThree;
+            CausticaMod.LOGGER.info(
+                    "RT path guide branch candidate arbitration: attempted={} none={} "
+                            + "freshOnly={} agedOnly={} bothFreshWins={} "
+                            + "reject[freshMetadata={},agedMetadata={}] terminal={} delta={} "
+                            + "chosen[fresh={},aged={},total={},delta={}] "
+                            + "branch[selected={},retained={},delta={}] "
+                            + "source[identity={},mapped={},delta={}] "
+                            + "segments[one={},two={},delta={}] "
+                            + "agedAge[one={},two={},three={},delta={}]",
+                    guideBranchCandidateArbitrationAttempted,
+                    guideBranchCandidateArbitrationNone,
+                    guideBranchCandidateArbitrationFreshOnly,
+                    guideBranchCandidateArbitrationAgedOnly,
+                    guideBranchCandidateArbitrationBothFreshWins,
+                    guideBranchCandidateArbitrationFreshMetadataReject,
+                    guideBranchCandidateArbitrationAgedMetadataReject,
+                    guideBranchCandidateArbitrationTerminal,
+                    guideBranchCandidateArbitrationAttempted
+                            - guideBranchCandidateArbitrationTerminal,
+                    guideBranchCandidateArbitrationChosenFresh,
+                    guideBranchCandidateArbitrationChosenAged,
+                    guideBranchCandidateArbitrationChosen,
+                    guideBranchCandidateArbitrationPopulation
+                            - guideBranchCandidateArbitrationChosen,
+                    guideBranchCandidateArbitrationChosenSelected,
+                    guideBranchCandidateArbitrationChosenRetained,
+                    guideBranchCandidateArbitrationChosen
+                            - guideBranchCandidateArbitrationBranch,
+                    guideBranchCandidateArbitrationChosenIdentitySource,
+                    guideBranchCandidateArbitrationChosenMappedSource,
+                    guideBranchCandidateArbitrationChosen
+                            - guideBranchCandidateArbitrationSource,
+                    guideBranchCandidateArbitrationChosenOneSegment,
+                    guideBranchCandidateArbitrationChosenTwoSegment,
+                    guideBranchCandidateArbitrationChosen
+                            - guideBranchCandidateArbitrationSegments,
+                    guideBranchCandidateArbitrationAgedAgeOne,
+                    guideBranchCandidateArbitrationAgedAgeTwo,
+                    guideBranchCandidateArbitrationAgedAgeThree,
+                    guideBranchCandidateArbitrationChosenAged
+                            - guideBranchCandidateArbitrationAgedAges);
             spatialDiagnosticViewPending = 0;
             return;
         }

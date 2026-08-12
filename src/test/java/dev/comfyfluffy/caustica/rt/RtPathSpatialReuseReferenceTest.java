@@ -2088,6 +2088,33 @@ final class RtPathSpatialReuseReferenceTest {
     }
 
     @Test
+    void branchCandidateArbitrationUsesFreshAndAgedOnlyAsFallback() {
+        assertEquals(RtPathSpatialReuseReference.BranchCandidateArbitrationOutcome.NONE,
+                RtPathSpatialReuseReference.branchCandidateArbitrationOutcome(
+                        false, false, false, false));
+        assertEquals(RtPathSpatialReuseReference.BranchCandidateArbitrationOutcome.FRESH_ONLY,
+                RtPathSpatialReuseReference.branchCandidateArbitrationOutcome(
+                        true, true, false, false));
+        assertEquals(RtPathSpatialReuseReference.BranchCandidateArbitrationOutcome.AGED_ONLY,
+                RtPathSpatialReuseReference.branchCandidateArbitrationOutcome(
+                        false, false, true, true));
+        assertEquals(
+                RtPathSpatialReuseReference.BranchCandidateArbitrationOutcome.BOTH_FRESH_WINS,
+                RtPathSpatialReuseReference.branchCandidateArbitrationOutcome(
+                        true, true, true, true));
+        assertEquals(
+                RtPathSpatialReuseReference.BranchCandidateArbitrationOutcome
+                        .FRESH_METADATA_REJECT,
+                RtPathSpatialReuseReference.branchCandidateArbitrationOutcome(
+                        true, false, true, false));
+        assertEquals(
+                RtPathSpatialReuseReference.BranchCandidateArbitrationOutcome
+                        .AGED_METADATA_REJECT,
+                RtPathSpatialReuseReference.branchCandidateArbitrationOutcome(
+                        false, false, true, false));
+    }
+
+    @Test
     void pairedMomentsExposeCovarianceAndCorrelationWithoutBatchStorage() {
         var moments = new RtPathSpatialReuseReference.PairMoments();
         moments.add(1.0, 2.0);
@@ -3353,8 +3380,44 @@ final class RtPathSpatialReuseReferenceTest {
                 .GUIDE_BRANCH_WINNER_DENSE_PAYLOAD_ONE_SEGMENT_INDEX);
         assertEquals(713, RtPathReservoirHistory
                 .GUIDE_BRANCH_WINNER_DENSE_PAYLOAD_TWO_SEGMENT_INDEX);
-        assertEquals(714, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
-        assertEquals(714 * Integer.BYTES,
+        assertEquals(714, RtPathReservoirHistory
+                .GUIDE_BRANCH_CANDIDATE_ARBITRATION_ATTEMPTED_INDEX);
+        assertEquals(715,
+                RtPathReservoirHistory.GUIDE_BRANCH_CANDIDATE_ARBITRATION_NONE_INDEX);
+        assertEquals(716, RtPathReservoirHistory
+                .GUIDE_BRANCH_CANDIDATE_ARBITRATION_FRESH_ONLY_INDEX);
+        assertEquals(717, RtPathReservoirHistory
+                .GUIDE_BRANCH_CANDIDATE_ARBITRATION_AGED_ONLY_INDEX);
+        assertEquals(718, RtPathReservoirHistory
+                .GUIDE_BRANCH_CANDIDATE_ARBITRATION_BOTH_FRESH_WINS_INDEX);
+        assertEquals(719, RtPathReservoirHistory
+                .GUIDE_BRANCH_CANDIDATE_ARBITRATION_FRESH_METADATA_REJECT_INDEX);
+        assertEquals(720, RtPathReservoirHistory
+                .GUIDE_BRANCH_CANDIDATE_ARBITRATION_AGED_METADATA_REJECT_INDEX);
+        assertEquals(721, RtPathReservoirHistory
+                .GUIDE_BRANCH_CANDIDATE_ARBITRATION_CHOSEN_FRESH_INDEX);
+        assertEquals(722,
+                RtPathReservoirHistory.GUIDE_BRANCH_CANDIDATE_ARBITRATION_CHOSEN_AGED_INDEX);
+        assertEquals(723, RtPathReservoirHistory
+                .GUIDE_BRANCH_CANDIDATE_ARBITRATION_CHOSEN_SELECTED_INDEX);
+        assertEquals(724, RtPathReservoirHistory
+                .GUIDE_BRANCH_CANDIDATE_ARBITRATION_CHOSEN_RETAINED_INDEX);
+        assertEquals(725, RtPathReservoirHistory
+                .GUIDE_BRANCH_CANDIDATE_ARBITRATION_CHOSEN_IDENTITY_SOURCE_INDEX);
+        assertEquals(726, RtPathReservoirHistory
+                .GUIDE_BRANCH_CANDIDATE_ARBITRATION_CHOSEN_MAPPED_SOURCE_INDEX);
+        assertEquals(727, RtPathReservoirHistory
+                .GUIDE_BRANCH_CANDIDATE_ARBITRATION_CHOSEN_ONE_SEGMENT_INDEX);
+        assertEquals(728, RtPathReservoirHistory
+                .GUIDE_BRANCH_CANDIDATE_ARBITRATION_CHOSEN_TWO_SEGMENT_INDEX);
+        assertEquals(729, RtPathReservoirHistory
+                .GUIDE_BRANCH_CANDIDATE_ARBITRATION_AGED_AGE_ONE_INDEX);
+        assertEquals(730, RtPathReservoirHistory
+                .GUIDE_BRANCH_CANDIDATE_ARBITRATION_AGED_AGE_TWO_INDEX);
+        assertEquals(731, RtPathReservoirHistory
+                .GUIDE_BRANCH_CANDIDATE_ARBITRATION_AGED_AGE_THREE_INDEX);
+        assertEquals(732, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
+        assertEquals(732 * Integer.BYTES,
                 RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_COUNTER_BYTES);
         assertEquals(32, RtPathReservoirHistory.SHIFTED_RECEIVER_GUIDE_STRIDE);
         assertEquals(8, RtPathReservoirHistory.BRANCH_RECEIVER_OWNERSHIP_STRIDE);

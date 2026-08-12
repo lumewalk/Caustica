@@ -2136,6 +2136,145 @@ static void pathBranchWinnerCandidateOwnerValidate() {
             : PATH_GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_TWO_SEGMENT], 1u);
 }
 
+// Counter-only ownership policy between the fresh adjacent-frame output and the independently
+// reconstructed aged fallback. Fresh wins a collision so two correlated current-reservoir merges
+// are never combined implicitly. This pass runs before the existing full clear and writes no tag,
+// pair, history or estimator state.
+static void pathBranchCandidateArbitrationValidate() {
+    if (pc.debugView != PATH_SHIFTED_RADIANCE_DEBUG_VIEW
+            || (pc.historyFlags
+                    & PATH_GUIDE_BRANCH_CANDIDATE_ARBITRATION_PASS_FLAG) == 0u
+            || worldPush.pathShiftDiagnosticCounterAddr == 0u
+            || worldPush.pathShiftDiagnosticPairAddr == 0u
+            || worldPush.pathShiftReceiverGuideAddr == 0u
+            || worldPush.pathShiftBranchWinnerScratchAddr == 0u) {
+        return;
+    }
+    uint2 pixel = DispatchRaysIndex().xy;
+    uint2 dimensions = DispatchRaysDimensions().xy;
+    uint pixelIndex = pixel.y * dimensions.x + pixel.x;
+    uint pixelCount = dimensions.x * dimensions.y;
+    DevicePtr<uint> counters = DevicePtr<uint>(worldPush.pathShiftDiagnosticCounterAddr);
+    InterlockedAdd(counters[
+            PATH_GUIDE_BRANCH_CANDIDATE_ARBITRATION_ATTEMPTED], 1u);
+
+    ConstPtr<uint4> freshTags = ConstPtr<uint4>(pathBranchWinnerTagAddress(
+            worldPush.pathShiftBranchWinnerScratchAddr, pixelCount));
+    uint4 freshTag = freshTags[pixelIndex];
+    bool freshPresent = !all(freshTag == uint4(0u));
+
+    ConstPtr<uint> ownership = ConstPtr<uint>(pathBranchReceiverOwnershipAddress(
+            worldPush.pathShiftReceiverGuideAddr, pixelCount));
+    uint agedFanIn = ownership[pixelIndex * 2u];
+    uint agedPriority = ownership[pixelIndex * 2u + 1u];
+    bool agedPresent = agedFanIn != 0u || agedPriority != 0u;
+    uint currentGeneration = pc.historyGeneration & PATH_GENERATION_MASK;
+
+    uint freshSourceMappingKind = freshTag.w & 0xFFu;
+    uint freshOutputMappingKind = (freshTag.w >> 8u) & 0xFFu;
+    uint freshPreviousOutputMappingKind = (freshTag.w >> 16u) & 0xFFu;
+    uint freshReplaySegments = (freshTag.w >> 24u) & 0xFFu;
+    bool freshMetadataValid = !freshPresent
+            || (freshTag.x == worldPush.frameIndex
+                    && freshTag.y == currentGeneration
+                    && freshTag.z == pixelIndex
+                    && (freshSourceMappingKind == PATH_MAPPING_IDENTITY
+                            || freshSourceMappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION)
+                    && (freshOutputMappingKind == PATH_MAPPING_IDENTITY
+                            || freshOutputMappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION)
+                    && (freshPreviousOutputMappingKind == PATH_MAPPING_IDENTITY
+                            || freshPreviousOutputMappingKind
+                                    == PATH_MAPPING_DIFFUSE_RECONNECTION)
+                    && (freshReplaySegments == 1u
+                            || freshReplaySegments == MAX_PATH_SEGMENTS));
+    if (!freshMetadataValid) {
+        InterlockedAdd(counters[
+                PATH_GUIDE_BRANCH_CANDIDATE_ARBITRATION_FRESH_METADATA_REJECT], 1u);
+        return;
+    }
+
+    uint agedAgeBand = agedPriority >> 14u;
+    uint agedAge = agedAgeBand >= 1u && agedAgeBand <= 3u
+            ? 4u - agedAgeBand : 0u;
+    uint agedLinearIndex = PATH_BRANCH_RECEIVER_OWNER_INDEX_MASK
+            - (agedPriority & PATH_BRANCH_RECEIVER_OWNER_INDEX_MASK);
+    ConstPtr<uint4> agedClaims = ConstPtr<uint4>(pathBranchReceiverOwnerClaimAddress(
+            worldPush.pathShiftDiagnosticPairAddr));
+    uint4 agedClaim = agedLinearIndex < PATH_BRANCH_RECEIVER_OWNER_CLAIM_CAPACITY
+            ? agedClaims[agedLinearIndex] : uint4(0u);
+    uint agedClaimPriority = agedClaim.w & PATH_BRANCH_RECEIVER_OWNER_PRIORITY_MASK;
+    uint agedOutputMappingKind = (agedClaim.w
+            >> PATH_BRANCH_RECEIVER_OWNER_OUTPUT_MAPPING_SHIFT) & 0xFu;
+    uint agedSourceMappingKind = (agedClaim.w
+            >> PATH_BRANCH_RECEIVER_OWNER_SOURCE_MAPPING_SHIFT) & 0xFu;
+    uint agedReplaySegments = (agedClaim.w
+            >> PATH_BRANCH_RECEIVER_OWNER_SEGMENT_SHIFT) & 0xFu;
+    bool agedMetadataValid = !agedPresent
+            || (agedFanIn > 0u
+                    && agedPriority != 0u
+                    && agedLinearIndex < PATH_BRANCH_RECEIVER_OWNER_CLAIM_CAPACITY
+                    && agedClaim.x == worldPush.frameIndex
+                    && agedClaim.y == currentGeneration
+                    && agedClaim.z == pixelIndex
+                    && agedClaimPriority == agedPriority
+                    && agedAge >= 1u
+                    && agedAge < PATH_BRANCH_CANDIDATE_HISTORY_SLOT_COUNT
+                    && (agedOutputMappingKind == PATH_MAPPING_IDENTITY
+                            || agedOutputMappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION)
+                    && (agedSourceMappingKind == PATH_MAPPING_IDENTITY
+                            || agedSourceMappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION)
+                    && (agedReplaySegments == 1u
+                            || agedReplaySegments == MAX_PATH_SEGMENTS)
+                    && (agedClaim.w & 0xF0000000u) == 0u);
+    if (!agedMetadataValid) {
+        InterlockedAdd(counters[
+                PATH_GUIDE_BRANCH_CANDIDATE_ARBITRATION_AGED_METADATA_REJECT], 1u);
+        return;
+    }
+
+    if (!freshPresent && !agedPresent) {
+        InterlockedAdd(counters[
+                PATH_GUIDE_BRANCH_CANDIDATE_ARBITRATION_NONE], 1u);
+        return;
+    }
+
+    bool chooseFresh = freshPresent;
+    if (freshPresent && agedPresent) {
+        InterlockedAdd(counters[
+                PATH_GUIDE_BRANCH_CANDIDATE_ARBITRATION_BOTH_FRESH_WINS], 1u);
+    } else {
+        InterlockedAdd(counters[freshPresent
+                ? PATH_GUIDE_BRANCH_CANDIDATE_ARBITRATION_FRESH_ONLY
+                : PATH_GUIDE_BRANCH_CANDIDATE_ARBITRATION_AGED_ONLY], 1u);
+    }
+
+    uint chosenOutputMappingKind = chooseFresh
+            ? freshOutputMappingKind : agedOutputMappingKind;
+    uint chosenSourceMappingKind = chooseFresh
+            ? freshSourceMappingKind : agedSourceMappingKind;
+    uint chosenReplaySegments = chooseFresh
+            ? freshReplaySegments : agedReplaySegments;
+    InterlockedAdd(counters[chooseFresh
+            ? PATH_GUIDE_BRANCH_CANDIDATE_ARBITRATION_CHOSEN_FRESH
+            : PATH_GUIDE_BRANCH_CANDIDATE_ARBITRATION_CHOSEN_AGED], 1u);
+    InterlockedAdd(counters[chosenOutputMappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION
+            ? PATH_GUIDE_BRANCH_CANDIDATE_ARBITRATION_CHOSEN_SELECTED
+            : PATH_GUIDE_BRANCH_CANDIDATE_ARBITRATION_CHOSEN_RETAINED], 1u);
+    InterlockedAdd(counters[chosenSourceMappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION
+            ? PATH_GUIDE_BRANCH_CANDIDATE_ARBITRATION_CHOSEN_MAPPED_SOURCE
+            : PATH_GUIDE_BRANCH_CANDIDATE_ARBITRATION_CHOSEN_IDENTITY_SOURCE], 1u);
+    InterlockedAdd(counters[chosenReplaySegments == 1u
+            ? PATH_GUIDE_BRANCH_CANDIDATE_ARBITRATION_CHOSEN_ONE_SEGMENT
+            : PATH_GUIDE_BRANCH_CANDIDATE_ARBITRATION_CHOSEN_TWO_SEGMENT], 1u);
+    if (!chooseFresh) {
+        InterlockedAdd(counters[agedAge == 1u
+                ? PATH_GUIDE_BRANCH_CANDIDATE_ARBITRATION_AGED_AGE_ONE
+                : agedAge == 2u
+                        ? PATH_GUIDE_BRANCH_CANDIDATE_ARBITRATION_AGED_AGE_TWO
+                        : PATH_GUIDE_BRANCH_CANDIDATE_ARBITRATION_AGED_AGE_THREE], 1u);
+    }
+}
+
 static void pathBranchReceiverOwnerValidate() {
     if (pc.debugView != PATH_SHIFTED_RADIANCE_DEBUG_VIEW
             || (pc.historyFlags & PATH_GUIDE_BRANCH_RECEIVER_OWNER_VALIDATE_PASS_FLAG) == 0u
@@ -5806,6 +5945,10 @@ public void pathGuideScratchValidate() {
 [shader("raygeneration")]
 void main() {
     worldPush = ConstPtr<WorldPush>(pc.worldPushAddr)[0];
+    if ((pc.historyFlags & PATH_GUIDE_BRANCH_CANDIDATE_ARBITRATION_PASS_FLAG) != 0u) {
+        pathBranchCandidateArbitrationValidate();
+        return;
+    }
     if ((pc.historyFlags
             & PATH_GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_VALIDATE_PASS_FLAG) != 0u) {
         pathBranchWinnerCandidateOwnerValidate();

@@ -1118,6 +1118,15 @@ final class RtPathSpatialReuseReference {
         RETAINED_ACCEPTED
     }
 
+    enum BranchCandidateArbitrationOutcome {
+        NONE,
+        FRESH_ONLY,
+        AGED_ONLY,
+        BOTH_FRESH_WINS,
+        FRESH_METADATA_REJECT,
+        AGED_METADATA_REJECT
+    }
+
     enum BranchCandidateRetentionOutcome {
         EMPTY,
         FUTURE_REJECT,
@@ -2763,6 +2772,30 @@ final class RtPathSpatialReuseReference {
                 ownerTagMatches, receiverIndexValid,
                 sourceMappingKind, outputMappingKind, previousOutputMappingKind,
                 segmentCount, reservoirBitsMatch, rootBitsMatch);
+    }
+
+    /**
+     * CPU mirror for the counter-only fresh-versus-aged ownership policy. Fresh is the adjacent
+     * winner output; aged is only a fallback, never a second correlated merge input.
+     */
+    static BranchCandidateArbitrationOutcome branchCandidateArbitrationOutcome(
+            boolean freshPresent, boolean freshMetadataValid,
+            boolean agedPresent, boolean agedMetadataValid) {
+        if (freshPresent && !freshMetadataValid) {
+            return BranchCandidateArbitrationOutcome.FRESH_METADATA_REJECT;
+        }
+        if (agedPresent && !agedMetadataValid) {
+            return BranchCandidateArbitrationOutcome.AGED_METADATA_REJECT;
+        }
+        if (!freshPresent && !agedPresent) {
+            return BranchCandidateArbitrationOutcome.NONE;
+        }
+        if (freshPresent && agedPresent) {
+            return BranchCandidateArbitrationOutcome.BOTH_FRESH_WINS;
+        }
+        return freshPresent
+                ? BranchCandidateArbitrationOutcome.FRESH_ONLY
+                : BranchCandidateArbitrationOutcome.AGED_ONLY;
     }
 
     /**
