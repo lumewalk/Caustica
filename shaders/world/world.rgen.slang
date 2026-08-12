@@ -1936,7 +1936,8 @@ static void pathBranchWinnerPairStorageValidate() {
             || (pc.historyFlags
                     & PATH_GUIDE_BRANCH_WINNER_PAIR_STORAGE_VALIDATE_PASS_FLAG) == 0u
             || worldPush.pathShiftDiagnosticCounterAddr == 0u
-            || worldPush.pathShiftDiagnosticPairAddr == 0u) {
+            || worldPush.pathShiftDiagnosticPairAddr == 0u
+            || worldPush.pathShiftBranchWinnerScratchAddr == 0u) {
         return;
     }
     uint sampleIndex = DispatchRaysIndex().y * DispatchRaysDimensions().x
@@ -1949,6 +1950,8 @@ static void pathBranchWinnerPairStorageValidate() {
 
     InterlockedAdd(counters[
             PATH_GUIDE_BRANCH_WINNER_PAIR_STORAGE_VALIDATE_ATTEMPTED], 1u);
+    InterlockedAdd(counters[
+            PATH_GUIDE_BRANCH_WINNER_DENSE_PAYLOAD_VALIDATE_ATTEMPTED], 1u);
     ConstPtr<PathBranchWinnerPairStorageCapture> expectedCaptures =
             ConstPtr<PathBranchWinnerPairStorageCapture>(
                     pathBranchWinnerPairExpectedAddress(
@@ -1968,8 +1971,7 @@ static void pathBranchWinnerPairStorageValidate() {
     uint guideHeight;
     gRestirPositionMaterial.GetDimensions(guideWidth, guideHeight);
     uint pixelCount = guideWidth * guideHeight;
-    bool metadataValid = all(stored.metadata == expected.metadata)
-            && expected.metadata.x == worldPush.frameIndex
+    bool expectedMetadataValid = expected.metadata.x == worldPush.frameIndex
             && expected.metadata.y == currentGeneration
             && expected.metadata.z < pixelCount
             && (sourceMappingKind == PATH_MAPPING_IDENTITY
@@ -1981,48 +1983,96 @@ static void pathBranchWinnerPairStorageValidate() {
             && pathMappingKind(expected.reservoir) == outputMappingKind
             && (replaySegments == 1u || replaySegments == MAX_PATH_SEGMENTS)
             && expected.reservoir.replayControl.y == replaySegments;
-    if (!metadataValid) {
+    bool pairMetadataValid = expectedMetadataValid
+            && all(stored.metadata == expected.metadata);
+    if (!pairMetadataValid) {
         InterlockedAdd(counters[
                 PATH_GUIDE_BRANCH_WINNER_PAIR_STORAGE_METADATA_REJECT], 1u);
+    } else {
+        bool reservoirMatches = pathReservoirBitsMatch(
+                stored.reservoir, expected.reservoir);
+        bool rootMatches = pathSourceRootBitsMatch(stored.root, expected.root);
+        InterlockedAdd(counters[reservoirMatches
+                ? PATH_GUIDE_BRANCH_WINNER_PAIR_STORAGE_RESERVOIR_MATCH
+                : PATH_GUIDE_BRANCH_WINNER_PAIR_STORAGE_RESERVOIR_MISMATCH], 1u);
+        InterlockedAdd(counters[rootMatches
+                ? PATH_GUIDE_BRANCH_WINNER_PAIR_STORAGE_ROOT_MATCH
+                : PATH_GUIDE_BRANCH_WINNER_PAIR_STORAGE_ROOT_MISMATCH], 1u);
+        if (!reservoirMatches || !rootMatches) {
+            InterlockedAdd(counters[
+                    PATH_GUIDE_BRANCH_WINNER_PAIR_STORAGE_PAIR_REJECT], 1u);
+        } else {
+            InterlockedAdd(counters[
+                    PATH_GUIDE_BRANCH_WINNER_PAIR_STORAGE_PAIR_ACCEPTED], 1u);
+            InterlockedAdd(counters[outputMappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION
+                    ? PATH_GUIDE_BRANCH_WINNER_PAIR_STORAGE_SELECTED_ACCEPTED
+                    : PATH_GUIDE_BRANCH_WINNER_PAIR_STORAGE_RETAINED_ACCEPTED], 1u);
+            InterlockedAdd(counters[
+                    previousOutputMappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION
+                            ? PATH_GUIDE_BRANCH_WINNER_PAIR_STORAGE_PREVIOUS_SELECTED
+                            : PATH_GUIDE_BRANCH_WINNER_PAIR_STORAGE_PREVIOUS_RETAINED], 1u);
+            InterlockedAdd(counters[sourceMappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION
+                    ? PATH_GUIDE_BRANCH_WINNER_PAIR_STORAGE_MAPPED_SOURCE
+                    : PATH_GUIDE_BRANCH_WINNER_PAIR_STORAGE_IDENTITY_SOURCE], 1u);
+            InterlockedAdd(counters[replaySegments == 1u
+                    ? PATH_GUIDE_BRANCH_WINNER_PAIR_STORAGE_ONE_SEGMENT
+                    : PATH_GUIDE_BRANCH_WINNER_PAIR_STORAGE_TWO_SEGMENT], 1u);
+        }
+    }
+
+    uint receiverPixelIndex = expected.metadata.z;
+    ConstPtr<uint4> denseTags = ConstPtr<uint4>(pathBranchWinnerTagAddress(
+            worldPush.pathShiftBranchWinnerScratchAddr, pixelCount));
+    uint4 denseTag = expectedMetadataValid
+            ? denseTags[receiverPixelIndex] : uint4(0u);
+    bool denseMetadataValid = expectedMetadataValid
+            && all(denseTag == expected.metadata);
+    if (!denseMetadataValid) {
+        InterlockedAdd(counters[
+                PATH_GUIDE_BRANCH_WINNER_DENSE_PAYLOAD_METADATA_REJECT], 1u);
         return;
     }
 
-    bool reservoirMatches = pathReservoirBitsMatch(
-            stored.reservoir, expected.reservoir);
-    bool rootMatches = pathSourceRootBitsMatch(stored.root, expected.root);
-    InterlockedAdd(counters[reservoirMatches
-            ? PATH_GUIDE_BRANCH_WINNER_PAIR_STORAGE_RESERVOIR_MATCH
-            : PATH_GUIDE_BRANCH_WINNER_PAIR_STORAGE_RESERVOIR_MISMATCH], 1u);
-    InterlockedAdd(counters[rootMatches
-            ? PATH_GUIDE_BRANCH_WINNER_PAIR_STORAGE_ROOT_MATCH
-            : PATH_GUIDE_BRANCH_WINNER_PAIR_STORAGE_ROOT_MISMATCH], 1u);
-    if (!reservoirMatches || !rootMatches) {
+    PathReservoir denseReservoir = ConstPtr<PathReservoir>(
+            worldPush.pathShiftBranchWinnerScratchAddr)[receiverPixelIndex];
+    PathSourceRoot denseRoot = ConstPtr<PathSourceRoot>(pathBranchWinnerRootAddress(
+            worldPush.pathShiftBranchWinnerScratchAddr, pixelCount))[receiverPixelIndex];
+    bool denseReservoirMatches = pathReservoirBitsMatch(
+            denseReservoir, expected.reservoir);
+    bool denseRootMatches = pathSourceRootBitsMatch(denseRoot, expected.root);
+    InterlockedAdd(counters[denseReservoirMatches
+            ? PATH_GUIDE_BRANCH_WINNER_DENSE_PAYLOAD_RESERVOIR_MATCH
+            : PATH_GUIDE_BRANCH_WINNER_DENSE_PAYLOAD_RESERVOIR_MISMATCH], 1u);
+    InterlockedAdd(counters[denseRootMatches
+            ? PATH_GUIDE_BRANCH_WINNER_DENSE_PAYLOAD_ROOT_MATCH
+            : PATH_GUIDE_BRANCH_WINNER_DENSE_PAYLOAD_ROOT_MISMATCH], 1u);
+    if (!denseReservoirMatches || !denseRootMatches) {
         InterlockedAdd(counters[
-                PATH_GUIDE_BRANCH_WINNER_PAIR_STORAGE_PAIR_REJECT], 1u);
+                PATH_GUIDE_BRANCH_WINNER_DENSE_PAYLOAD_PAIR_REJECT], 1u);
         return;
     }
 
     InterlockedAdd(counters[
-            PATH_GUIDE_BRANCH_WINNER_PAIR_STORAGE_PAIR_ACCEPTED], 1u);
+            PATH_GUIDE_BRANCH_WINNER_DENSE_PAYLOAD_PAIR_ACCEPTED], 1u);
     InterlockedAdd(counters[outputMappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION
-            ? PATH_GUIDE_BRANCH_WINNER_PAIR_STORAGE_SELECTED_ACCEPTED
-            : PATH_GUIDE_BRANCH_WINNER_PAIR_STORAGE_RETAINED_ACCEPTED], 1u);
+            ? PATH_GUIDE_BRANCH_WINNER_DENSE_PAYLOAD_SELECTED_ACCEPTED
+            : PATH_GUIDE_BRANCH_WINNER_DENSE_PAYLOAD_RETAINED_ACCEPTED], 1u);
     InterlockedAdd(counters[
             previousOutputMappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION
-                    ? PATH_GUIDE_BRANCH_WINNER_PAIR_STORAGE_PREVIOUS_SELECTED
-                    : PATH_GUIDE_BRANCH_WINNER_PAIR_STORAGE_PREVIOUS_RETAINED], 1u);
+                    ? PATH_GUIDE_BRANCH_WINNER_DENSE_PAYLOAD_PREVIOUS_SELECTED
+                    : PATH_GUIDE_BRANCH_WINNER_DENSE_PAYLOAD_PREVIOUS_RETAINED], 1u);
     InterlockedAdd(counters[sourceMappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION
-            ? PATH_GUIDE_BRANCH_WINNER_PAIR_STORAGE_MAPPED_SOURCE
-            : PATH_GUIDE_BRANCH_WINNER_PAIR_STORAGE_IDENTITY_SOURCE], 1u);
+            ? PATH_GUIDE_BRANCH_WINNER_DENSE_PAYLOAD_MAPPED_SOURCE
+            : PATH_GUIDE_BRANCH_WINNER_DENSE_PAYLOAD_IDENTITY_SOURCE], 1u);
     InterlockedAdd(counters[replaySegments == 1u
-            ? PATH_GUIDE_BRANCH_WINNER_PAIR_STORAGE_ONE_SEGMENT
-            : PATH_GUIDE_BRANCH_WINNER_PAIR_STORAGE_TWO_SEGMENT], 1u);
+            ? PATH_GUIDE_BRANCH_WINNER_DENSE_PAYLOAD_ONE_SEGMENT
+            : PATH_GUIDE_BRANCH_WINNER_DENSE_PAYLOAD_TWO_SEGMENT], 1u);
 }
 
-// Metadata-only proof for the future dense current-candidate slot. The previous-winner dispatch
-// owns exactly one invocation per current receiver, so no atomic ownership arbitration is needed.
-// Only the tag tail of the current winner write slot is touched; it is cleared before this pass,
-// validated here, then cleared again by the existing aged-winner lifetime before payload writes.
+// Full-screen ownership proof for the temporary dense current-candidate slot. The previous-winner
+// dispatch owns exactly one invocation per current receiver, so no atomic arbitration is needed.
+// The tag tail gates payload visibility; this pass validates ownership after the bounded exact
+// payload audit, then the existing aged-winner lifetime clears and reuses the complete slot.
 static void pathBranchWinnerCandidateOwnerValidate() {
     if (pc.debugView != PATH_SHIFTED_RADIANCE_DEBUG_VIEW
             || (pc.historyFlags
@@ -3214,14 +3264,24 @@ static void pathBranchWinnerPreviousReplayValidate() {
                         ? PATH_GUIDE_BRANCH_WINNER_PAIR_REPLAY_ONE_SEGMENT
                         : PATH_GUIDE_BRANCH_WINNER_PAIR_REPLAY_TWO_SEGMENT], 1u);
 
-                // One invocation owns this current receiver index. Store only the candidate-owner
-                // tag; the reservoir/root remain registers and the later aged-winner clear removes
-                // this temporary tag before that slot receives its normal payload.
+                // One invocation owns this current receiver index. Write the complete pair and its
+                // owner tag into the current winner slot only for the immediate post-barrier audit.
+                // The later aged-winner clear destroys this temporary payload before normal use.
                 InterlockedAdd(counters[
                         PATH_GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_WRITE_ELIGIBLE], 1u);
+                InterlockedAdd(counters[
+                        PATH_GUIDE_BRANCH_WINNER_DENSE_PAYLOAD_WRITE_ELIGIBLE], 1u);
+                DevicePtr<PathReservoir> denseCandidateReservoirs =
+                        DevicePtr<PathReservoir>(
+                                worldPush.pathShiftBranchWinnerScratchAddr);
+                DevicePtr<PathSourceRoot> denseCandidateRoots =
+                        DevicePtr<PathSourceRoot>(pathBranchWinnerRootAddress(
+                                worldPush.pathShiftBranchWinnerScratchAddr, pixelCount));
                 DevicePtr<uint4> candidateOwnerTags = DevicePtr<uint4>(
                         pathBranchWinnerTagAddress(
                                 worldPush.pathShiftBranchWinnerScratchAddr, pixelCount));
+                denseCandidateReservoirs[receiverPixelIndex] = branchRecord;
+                denseCandidateRoots[receiverPixelIndex] = pairedRoot;
                 candidateOwnerTags[receiverPixelIndex] = uint4(
                         worldPush.frameIndex, currentGeneration, receiverPixelIndex,
                         pathBranchWinnerPairStorageControl(
@@ -3229,6 +3289,8 @@ static void pathBranchWinnerPreviousReplayValidate() {
                                 outputMappingKind, pairedSegments));
                 InterlockedAdd(counters[
                         PATH_GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_WRITE_COMPLETED], 1u);
+                InterlockedAdd(counters[
+                        PATH_GUIDE_BRANCH_WINNER_DENSE_PAYLOAD_WRITE_COMPLETED], 1u);
 
                 // First device-storage proof for the newly merged current-frame pair. Expected
                 // and stored copies share the bounded capture arrays only until the immediate

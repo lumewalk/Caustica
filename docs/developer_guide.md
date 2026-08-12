@@ -888,6 +888,27 @@ covered 8 full-screen readbacks / 7372800 attempted slots: 88355 tags accepted, 
 metadata rejects and zero deltas. Counter storage is 696 uints / 2784 B; allocations, `WorldPush`,
 inline push constants and replay ABI are unchanged. The client was closed with no Java processes.
 
+`RT path guide branch winner dense payload` extends that same temporary lifetime to the complete
+176-byte `PathReservoir` and 160-byte `PathSourceRoot`. A replay-approved invocation stores both at
+its receiver index and writes the owner tag last. The bounded storage validator then compares the
+dense pair against the existing exact expected capture after a barrier. The full-screen owner pass
+still validates every tag, and `beginCurrentBranchWinnerScratch` subsequently clears the entire
+slot before its aged-winner use. Do not move the clear earlier, retain this payload after the clear,
+or interpret it as committed history.
+
+Correct accounting requires `write.eligible = write.completed = replayAccepted`, zero write delta
+and gateDelta, and `validate.attempted = pair.accepted + pair.reject`. Metadata reject, reservoir
+mismatch, root mismatch, pair reject and all validation deltas must be zero. The reference run wrote
+11698/11698 pairs and matched all 4096 bounded dense samples bit-for-bit, split into 3759 selected
+and 337 retained outputs. Counter storage is 714 uints / 2856 B; allocation sizes, 688 B `WorldPush`,
+120 B inline push constants and replay ABI 10 are unchanged.
+
+Full-screen view 20 can pause and then run at very low FPS during this proof. It performs multiple
+full-resolution replay/validation passes, device barriers, readback waits and temporary full-payload
+writes while the lazy diagnostic allocation group is about 1728.51 MiB at 1280x673. Use only enough
+frames to obtain a clean readback, then close the client. This cost is view-20-only: ordinary
+rendering receives zero diagnostic scratch addresses, so its FPS must be measured separately.
+
 For a fresh runtime check, use debug view 20 and inspect `run/logs/latest.log`. Normal operation
 requires `RT bring-up OK`, Vulkan, the intended NVIDIA device, exact zero-delta counter partitions,
 and no `DEVICE_LOST`, `VK_ERROR`, GPU fault or shader compilation error. Debug colors and sparse

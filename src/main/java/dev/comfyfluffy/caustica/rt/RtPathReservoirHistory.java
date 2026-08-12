@@ -735,7 +735,25 @@ final class RtPathReservoirHistory {
     static final int GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_MAPPED_SOURCE_INDEX = 693;
     static final int GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_ONE_SEGMENT_INDEX = 694;
     static final int GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_TWO_SEGMENT_INDEX = 695;
-    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 696;
+    static final int GUIDE_BRANCH_WINNER_DENSE_PAYLOAD_WRITE_ELIGIBLE_INDEX = 696;
+    static final int GUIDE_BRANCH_WINNER_DENSE_PAYLOAD_WRITE_COMPLETED_INDEX = 697;
+    static final int GUIDE_BRANCH_WINNER_DENSE_PAYLOAD_VALIDATE_ATTEMPTED_INDEX = 698;
+    static final int GUIDE_BRANCH_WINNER_DENSE_PAYLOAD_METADATA_REJECT_INDEX = 699;
+    static final int GUIDE_BRANCH_WINNER_DENSE_PAYLOAD_RESERVOIR_MATCH_INDEX = 700;
+    static final int GUIDE_BRANCH_WINNER_DENSE_PAYLOAD_RESERVOIR_MISMATCH_INDEX = 701;
+    static final int GUIDE_BRANCH_WINNER_DENSE_PAYLOAD_ROOT_MATCH_INDEX = 702;
+    static final int GUIDE_BRANCH_WINNER_DENSE_PAYLOAD_ROOT_MISMATCH_INDEX = 703;
+    static final int GUIDE_BRANCH_WINNER_DENSE_PAYLOAD_PAIR_ACCEPTED_INDEX = 704;
+    static final int GUIDE_BRANCH_WINNER_DENSE_PAYLOAD_PAIR_REJECT_INDEX = 705;
+    static final int GUIDE_BRANCH_WINNER_DENSE_PAYLOAD_SELECTED_ACCEPTED_INDEX = 706;
+    static final int GUIDE_BRANCH_WINNER_DENSE_PAYLOAD_RETAINED_ACCEPTED_INDEX = 707;
+    static final int GUIDE_BRANCH_WINNER_DENSE_PAYLOAD_PREVIOUS_SELECTED_INDEX = 708;
+    static final int GUIDE_BRANCH_WINNER_DENSE_PAYLOAD_PREVIOUS_RETAINED_INDEX = 709;
+    static final int GUIDE_BRANCH_WINNER_DENSE_PAYLOAD_IDENTITY_SOURCE_INDEX = 710;
+    static final int GUIDE_BRANCH_WINNER_DENSE_PAYLOAD_MAPPED_SOURCE_INDEX = 711;
+    static final int GUIDE_BRANCH_WINNER_DENSE_PAYLOAD_ONE_SEGMENT_INDEX = 712;
+    static final int GUIDE_BRANCH_WINNER_DENSE_PAYLOAD_TWO_SEGMENT_INDEX = 713;
+    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 714;
     static final int SHIFTED_RECEIVER_GUIDE_STRIDE = 8 * Float.BYTES;
     static final int BRANCH_RECEIVER_OWNERSHIP_STRIDE = 2 * Integer.BYTES;
     static final int BRANCH_CANDIDATE_TAG_STRIDE = 2 * Integer.BYTES;
@@ -2547,6 +2565,42 @@ final class RtPathReservoirHistory {
                     counters.get(GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_ONE_SEGMENT_INDEX));
             long guideBranchWinnerCandidateOwnerTwoSegment = Integer.toUnsignedLong(
                     counters.get(GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_TWO_SEGMENT_INDEX));
+            long guideBranchWinnerDensePayloadWriteEligible = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_DENSE_PAYLOAD_WRITE_ELIGIBLE_INDEX));
+            long guideBranchWinnerDensePayloadWriteCompleted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_DENSE_PAYLOAD_WRITE_COMPLETED_INDEX));
+            long guideBranchWinnerDensePayloadValidateAttempted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_DENSE_PAYLOAD_VALIDATE_ATTEMPTED_INDEX));
+            long guideBranchWinnerDensePayloadMetadataReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_DENSE_PAYLOAD_METADATA_REJECT_INDEX));
+            long guideBranchWinnerDensePayloadReservoirMatch = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_DENSE_PAYLOAD_RESERVOIR_MATCH_INDEX));
+            long guideBranchWinnerDensePayloadReservoirMismatch = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_DENSE_PAYLOAD_RESERVOIR_MISMATCH_INDEX));
+            long guideBranchWinnerDensePayloadRootMatch = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_DENSE_PAYLOAD_ROOT_MATCH_INDEX));
+            long guideBranchWinnerDensePayloadRootMismatch = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_DENSE_PAYLOAD_ROOT_MISMATCH_INDEX));
+            long guideBranchWinnerDensePayloadPairAccepted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_DENSE_PAYLOAD_PAIR_ACCEPTED_INDEX));
+            long guideBranchWinnerDensePayloadPairReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_DENSE_PAYLOAD_PAIR_REJECT_INDEX));
+            long guideBranchWinnerDensePayloadSelectedAccepted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_DENSE_PAYLOAD_SELECTED_ACCEPTED_INDEX));
+            long guideBranchWinnerDensePayloadRetainedAccepted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_DENSE_PAYLOAD_RETAINED_ACCEPTED_INDEX));
+            long guideBranchWinnerDensePayloadPreviousSelected = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_DENSE_PAYLOAD_PREVIOUS_SELECTED_INDEX));
+            long guideBranchWinnerDensePayloadPreviousRetained = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_DENSE_PAYLOAD_PREVIOUS_RETAINED_INDEX));
+            long guideBranchWinnerDensePayloadIdentitySource = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_DENSE_PAYLOAD_IDENTITY_SOURCE_INDEX));
+            long guideBranchWinnerDensePayloadMappedSource = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_DENSE_PAYLOAD_MAPPED_SOURCE_INDEX));
+            long guideBranchWinnerDensePayloadOneSegment = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_DENSE_PAYLOAD_ONE_SEGMENT_INDEX));
+            long guideBranchWinnerDensePayloadTwoSegment = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_DENSE_PAYLOAD_TWO_SEGMENT_INDEX));
             long crossFrameReceiverReject = crossFrameReceiverSurfaceReject
                     + crossFrameReceiverSampleReject + crossFrameReceiverEdgeReject
                     + crossFrameReceiverTopologyReject + crossFrameReceiverDepthReject
@@ -4661,6 +4715,81 @@ final class RtPathReservoirHistory {
                     guideBranchWinnerCandidateOwnerTwoSegment,
                     guideBranchWinnerCandidateOwnerAccepted
                             - guideBranchWinnerCandidateOwnerSegments);
+            long guideBranchWinnerDensePayloadReservoirTerminal =
+                    guideBranchWinnerDensePayloadReservoirMatch
+                            + guideBranchWinnerDensePayloadReservoirMismatch;
+            long guideBranchWinnerDensePayloadRootTerminal =
+                    guideBranchWinnerDensePayloadRootMatch
+                            + guideBranchWinnerDensePayloadRootMismatch;
+            long guideBranchWinnerDensePayloadValidationTerminal =
+                    guideBranchWinnerDensePayloadMetadataReject
+                            + guideBranchWinnerDensePayloadPairAccepted
+                            + guideBranchWinnerDensePayloadPairReject;
+            long guideBranchWinnerDensePayloadBranch =
+                    guideBranchWinnerDensePayloadSelectedAccepted
+                            + guideBranchWinnerDensePayloadRetainedAccepted;
+            long guideBranchWinnerDensePayloadPrevious =
+                    guideBranchWinnerDensePayloadPreviousSelected
+                            + guideBranchWinnerDensePayloadPreviousRetained;
+            long guideBranchWinnerDensePayloadSource =
+                    guideBranchWinnerDensePayloadIdentitySource
+                            + guideBranchWinnerDensePayloadMappedSource;
+            long guideBranchWinnerDensePayloadSegments =
+                    guideBranchWinnerDensePayloadOneSegment
+                            + guideBranchWinnerDensePayloadTwoSegment;
+            CausticaMod.LOGGER.info(
+                    "RT path guide branch winner dense payload: replayAccepted={} "
+                            + "write[eligible={},completed={},delta={},gateDelta={}] "
+                            + "validate[attempted={},metadataReject={},"
+                            + "reservoir[match={},mismatch={},delta={}],"
+                            + "root[match={},mismatch={},delta={}],"
+                            + "pair[accepted={},reject={},terminal={},delta={}],gateDelta={}] "
+                            + "branch[selected={},retained={},delta={}] "
+                            + "previous[selected={},retained={},delta={}] "
+                            + "source[identity={},mapped={},delta={}] "
+                            + "segments[one={},two={},delta={}]",
+                    guideBranchWinnerPairReplayAccepted,
+                    guideBranchWinnerDensePayloadWriteEligible,
+                    guideBranchWinnerDensePayloadWriteCompleted,
+                    guideBranchWinnerDensePayloadWriteEligible
+                            - guideBranchWinnerDensePayloadWriteCompleted,
+                    guideBranchWinnerPairReplayAccepted
+                            - guideBranchWinnerDensePayloadWriteEligible,
+                    guideBranchWinnerDensePayloadValidateAttempted,
+                    guideBranchWinnerDensePayloadMetadataReject,
+                    guideBranchWinnerDensePayloadReservoirMatch,
+                    guideBranchWinnerDensePayloadReservoirMismatch,
+                    guideBranchWinnerDensePayloadValidateAttempted
+                            - guideBranchWinnerDensePayloadMetadataReject
+                            - guideBranchWinnerDensePayloadReservoirTerminal,
+                    guideBranchWinnerDensePayloadRootMatch,
+                    guideBranchWinnerDensePayloadRootMismatch,
+                    guideBranchWinnerDensePayloadValidateAttempted
+                            - guideBranchWinnerDensePayloadMetadataReject
+                            - guideBranchWinnerDensePayloadRootTerminal,
+                    guideBranchWinnerDensePayloadPairAccepted,
+                    guideBranchWinnerDensePayloadPairReject,
+                    guideBranchWinnerDensePayloadValidationTerminal,
+                    guideBranchWinnerDensePayloadValidateAttempted
+                            - guideBranchWinnerDensePayloadValidationTerminal,
+                    guideBranchWinnerPairStorageWriteCompleted
+                            - guideBranchWinnerDensePayloadValidateAttempted,
+                    guideBranchWinnerDensePayloadSelectedAccepted,
+                    guideBranchWinnerDensePayloadRetainedAccepted,
+                    guideBranchWinnerDensePayloadPairAccepted
+                            - guideBranchWinnerDensePayloadBranch,
+                    guideBranchWinnerDensePayloadPreviousSelected,
+                    guideBranchWinnerDensePayloadPreviousRetained,
+                    guideBranchWinnerDensePayloadPairAccepted
+                            - guideBranchWinnerDensePayloadPrevious,
+                    guideBranchWinnerDensePayloadIdentitySource,
+                    guideBranchWinnerDensePayloadMappedSource,
+                    guideBranchWinnerDensePayloadPairAccepted
+                            - guideBranchWinnerDensePayloadSource,
+                    guideBranchWinnerDensePayloadOneSegment,
+                    guideBranchWinnerDensePayloadTwoSegment,
+                    guideBranchWinnerDensePayloadPairAccepted
+                            - guideBranchWinnerDensePayloadSegments);
             spatialDiagnosticViewPending = 0;
             return;
         }

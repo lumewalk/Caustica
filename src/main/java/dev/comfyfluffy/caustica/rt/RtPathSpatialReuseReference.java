@@ -2727,7 +2727,7 @@ final class RtPathSpatialReuseReference {
 
     /**
      * CPU mirror for the temporary dense candidate-owner tag. The receiver index is the unique
-     * storage owner; payload remains in registers and all provenance fields must be explicit.
+     * storage owner; all provenance fields must be explicit before payload can be considered.
      */
     static BranchWinnerCandidateOwnerOutcome branchWinnerCandidateOwnerOutcome(
             boolean empty, boolean metadataMatches, boolean receiverIndexMatches,
@@ -2747,6 +2747,22 @@ final class RtPathSpatialReuseReference {
         return outputMappingKind == MappingKind.DIFFUSE_RECONNECTION
                 ? BranchWinnerCandidateOwnerOutcome.SELECTED_ACCEPTED
                 : BranchWinnerCandidateOwnerOutcome.RETAINED_ACCEPTED;
+    }
+
+    /** CPU mirror for bounded exact validation of the receiver-indexed dense payload. */
+    static BranchAgedStorageOutcome branchWinnerDensePayloadOutcome(
+            boolean ownerTagMatches,
+            boolean receiverIndexValid,
+            MappingKind sourceMappingKind,
+            MappingKind outputMappingKind,
+            MappingKind previousOutputMappingKind,
+            int segmentCount,
+            boolean reservoirBitsMatch,
+            boolean rootBitsMatch) {
+        return branchWinnerPairStorageOutcome(
+                ownerTagMatches, receiverIndexValid,
+                sourceMappingKind, outputMappingKind, previousOutputMappingKind,
+                segmentCount, reservoirBitsMatch, rootBitsMatch);
     }
 
     /**

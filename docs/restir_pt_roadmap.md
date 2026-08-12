@@ -1139,11 +1139,24 @@ gate. Fourteen counters bring storage to 696 uints / 2784 B; all GPU allocations
 Eight full-screen Vulkan readbacks validated 7372800 receiver slots. Exactly 88355 replay-approved
 pairs wrote and validated 88355 owner tags; the remaining 7284445 slots were cleanly empty.
 Metadata rejects and every write, validation, branch, previous-output, source-mapping and segment
-delta were zero. No Vulkan/device/GPU/shader failure occurred. The next safe gate may write the
-replay-approved pair payload into this same temporary current slot, compare bounded dense samples
-against the existing exact expected captures after a barrier, and then let the aged-winner clear
-destroy it. The write must still not survive the frame, become committed history or reach the
-ordinary estimator.
+delta were zero. No Vulkan/device/GPU/shader failure occurred.
+
+The temporary dense payload gate now writes the complete replay-approved 176-byte reservoir and
+160-byte source root at that receiver index, followed by the already-proven tag. The bounded
+post-barrier validator reuses the existing exact expected captures, opens the dense tag and compares
+every reservoir/root bit before the full-resolution owner validator runs. The later aged-winner
+clear then destroys the complete temporary slot, so the pair cannot survive the frame or become
+history. Eighteen counters bring storage to 714 uints / 2856 B; allocations, `WorldPush`, inline
+push constants and replay ABI remain unchanged.
+
+The full-screen Vulkan proof wrote 11698 of 11698 eligible pairs and validated the bounded 4096 of
+4096 dense samples: metadata rejects, reservoir/root mismatches, pair rejects and every accounting
+delta were zero. Vulkan, GPU and shader failure scans were also clean. The workload was visibly
+slow in full-screen view 20; this is an expected cost of the diagnostic-only full-payload write and
+exact comparison inside an already expensive replay view, not evidence about ordinary-render FPS.
+The next safe gate must first define deterministic arbitration between this previous-winner output
+and the later aged-winner candidate before either may own a surviving current slot. Persistent
+history and ordinary-estimator use remain blocked.
 
 ## Delivery Phases
 
