@@ -903,11 +903,20 @@ mismatch, root mismatch, pair reject and all validation deltas must be zero. The
 and 337 retained outputs. Counter storage is 714 uints / 2856 B; allocation sizes, 688 B `WorldPush`,
 120 B inline push constants and replay ABI 10 are unchanged.
 
-Full-screen view 20 can pause and then run at very low FPS during this proof. It performs multiple
-full-resolution replay/validation passes, device barriers, readback waits and temporary full-payload
-writes while the lazy diagnostic allocation group is about 1728.51 MiB at 1280x673. Use only enough
-frames to obtain a clean readback, then close the client. This cost is view-20-only: ordinary
-rendering receives zero diagnostic scratch addresses, so its FPS must be measured separately.
+View 20 has two explicit operating modes. The default `visual` mode runs the shifted-radiance image
+without the accumulated branch/winner proof chain, mapping validators or synchronous counter
+readback. It is the mode for walking through a scene and inspecting the diagnostic. On the reference
+RTX 5060 Ti full-screen responsiveness improved from about 1 FPS with the complete audit to about
+16 FPS in visual mode. This is still a raw RT diagnostic without DLSS-RR, not an ordinary-render
+benchmark.
+
+The original proof workload is retained behind the startup property
+`-Dcaustica.rt.view20FullAudit=true`. `full audit` performs the multiple full-resolution replay/
+validation passes, device barriers, readback waits and temporary full-payload writes needed for
+counter evidence. Use only enough frames to obtain a clean readback, then close the client. The log
+must say either `RT debug view 20 mode: visual` or `full audit`; never use the latter for manual scene
+navigation. Both modes remain view-20-only, and ordinary rendering receives zero diagnostic scratch
+addresses.
 
 For a fresh runtime check, use debug view 20 and inspect `run/logs/latest.log`. Normal operation
 requires `RT bring-up OK`, Vulkan, the intended NVIDIA device, exact zero-delta counter partitions,

@@ -99,6 +99,8 @@ public final class RtComposite {
     // WorldPushConstantsData is generated from the same Slang module and owns this second ABI as well.
     private static final int GUIDE_COUNT = 9; // six RR guides + three first-interface ReSTIR surface guides
     private static final long PATH_RECORD_BYTES = 48L;
+    private static final boolean VIEW20_FULL_AUDIT = Boolean.parseBoolean(
+            System.getProperty("caustica.rt.view20FullAudit", "false"));
     private static int debugView() {
         return CausticaConfig.Rt.Composite.DEBUG_VIEW.value();
     }
@@ -155,6 +157,7 @@ public final class RtComposite {
 
     // Monotonic per-composite frame counter used for cache eviction, shader sampling, and diagnostics.
     private static volatile long frameCounter;
+    private boolean view20ModeLogged;
 
     public static long frameCounter() {
         return frameCounter;
@@ -941,17 +944,31 @@ public final class RtComposite {
         RtPathReservoirHistory.BranchScratchFrame branchScratchFrame = null;
         RtPathReservoirHistory.BranchScratchFrame branchWinnerScratchFrame = null;
         if (restirPt) {
-            pathReservoirs.pollSpatialDiagnosticCounters(ctx, frameCounter);
+            pathReservoirs.pollSpatialDiagnosticCounters(
+                    ctx, frameCounter, VIEW20_FULL_AUDIT);
             if (debugView == RtPathReservoirHistory.SHIFTED_RADIANCE_DEBUG_VIEW) {
+                if (!view20ModeLogged) {
+                    CausticaMod.LOGGER.info(
+                            "RT debug view 20 mode: {}",
+                            VIEW20_FULL_AUDIT
+                                    ? "full audit (slow; proof passes and readback enabled)"
+                                    : "visual (full audit disabled; use "
+                                            + "-Dcaustica.rt.view20FullAudit=true for proof runs)");
+                    view20ModeLogged = true;
+                }
                 pathReservoirs.ensureShiftedSourceRoots(ctx);
-                previousShiftedSnapshot = pathReservoirs.previousShiftedSnapshotAvailable(
-                        pathReservoirFrame, frameCounter);
-                previousGuideScratch = pathReservoirs.previousGuideScratchAvailable(
-                        pathReservoirFrame, frameCounter);
-                branchScratchFrame = pathReservoirs.beginBranchScratch(
-                        pathReservoirFrame, frameCounter);
-                branchWinnerScratchFrame = pathReservoirs.beginBranchWinnerScratch(
-                        pathReservoirFrame, frameCounter);
+                if (VIEW20_FULL_AUDIT) {
+                    previousShiftedSnapshot = pathReservoirs.previousShiftedSnapshotAvailable(
+                            pathReservoirFrame, frameCounter);
+                    previousGuideScratch = pathReservoirs.previousGuideScratchAvailable(
+                            pathReservoirFrame, frameCounter);
+                    branchScratchFrame = pathReservoirs.beginBranchScratch(
+                            pathReservoirFrame, frameCounter);
+                    branchWinnerScratchFrame = pathReservoirs.beginBranchWinnerScratch(
+                            pathReservoirFrame, frameCounter);
+                }
+            } else {
+                view20ModeLogged = false;
             }
         }
         long dstImage = vkImage(nativeColor);
@@ -1099,21 +1116,29 @@ public final class RtComposite {
                     restirPt && debugView == RtPathReservoirHistory.SHIFTED_RADIANCE_DEBUG_VIEW
                             ? pathReservoirs.shiftedReceiverGuideAddress() : 0L,
                     restirPt && debugView == RtPathReservoirHistory.SHIFTED_RADIANCE_DEBUG_VIEW
+                            && VIEW20_FULL_AUDIT
                             ? pathReservoirs.shiftedGuideScratchAddress() : 0L,
                     restirPt && debugView == RtPathReservoirHistory.SHIFTED_RADIANCE_DEBUG_VIEW
+                            && VIEW20_FULL_AUDIT
                             ? pathReservoirs.shiftedGuideRootScratchAddress() : 0L,
                     restirPt && debugView == RtPathReservoirHistory.SHIFTED_RADIANCE_DEBUG_VIEW
+                            && VIEW20_FULL_AUDIT
                             ? pathReservoirs.branchScratchReservoirAddress(branchScratchFrame) : 0L,
                     restirPt && debugView == RtPathReservoirHistory.SHIFTED_RADIANCE_DEBUG_VIEW
+                            && VIEW20_FULL_AUDIT
                             ? pathReservoirs.branchScratchRootAddress(branchScratchFrame) : 0L,
                     restirPt && debugView == RtPathReservoirHistory.SHIFTED_RADIANCE_DEBUG_VIEW
+                            && VIEW20_FULL_AUDIT
                             ? pathReservoirs.previousBranchScratchReservoirAddress(branchScratchFrame) : 0L,
                     restirPt && debugView == RtPathReservoirHistory.SHIFTED_RADIANCE_DEBUG_VIEW
+                            && VIEW20_FULL_AUDIT
                             ? pathReservoirs.previousBranchScratchRootAddress(branchScratchFrame) : 0L,
                     restirPt && debugView == RtPathReservoirHistory.SHIFTED_RADIANCE_DEBUG_VIEW
+                            && VIEW20_FULL_AUDIT
                             ? pathReservoirs.branchWinnerScratchAddress(
                                     branchWinnerScratchFrame) : 0L,
                     restirPt && debugView == RtPathReservoirHistory.SHIFTED_RADIANCE_DEBUG_VIEW
+                            && VIEW20_FULL_AUDIT
                             ? pathReservoirs.previousBranchWinnerScratchAddress(
                                     branchWinnerScratchFrame) : 0L
             ).write(push);
@@ -1539,130 +1564,133 @@ public final class RtComposite {
                 }
                 VulkanCommandEncoder.memoryBarrier(cmd, stack);
                 if (debugView == RtPathReservoirHistory.SHIFTED_RADIANCE_DEBUG_VIEW) {
-                    pathReservoirs.beginShiftedRadianceDiagnostics(cmd);
-                    if (branchWinnerScratchFrame.previousAvailable()) {
-                        pathReservoirs.beginCurrentBranchWinnerCandidateOwnership(
-                                cmd, branchWinnerScratchFrame);
+                    pathReservoirs.beginShiftedRadianceDiagnostics(
+                            cmd, VIEW20_FULL_AUDIT);
+                    if (VIEW20_FULL_AUDIT) {
+                        if (branchWinnerScratchFrame.previousAvailable()) {
+                            pathReservoirs.beginCurrentBranchWinnerCandidateOwnership(
+                                    cmd, branchWinnerScratchFrame);
+                            try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd,
+                                         "path branch winner previous replay");
+                                 RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage(
+                                         "frame.pathBranchWinnerPreviousReplay")) {
+                                active.trace(cmd, renderW, renderH,
+                                        branchWinnerPreviousReplayPushConstants, 1);
+                            }
+                            VulkanCommandEncoder.memoryBarrier(cmd, stack);
+                            try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd,
+                                         "path branch winner pair storage validate");
+                                 RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage(
+                                         "frame.pathBranchWinnerPairStorageValidate")) {
+                                active.trace(cmd,
+                                        RtPathReservoirHistory.PATH_BRANCH_SCRATCH_CAPTURE_CAPACITY,
+                                        1, branchWinnerPairStorageValidatePushConstants, 1);
+                            }
+                            VulkanCommandEncoder.memoryBarrier(cmd, stack);
+                            try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd,
+                                         "path branch winner candidate owner validate");
+                                 RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage(
+                                         "frame.pathBranchWinnerCandidateOwnerValidate")) {
+                                active.trace(cmd, renderW, renderH,
+                                        branchWinnerCandidateOwnerValidatePushConstants, 1);
+                            }
+                            VulkanCommandEncoder.memoryBarrier(cmd, stack);
+                        }
+                        pathReservoirs.beginCurrentBranchScratch(cmd, branchScratchFrame);
                         try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd,
-                                     "path branch winner previous replay");
+                                 "path guide previous replay");
                              RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage(
-                                     "frame.pathBranchWinnerPreviousReplay")) {
+                                 "frame.pathGuidePreviousReplay")) {
                             active.trace(cmd, renderW, renderH,
-                                    branchWinnerPreviousReplayPushConstants, 1);
+                                    guidePreviousReplayPushConstants, 1);
                         }
                         VulkanCommandEncoder.memoryBarrier(cmd, stack);
                         try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd,
-                                     "path branch winner pair storage validate");
+                                 "path branch scratch storage validate");
                              RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage(
-                                     "frame.pathBranchWinnerPairStorageValidate")) {
+                                 "frame.pathBranchScratchStorageValidate")) {
+                            active.trace(cmd, renderW, renderH,
+                                    branchScratchValidatePushConstants, 1);
+                        }
+                        VulkanCommandEncoder.memoryBarrier(cmd, stack);
+                        try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd,
+                                 "path branch candidate retention audit");
+                             RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage(
+                                 "frame.pathBranchCandidateRetentionAudit")) {
                             active.trace(cmd,
                                     RtPathReservoirHistory.PATH_BRANCH_SCRATCH_CAPTURE_CAPACITY,
-                                    1, branchWinnerPairStorageValidatePushConstants, 1);
+                                    RtPathReservoirHistory.PATH_BRANCH_CANDIDATE_HISTORY_SLOT_COUNT,
+                                    branchCandidateRetentionPushConstants, 1);
                         }
                         VulkanCommandEncoder.memoryBarrier(cmd, stack);
                         try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd,
-                                     "path branch winner candidate owner validate");
-                             RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage(
-                                     "frame.pathBranchWinnerCandidateOwnerValidate")) {
-                            active.trace(cmd, renderW, renderH,
-                                    branchWinnerCandidateOwnerValidatePushConstants, 1);
-                        }
-                        VulkanCommandEncoder.memoryBarrier(cmd, stack);
-                    }
-                    pathReservoirs.beginCurrentBranchScratch(cmd, branchScratchFrame);
-                    try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd,
-                                 "path guide previous replay");
-                         RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage(
-                                 "frame.pathGuidePreviousReplay")) {
-                        active.trace(cmd, renderW, renderH,
-                                guidePreviousReplayPushConstants, 1);
-                    }
-                    VulkanCommandEncoder.memoryBarrier(cmd, stack);
-                    try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd,
-                                 "path branch scratch storage validate");
-                         RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage(
-                                 "frame.pathBranchScratchStorageValidate")) {
-                        active.trace(cmd, renderW, renderH,
-                                branchScratchValidatePushConstants, 1);
-                    }
-                    VulkanCommandEncoder.memoryBarrier(cmd, stack);
-                    try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd,
-                                 "path branch candidate retention audit");
-                         RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage(
-                                 "frame.pathBranchCandidateRetentionAudit")) {
-                        active.trace(cmd,
-                                RtPathReservoirHistory.PATH_BRANCH_SCRATCH_CAPTURE_CAPACITY,
-                                RtPathReservoirHistory.PATH_BRANCH_CANDIDATE_HISTORY_SLOT_COUNT,
-                                branchCandidateRetentionPushConstants, 1);
-                    }
-                    VulkanCommandEncoder.memoryBarrier(cmd, stack);
-                    try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd,
                                  "path branch age replay audit");
-                         RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage(
+                             RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage(
                                  "frame.pathBranchAgeReplayAudit")) {
-                        active.trace(cmd,
-                                RtPathReservoirHistory.PATH_BRANCH_SCRATCH_CAPTURE_CAPACITY,
-                                RtPathReservoirHistory.PATH_BRANCH_CANDIDATE_HISTORY_SLOT_COUNT,
-                                branchAgeReplayPushConstants, 1);
-                    }
-                    VulkanCommandEncoder.memoryBarrier(cmd, stack);
-                    pathReservoirs.beginCurrentBranchWinnerScratch(
-                            cmd, branchWinnerScratchFrame);
-                    try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd,
+                            active.trace(cmd,
+                                    RtPathReservoirHistory.PATH_BRANCH_SCRATCH_CAPTURE_CAPACITY,
+                                    RtPathReservoirHistory.PATH_BRANCH_CANDIDATE_HISTORY_SLOT_COUNT,
+                                    branchAgeReplayPushConstants, 1);
+                        }
+                        VulkanCommandEncoder.memoryBarrier(cmd, stack);
+                        pathReservoirs.beginCurrentBranchWinnerScratch(
+                                cmd, branchWinnerScratchFrame);
+                        try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd,
                                  "path branch receiver ownership validate");
-                         RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage(
+                             RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage(
                                  "frame.pathBranchReceiverOwnershipValidate")) {
-                        active.trace(cmd, renderW, renderH,
-                                branchReceiverOwnerValidatePushConstants, 1);
-                    }
-                    VulkanCommandEncoder.memoryBarrier(cmd, stack);
-                    try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd,
+                            active.trace(cmd, renderW, renderH,
+                                    branchReceiverOwnerValidatePushConstants, 1);
+                        }
+                        VulkanCommandEncoder.memoryBarrier(cmd, stack);
+                        try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd,
                                  "path branch winner storage validate");
-                         RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage(
+                             RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage(
                                  "frame.pathBranchWinnerStorageValidate")) {
-                        active.trace(cmd, renderW, renderH,
-                                branchWinnerStorageValidatePushConstants, 1);
-                    }
-                    VulkanCommandEncoder.memoryBarrier(cmd, stack);
-                    pathReservoirs.commitBranchWinnerScratch(
-                            branchWinnerScratchFrame, pathReservoirFrame, frameCounter);
-                    try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd,
+                            active.trace(cmd, renderW, renderH,
+                                    branchWinnerStorageValidatePushConstants, 1);
+                        }
+                        VulkanCommandEncoder.memoryBarrier(cmd, stack);
+                        pathReservoirs.commitBranchWinnerScratch(
+                                branchWinnerScratchFrame, pathReservoirFrame, frameCounter);
+                        try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd,
                                  "path branch aged storage validate");
-                         RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage(
+                             RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage(
                                  "frame.pathBranchAgedStorageValidate")) {
-                        active.trace(cmd,
-                                RtPathReservoirHistory.PATH_BRANCH_SCRATCH_CAPTURE_CAPACITY,
-                                1, branchAgedStorageValidatePushConstants, 1);
-                    }
-                    VulkanCommandEncoder.memoryBarrier(cmd, stack);
-                    pathReservoirs.commitBranchScratch(
-                            branchScratchFrame, pathReservoirFrame, frameCounter);
-                    // Previous guide records and roots have now been consumed. Reuse the same
-                    // isolated buffers for the current frame instead of allocating a second pair.
-                    pathReservoirs.beginCurrentGuideScratch(cmd);
-                    if (previousShiftedSnapshot) {
-                        try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd,
+                            active.trace(cmd,
+                                    RtPathReservoirHistory.PATH_BRANCH_SCRATCH_CAPTURE_CAPACITY,
+                                    1, branchAgedStorageValidatePushConstants, 1);
+                        }
+                        VulkanCommandEncoder.memoryBarrier(cmd, stack);
+                        pathReservoirs.commitBranchScratch(
+                                branchScratchFrame, pathReservoirFrame, frameCounter);
+                        // Previous guide records and roots have now been consumed. Reuse the same
+                        // isolated buffers for the current frame instead of allocating a second pair.
+                        pathReservoirs.beginCurrentGuideScratch(cmd);
+                        if (previousShiftedSnapshot) {
+                            try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd,
                                      "path cross-frame mapping replay");
-                             RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage(
+                                 RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage(
                                      "frame.pathCrossFrameMappingReplay")) {
-                            active.trace(cmd, renderW, renderH,
-                                    crossFrameMappingReplayPushConstants, 1);
-                        }
-                        VulkanCommandEncoder.memoryBarrier(cmd, stack);
-                        try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd,
+                                active.trace(cmd, renderW, renderH,
+                                        crossFrameMappingReplayPushConstants, 1);
+                            }
+                            VulkanCommandEncoder.memoryBarrier(cmd, stack);
+                            try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd,
                                      "path guide scratch validate");
-                             RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage(
+                                 RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage(
                                      "frame.pathGuideScratchValidate")) {
-                            active.trace(cmd, renderW, renderH,
-                                    guideScratchValidatePushConstants, 1);
+                                active.trace(cmd, renderW, renderH,
+                                        guideScratchValidatePushConstants, 1);
+                            }
+                            VulkanCommandEncoder.memoryBarrier(cmd, stack);
+                            pathReservoirs.commitGuideScratchSnapshot(
+                                    pathReservoirFrame, frameCounter);
                         }
-                        VulkanCommandEncoder.memoryBarrier(cmd, stack);
-                        pathReservoirs.commitGuideScratchSnapshot(
-                                pathReservoirFrame, frameCounter);
+                        // The previous snapshot has now been consumed. Clear only the mapped-record
+                        // gate; source-root lanes may remain stale because a zero mapping never reads them.
+                        pathReservoirs.beginCurrentShiftedSnapshot(cmd);
                     }
-                    // The previous snapshot has now been consumed. Clear only the mapped-record
-                    // gate; source-root lanes may remain stale because a zero mapping never reads them.
-                    pathReservoirs.beginCurrentShiftedSnapshot(cmd);
                     try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd,
                                  "path shifted radiance");
                          RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage(
@@ -1670,15 +1698,17 @@ public final class RtComposite {
                         active.trace(cmd, renderW, renderH, pushConstants, 3);
                     }
                     VulkanCommandEncoder.memoryBarrier(cmd, stack);
-                    try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd,
-                                 "path mapping replay");
-                         RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage(
-                                 "frame.pathMappingReplay")) {
-                        active.trace(cmd, renderW, renderH,
-                                mappingReplayPushConstants, 1);
+                    if (VIEW20_FULL_AUDIT) {
+                        try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd,
+                                     "path mapping replay");
+                             RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage(
+                                     "frame.pathMappingReplay")) {
+                            active.trace(cmd, renderW, renderH,
+                                    mappingReplayPushConstants, 1);
+                        }
+                        VulkanCommandEncoder.memoryBarrier(cmd, stack);
+                        pathReservoirs.commitShiftedSnapshot(pathReservoirFrame, frameCounter);
                     }
-                    VulkanCommandEncoder.memoryBarrier(cmd, stack);
-                    pathReservoirs.commitShiftedSnapshot(pathReservoirFrame, frameCounter);
                 }
             }
             try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd, "direct reservoir initialize");

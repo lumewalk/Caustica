@@ -1151,9 +1151,12 @@ push constants and replay ABI remain unchanged.
 
 The full-screen Vulkan proof wrote 11698 of 11698 eligible pairs and validated the bounded 4096 of
 4096 dense samples: metadata rejects, reservoir/root mismatches, pair rejects and every accounting
-delta were zero. Vulkan, GPU and shader failure scans were also clean. The workload was visibly
-slow in full-screen view 20; this is an expected cost of the diagnostic-only full-payload write and
-exact comparison inside an already expensive replay view, not evidence about ordinary-render FPS.
+delta were zero. Vulkan, GPU and shader failure scans were also clean. Because the accumulated proof
+chain reduced full-screen view 20 to about 1 FPS, it is now startup-opt-in through
+`-Dcaustica.rt.view20FullAudit=true`. Default visual view 20 skips branch/winner proofs, mapping
+validators and synchronous counter readback while preserving the shifted-radiance image; the
+reference machine measured about 16 FPS. This separation changes no estimator, history, replay ABI
+or proof result.
 The next safe gate must first define deterministic arbitration between this previous-winner output
 and the later aged-winner candidate before either may own a surviving current slot. Persistent
 history and ordinary-estimator use remain blocked.

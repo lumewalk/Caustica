@@ -981,16 +981,18 @@ final class RtPathReservoirHistory {
         spatialDiagnosticViewPending = counterDiagnostics ? spatialDiagnosticView : 0;
     }
 
-    void beginShiftedRadianceDiagnostics(VkCommandBuffer cmd) {
+    void beginShiftedRadianceDiagnostics(VkCommandBuffer cmd, boolean fullAudit) {
         if (spatialDiagnosticCounters == null || shiftedGuideScratchReservoirs == null
                 || shiftedGuideScratchSourceRoots == null || shiftedReceiverGuides == null) {
             throw new IllegalStateException("Shifted-radiance diagnostics used before allocation");
         }
         VK10.vkCmdFillBuffer(cmd, spatialDiagnosticCounters.handle, 0L,
                 spatialDiagnosticCounters.size, 0);
-        VK10.vkCmdFillBuffer(cmd, shiftedReceiverGuides.handle,
-                shiftedReceiverGuideBytes(width, height),
-                branchReceiverOwnershipBytes(width, height), 0);
+        if (fullAudit) {
+            VK10.vkCmdFillBuffer(cmd, shiftedReceiverGuides.handle,
+                    shiftedReceiverGuideBytes(width, height),
+                    branchReceiverOwnershipBytes(width, height), 0);
+        }
         if (!spatialDiagnosticPairsInitialized) {
             VK10.vkCmdFillBuffer(cmd, spatialDiagnosticPairs.handle, 0L,
                     spatialDiagnosticPairs.size, 0);
@@ -1235,8 +1237,11 @@ final class RtPathReservoirHistory {
         guideScratchSnapshotState.commit(frame, frameIndex);
     }
 
-    void pollSpatialDiagnosticCounters(RtContext ctx, long frameIndex) {
+    void pollSpatialDiagnosticCounters(
+            RtContext ctx, long frameIndex, boolean view20FullAudit) {
         if (spatialDiagnosticViewPending == 0
+                || (spatialDiagnosticViewPending == SHIFTED_RADIANCE_DEBUG_VIEW
+                        && !view20FullAudit)
                 || frameIndex == 0L || frameIndex % 60L != 0L) {
             return;
         }
