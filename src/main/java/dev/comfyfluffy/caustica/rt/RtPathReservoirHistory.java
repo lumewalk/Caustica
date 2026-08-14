@@ -3964,7 +3964,12 @@ final class RtPathReservoirHistory {
             long guideBranchAgedStorageSegmentAccepted =
                     guideBranchAgedStorageValidateOneSegmentAccepted
                             + guideBranchAgedStorageValidateTwoSegmentAccepted;
-            CausticaMod.LOGGER.info(
+            // These legacy proof summaries are useful only when their validator dispatches run.
+            // Mixed-winner promotion deliberately retires those dispatches while reusing the
+            // claim/capture counters for arbitration, so printing them unconditionally would
+            // report a false claim delta.
+            if (guideBranchAgedStorageValidateAttempted != 0L) {
+                CausticaMod.LOGGER.info(
                     "RT path guide branch aged storage: "
                             + "write[eligible={},stored={},overflow={}] "
                             + "capture[cursor={},captured={},overflow={}] "
@@ -4002,8 +4007,9 @@ final class RtPathReservoirHistory {
                     guideBranchAgedStorageValidateOneSegmentAccepted,
                     guideBranchAgedStorageValidateTwoSegmentAccepted,
                     guideBranchAgedStorageAccepted - guideBranchAgedStorageSegmentAccepted,
-                    guideBranchDirectPairReplayAccepted
-                            - guideBranchAgedStorageWriteEligible);
+                        guideBranchDirectPairReplayAccepted
+                                - guideBranchAgedStorageWriteEligible);
+            }
             long guideBranchReceiverOwnerOccupied = guideBranchReceiverOwnerUnique
                     + guideBranchReceiverOwnerCollision;
             long guideBranchReceiverOwnerTerminal = guideBranchReceiverOwnerEmpty
@@ -4028,7 +4034,8 @@ final class RtPathReservoirHistory {
             long guideBranchReceiverOwnerWinnerSegments =
                     guideBranchReceiverOwnerWinnerOneSegment
                             + guideBranchReceiverOwnerWinnerTwoSegment;
-            CausticaMod.LOGGER.info(
+            if (guideBranchReceiverOwnerValidateAttempted != 0L) {
+                CausticaMod.LOGGER.info(
                     "RT path guide branch receiver ownership: "
                             + "claim[eligible={},written={},delta={}] "
                             + "receiver[attempted={},empty={},unique={},collision={},"
@@ -4079,8 +4086,9 @@ final class RtPathReservoirHistory {
                             - guideBranchReceiverOwnerWinnerSource,
                     guideBranchReceiverOwnerWinnerOneSegment,
                     guideBranchReceiverOwnerWinnerTwoSegment,
-                    guideBranchReceiverOwnerWinnerAccepted
-                            - guideBranchReceiverOwnerWinnerSegments);
+                        guideBranchReceiverOwnerWinnerAccepted
+                                - guideBranchReceiverOwnerWinnerSegments);
+            }
             long guideBranchWinnerStorageTerminal = guideBranchWinnerStorageEmpty
                     + guideBranchWinnerStorageEmptyDirtyReject
                     + guideBranchWinnerStorageMetadataReject
@@ -4107,7 +4115,8 @@ final class RtPathReservoirHistory {
             long guideBranchWinnerStorageSegments =
                     guideBranchWinnerStorageOneSegmentAccepted
                             + guideBranchWinnerStorageTwoSegmentAccepted;
-            CausticaMod.LOGGER.info(
+            if (guideBranchWinnerStorageValidateAttempted != 0L) {
+                CausticaMod.LOGGER.info(
                     "RT path guide branch winner storage: "
                             + "write[eligible={},completed={},delta={}] "
                             + "validate[attempted={},empty={},emptyDirty={},metadata={},"
@@ -4158,7 +4167,8 @@ final class RtPathReservoirHistory {
                     guideBranchWinnerStoragePairAccepted - guideBranchWinnerStorageSource,
                     guideBranchWinnerStorageOneSegmentAccepted,
                     guideBranchWinnerStorageTwoSegmentAccepted,
-                    guideBranchWinnerStoragePairAccepted - guideBranchWinnerStorageSegments);
+                        guideBranchWinnerStoragePairAccepted - guideBranchWinnerStorageSegments);
+            }
             long guideBranchWinnerReplayAccepted =
                     guideBranchWinnerReplaySelectedAccepted
                             + guideBranchWinnerReplayRetainedAccepted;

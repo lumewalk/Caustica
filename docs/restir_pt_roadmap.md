@@ -956,14 +956,14 @@ generation matches and read/write slots differ. Only the current slot is cleared
 `WorldPush` BDA names the previous slot, but consumes existing tail padding so reflected
 `WorldPush` remains 688 bytes and replay ABI 10 remains unchanged.
 
-Before the current winner slot is cleared or written, a separate full-resolution view-20 dispatch
-reprojects each current receiver through `gMotion`, opens the previous dense tag, validates exact
-frame/generation/priority/output-mapping/source-mapping/segment ownership, reprojects the immutable
-source root independently, and repeats seeded source replay. Selected diffuse-reconnection output
-uses the mapping-source comparator; retained identity output uses the full exact replay comparator.
-Acceptance is partitioned by output branch, original source mapping and segment count. The pass
-never remaps the winner, uses a mapped output as another spatial source, writes either winner slot,
-commits path history or contributes to the estimator.
+At the start of each full-audit frame, only the current winner write-slot tag tail is cleared. A
+separate full-resolution dispatch reprojects each current receiver through `gMotion`, opens the
+previous dense tag, validates exact frame/generation/receiver ownership plus all source/output/
+previous-output mapping and segment bytes, reprojects the immutable source root independently, and
+repeats seeded source replay. Selected diffuse-reconnection output uses the mapping-source
+comparator; retained identity output uses the full exact replay comparator. A later register-only
+merge may write the current diagnostic slot, but mapped output is still forbidden as another
+spatial source and neither committed path history nor the estimator is reachable.
 
 Two 352 B/pixel winner slots total 606453760 bytes (578.36 MiB) at 1280x673, bringing the complete
 lazy shifted diagnostic GPU allocation group to approximately 1728.51 MiB. Counter storage is
@@ -1158,20 +1158,30 @@ validators and synchronous counter readback while preserving the shifted-radianc
 reference machine measured about 16 FPS. This separation changes no estimator, history, replay ABI
 or proof result.
 
-Fresh-first/aged-fallback arbitration is now applied only inside the isolated current-winner
+Fresh-first/aged-fallback arbitration is applied inside the isolated current-winner
 scratch. Fresh pairs remain untouched; aged-only winners fill empty receiver slots from their exact
 owner pair. Every chosen tag and complete reservoir/root pair is captured into the existing bounded
 expected array and reopened by a separate post-barrier validator. A diagnostic-only aged marker
-records origin and age without growing the scratch, then the established full clear destroys the
-entire mixed set before the aged-winner lifecycle. Four full-audit readbacks offered 56201 chosen
+records origin and age without growing the scratch. Four full-audit readbacks originally offered
+56201 chosen
 pairs, wrote all 16047 aged fallbacks, and validated 16384 bounded pairs (11552 fresh + 4832 aged)
 bit-for-bit. Metadata, reservoir/root mismatch, pair reject and all accounting deltas were zero.
 Twenty-four counters bring storage to 756 uints / 3024 B; allocations, `WorldPush`, inline push
 constants and replay ABI remain unchanged.
 
-The next safe gate must define a normal one-frame promotion/replay contract for this single mixed
-winner population. The temporary aged audit marker must not escape its immediate validator, and
-committed path history, mapping composition and ordinary-estimator use remain blocked.
+The normal one-frame promotion contract is now implemented for this single mixed population. Both
+origins use the same receiver-owned dense tag; the aged origin/age marker exists only in the bounded
+expected copy and is stripped before dense comparison. The host commits the exact validated slot
+directly to the winner ping-pong and no longer clears and rewrites it through the retired aged-only
+passes. Next-frame replay validates the reprojected receiver owner and complete control word, then
+uses the existing independent source reprojection and strict seeded replay path. Eleven Vulkan
+readbacks attempted 2002880 records and accepted 433019 (427210 selected, 5809 retained; 14454
+identity source, 418565 mapped source). The remaining non-empty records were 1275 strict source-
+replay rejects and one receiver-surface reject; metadata rejects and all accounting deltas were
+zero. Producing frames wrote 4344 aged fallbacks and bitwise-validated all 45056 bounded mixed
+samples, including 671 aged samples. Allocation sizes, 756-counter storage, 688 B `WorldPush`,
+120 B inline push constants and replay ABI 10 remain unchanged. Committed path history, mapping
+composition and ordinary-estimator use remain blocked pending an explicit persistence policy gate.
 
 ## Delivery Phases
 

@@ -873,8 +873,9 @@ tree was closed. This proves only bounded device storage equality. Before any de
 define its ownership, clear/reset, generation and adjacent-frame lifetime contract; committed path
 history and the ordinary estimator are still forbidden.
 
-`RT path guide branch winner candidate owner` audits that ownership contract without adding a
-buffer. The current winner write slot differs from the adjacent previous read slot. Before replay,
+The original `RT path guide branch winner candidate owner` staging gate audited that ownership
+contract without adding a buffer. The current winner write slot differs from the adjacent previous
+read slot. Before replay,
 only its 16 B/pixel tag tail is cleared; replay-approved output writes one tag at its own current
 receiver index. The tag binds frame, 24-bit generation, receiver index, source/new-output/previous-
 output mapping kinds and one/two-segment replay ownership. A full-resolution validator consumes the
@@ -928,14 +929,14 @@ correlated merges that both consumed the current reservoir from being combined i
 original counter-only proof classified 861440 pixels into 845993 empty, 3652 fresh-only, 4003
 aged-only and 7792 collisions won by fresh, with zero metadata rejects and deltas.
 
-The follow-on mixed-payload gate applies that policy only inside the isolated current-winner
+The mixed-payload gate applies that policy only inside the isolated current-winner
 scratch. Fresh pairs remain in place; an aged-only owner copies its exact `PathReservoir` and
 `PathSourceRoot` into the empty receiver slot. Every chosen pair is copied into the existing 4096-
 entry bounded expected array, then a separate post-barrier pass compares the dense tag and every
-payload bit. A temporary aged marker uses the high control bit and the high generation byte for the
-exact age; it is valid only for this immediate validator. `beginCurrentBranchWinnerScratch` then
-clears the complete mixed slot before the pre-existing aged-winner lifecycle, so the marker and
-payload cannot reach committed history or the estimator.
+payload bit. The high control bit and high generation byte record aged origin and exact age only in
+that bounded expected copy. The dense tag is normalized for both origins to frame, 24-bit
+generation, receiver owner, source/new-output/previous-output mapping kinds and replay segment
+count; the temporary marker never reaches the dense slot.
 
 Correct accounting requires chosen = capture cursor, capture cursor = completed + overflow, aged
 chosen = aged write eligible = aged write completed, and validate attempted = metadata reject +
@@ -944,6 +945,24 @@ deltas must be exact. Four reference full-audit readbacks offered 56201 chosen p
 16047 aged fallbacks, and checked 16384 bounded pairs (11552 fresh + 4832 aged) bit-for-bit. Metadata,
 reservoir/root mismatch, pair reject and all deltas were zero. Counter storage is 756 uints / 3024 B;
 allocation sizes, 688 B `WorldPush`, 120 B inline push constants and replay ABI 10 are unchanged.
+
+The promotion gate removes the later full clear and the redundant aged-only winner rewrite. After
+the mixed payload validator, the host commits that exact write slot directly to the independent
+winner ping-pong. The adjacent frame reprojects the receiver, requires the stored owner to equal
+the reprojected previous pixel, validates all mapping/segment bytes, independently reprojects the
+immutable source root and repeats strict seeded replay. The deterministic winner draw is bound to
+the complete promoted control word rather than to the retired aged priority. The three legacy
+aged-only validators are not dispatched; their summaries are logged only if explicitly re-enabled,
+so reused claim counters cannot create a false delta. This remains view-20 full-audit-only and
+cannot write committed path history or the ordinary estimator.
+
+Eleven reference readbacks attempted 2002880 adjacent-frame replays. They accepted 433019 records
+(427210 selected and 5809 retained), including 14454 identity-source and 418565 mapped-source
+records. Exactly 1275 strict source-replay rejects and one receiver-surface reject failed closed;
+metadata rejects and every terminal/branch/source/segment delta were zero. In the producing frames,
+435959 mixed candidates included 4344 aged fallback writes; all 45056 bounded samples matched every
+reservoir/root bit, including 671 aged samples. No Vulkan/device/GPU/shader failure was logged.
+Counter storage, allocation sizes, `WorldPush`, inline push constants and replay ABI are unchanged.
 
 For a fresh runtime check, use debug view 20 and inspect `run/logs/latest.log`. Normal operation
 requires `RT bring-up OK`, Vulkan, the intended NVIDIA device, exact zero-delta counter partitions,

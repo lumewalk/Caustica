@@ -1739,7 +1739,7 @@ final class RtPathSpatialReuseReferenceTest {
     }
 
     @Test
-    void branchWinnerBernoulliBindsReceiverWinnerOwnershipAndFrame() {
+    void branchWinnerBernoulliBindsReceiverPromotionControlAndFrame() {
         var selection = new RtPathSpatialReuseReference.BranchWinnerDirectSelectionAudit(
                 RtPathSpatialReuseReference.BranchWinnerDirectSelectionOutcome.OPEN,
                 RtPathSpatialReuseReference.BranchDirectCurrentWeightOutcome.POSITIVE, 0.5);

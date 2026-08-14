@@ -29,7 +29,7 @@ final class RtPathSpatialReuseReference {
     static final int BRANCH_BERNOULLI_FRAME_MULTIPLIER = (int) 2_891_336_453L;
     static final int BRANCH_BERNOULLI_SALT = (int) 0x94D0_49BBL;
     static final int BRANCH_WINNER_BERNOULLI_TAG_FRAME_MULTIPLIER = 277_803_737;
-    static final int BRANCH_WINNER_BERNOULLI_PRIORITY_MULTIPLIER = 1_597_334_677;
+    static final int BRANCH_WINNER_BERNOULLI_CONTROL_MULTIPLIER = 1_597_334_677;
     static final int BRANCH_WINNER_BERNOULLI_SALT = (int) 0xD1B5_4A35L;
     static final int BRANCH_RECEIVER_OWNER_INDEX_BITS = 14;
     static final int BRANCH_RECEIVER_OWNER_INDEX_MASK =
@@ -2356,11 +2356,11 @@ final class RtPathSpatialReuseReference {
             boolean oneBoundaryViolation) {
     }
 
-    /** CPU mirror for the winner-owned deterministic diagnostic draw without reservoir mutation. */
+    /** CPU mirror for the promoted-winner deterministic draw without reservoir mutation. */
     static BranchWinnerDirectBernoulliAudit branchWinnerDirectBernoulliAudit(
             BranchWinnerDirectSelectionAudit selectionAudit,
             int receiverPixelIndex, int previousPixelIndex,
-            int winnerTagFrame, int winnerPriority, int frameIndex) {
+            int winnerTagFrame, int winnerTagControl, int frameIndex) {
         boolean selectionReady = selectionAudit.selection()
                 == BranchWinnerDirectSelectionOutcome.ZERO
                 || selectionAudit.selection() == BranchWinnerDirectSelectionOutcome.OPEN
@@ -2379,7 +2379,7 @@ final class RtPathSpatialReuseReference {
         int mixedSeed = receiverPixelIndex
                 ^ previousPixelIndex * BRANCH_BERNOULLI_ENTRY_MULTIPLIER
                 ^ winnerTagFrame * BRANCH_WINNER_BERNOULLI_TAG_FRAME_MULTIPLIER
-                ^ winnerPriority * BRANCH_WINNER_BERNOULLI_PRIORITY_MULTIPLIER
+                ^ winnerTagControl * BRANCH_WINNER_BERNOULLI_CONTROL_MULTIPLIER
                 ^ frameIndex * BRANCH_BERNOULLI_FRAME_MULTIPLIER
                 ^ BRANCH_WINNER_BERNOULLI_SALT;
         int hashedSeed = RtPathReplayReference.pathHash(mixedSeed);
@@ -2743,8 +2743,8 @@ final class RtPathSpatialReuseReference {
     }
 
     /**
-     * CPU mirror for the temporary dense candidate-owner tag. The receiver index is the unique
-     * storage owner; all provenance fields must be explicit before payload can be considered.
+     * CPU mirror for the promoted one-frame dense winner tag. The receiver index is the unique
+     * storage owner; all provenance fields must be explicit before payload can be replayed.
      */
     static BranchWinnerCandidateOwnerOutcome branchWinnerCandidateOwnerOutcome(
             boolean empty, boolean metadataMatches, boolean receiverIndexMatches,

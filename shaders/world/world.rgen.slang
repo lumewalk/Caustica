@@ -1810,11 +1810,10 @@ static uint pathBranchWinnerPairStorageControl(
             | ((replaySegments & 0xFFu) << 24u);
 }
 
-// The mixed-candidate tag exists only between the arbitration/apply pass and its immediate
-// post-barrier validator. The later full clear destroys it before the aged-winner lifecycle.
-// Fresh tags keep their established format; aged fallback tags use the high control bit and the
-// high generation byte to preserve the chosen origin and exact age without growing the scratch.
-static const uint PATH_BRANCH_CANDIDATE_AGED_TAG_BIT = 0x80000000u;
+// Only the bounded expected capture uses this bit plus the high generation byte to classify an
+// aged fallback and its exact age. The dense winner tag is always the normal one-frame promotion
+// contract and never carries this audit-only marker.
+static const uint PATH_BRANCH_CANDIDATE_CAPTURE_AGED_BIT = 0x80000000u;
 
 static uint64_t pathBranchReceiverOwnerClaimAddress(uint64_t sampleAddress) {
     return sampleAddress + uint64_t(PATH_BRANCH_RECEIVER_OWNER_CLAIM_BYTE_OFFSET);
@@ -2224,6 +2223,20 @@ static void pathBranchCandidateArbitrationValidate() {
     if (agedLinearIndex < PATH_BRANCH_RECEIVER_OWNER_CLAIM_CAPACITY) {
         agedPair = agedPairs[agedLinearIndex];
     }
+    uint agedSlot = agedLinearIndex / PATH_BRANCH_SCRATCH_CAPTURE_CAPACITY;
+    uint agedSampleIndex = agedLinearIndex % PATH_BRANCH_SCRATCH_CAPTURE_CAPACITY;
+    ConstPtr<PathBranchScratchCapture> agedCaptures = ConstPtr<PathBranchScratchCapture>(
+            pathBranchCaptureStorageAddress(
+                    worldPush.pathShiftDiagnosticPairAddr, agedSlot));
+    PathBranchScratchCapture agedCapture = {};
+    if (agedLinearIndex < PATH_BRANCH_RECEIVER_OWNER_CLAIM_CAPACITY) {
+        agedCapture = agedCaptures[agedSampleIndex];
+    }
+    bool agedCaptureFrameValid = agedCapture.promotion.x
+            == PATH_BRANCH_CANDIDATE_PROMOTION_MAGIC
+            && agedCapture.promotion.y <= worldPush.frameIndex;
+    uint agedCaptureAge = agedCaptureFrameValid
+            ? worldPush.frameIndex - agedCapture.promotion.y : 0u;
     bool agedMetadataValid = !agedPresent
             || (agedFanIn > 0u
                     && agedPriority != 0u
@@ -2234,6 +2247,12 @@ static void pathBranchCandidateArbitrationValidate() {
                     && agedClaimPriority == agedPriority
                     && agedAge >= 1u
                     && agedAge < PATH_BRANCH_CANDIDATE_HISTORY_SLOT_COUNT
+                    && agedCaptureAge == agedAge
+                    && agedCapture.promotion.z == currentGeneration
+                    && agedCapture.promotion.w == agedSourceMappingKind
+                    && agedCapture.metadata.y == agedSourceMappingKind
+                    && agedCapture.metadata.w == currentGeneration
+                    && pathMappingKind(agedCapture.reservoir) == agedSourceMappingKind
                     && (agedOutputMappingKind == PATH_MAPPING_IDENTITY
                             || agedOutputMappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION)
                     && (agedSourceMappingKind == PATH_MAPPING_IDENTITY
@@ -2311,12 +2330,11 @@ static void pathBranchCandidateArbitrationValidate() {
         chosenRoot = agedPair.root;
         chosenTag = uint4(
                 worldPush.frameIndex,
-                currentGeneration | ((agedAge & 0xFFu) << 24u),
+                currentGeneration,
                 pixelIndex,
                 pathBranchWinnerPairStorageControl(
                         agedSourceMappingKind, agedOutputMappingKind,
-                        agedSourceMappingKind, agedReplaySegments)
-                        | PATH_BRANCH_CANDIDATE_AGED_TAG_BIT);
+                        agedSourceMappingKind, agedReplaySegments));
         mixedReservoirs[pixelIndex] = chosenReservoir;
         mixedRoots[pixelIndex] = chosenRoot;
         mixedTags[pixelIndex] = chosenTag;
@@ -2330,6 +2348,10 @@ static void pathBranchCandidateArbitrationValidate() {
     if (captureIndex < PATH_BRANCH_SCRATCH_CAPTURE_CAPACITY) {
         PathBranchWinnerPairStorageCapture capture = {};
         capture.metadata = chosenTag;
+        if (!chooseFresh) {
+            capture.metadata.y |= (agedAge & 0xFFu) << 24u;
+            capture.metadata.w |= PATH_BRANCH_CANDIDATE_CAPTURE_AGED_BIT;
+        }
         capture.reservoir = chosenReservoir;
         capture.root = chosenRoot;
         DevicePtr<PathBranchWinnerPairStorageCapture> expectedCaptures =
@@ -2346,8 +2368,9 @@ static void pathBranchCandidateArbitrationValidate() {
 }
 
 // Reopen the bounded expected set only after a device barrier and compare it with the mixed dense
-// current-winner slot. This validates the chosen tag and every reservoir/root bit. It cannot
-// authorize history or estimator use, and the host clears the complete slot immediately after it.
+// current-winner slot. This validates the chosen tag and every reservoir/root bit before the host
+// promotes the slot for one adjacent-frame diagnostic replay. It cannot authorize committed
+// history or estimator use.
 static void pathBranchCandidatePayloadValidate() {
     if (pc.debugView != PATH_SHIFTED_RADIANCE_DEBUG_VIEW
             || (pc.historyFlags
@@ -2373,11 +2396,16 @@ static void pathBranchCandidatePayloadValidate() {
                             worldPush.pathShiftDiagnosticPairAddr));
     PathBranchWinnerPairStorageCapture expected = expectedCaptures[sampleIndex];
     bool chosenAged = (expected.metadata.w
-            & PATH_BRANCH_CANDIDATE_AGED_TAG_BIT) != 0u;
-    uint sourceMappingKind = expected.metadata.w & 0xFFu;
-    uint outputMappingKind = (expected.metadata.w >> 8u) & 0xFFu;
-    uint previousOutputMappingKind = (expected.metadata.w >> 16u) & 0xFFu;
-    uint replaySegments = (expected.metadata.w >> 24u) & 0x7Fu;
+            & PATH_BRANCH_CANDIDATE_CAPTURE_AGED_BIT) != 0u;
+    uint4 expectedTag = uint4(
+            expected.metadata.x,
+            expected.metadata.y & PATH_GENERATION_MASK,
+            expected.metadata.z,
+            expected.metadata.w & ~PATH_BRANCH_CANDIDATE_CAPTURE_AGED_BIT);
+    uint sourceMappingKind = expectedTag.w & 0xFFu;
+    uint outputMappingKind = (expectedTag.w >> 8u) & 0xFFu;
+    uint previousOutputMappingKind = (expectedTag.w >> 16u) & 0xFFu;
+    uint replaySegments = (expectedTag.w >> 24u) & 0xFFu;
     uint chosenAge = chosenAged ? (expected.metadata.y >> 24u) & 0xFFu : 0u;
     uint currentGeneration = pc.historyGeneration & PATH_GENERATION_MASK;
     uint generation = expected.metadata.y & PATH_GENERATION_MASK;
@@ -2390,10 +2418,10 @@ static void pathBranchCandidatePayloadValidate() {
             worldPush.pathShiftBranchWinnerScratchAddr, pixelCount));
     uint4 storedTag = receiverPixelIndex < pixelCount
             ? mixedTags[receiverPixelIndex] : uint4(0u);
-    bool metadataValid = expected.metadata.x == worldPush.frameIndex
+    bool metadataValid = expectedTag.x == worldPush.frameIndex
             && generation == currentGeneration
             && receiverPixelIndex < pixelCount
-            && all(storedTag == expected.metadata)
+            && all(storedTag == expectedTag)
             && (sourceMappingKind == PATH_MAPPING_IDENTITY
                     || sourceMappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION)
             && (outputMappingKind == PATH_MAPPING_IDENTITY
@@ -2404,7 +2432,7 @@ static void pathBranchCandidatePayloadValidate() {
             && pathMappingKind(expected.reservoir) == outputMappingKind
             && expected.reservoir.replayControl.y == replaySegments
             && (!chosenAged
-                    ? expected.metadata.y == currentGeneration
+                    ? expectedTag.y == currentGeneration
                     : chosenAge >= 1u
                             && chosenAge < PATH_BRANCH_CANDIDATE_HISTORY_SLOT_COUNT
                             && previousOutputMappingKind == sourceMappingKind);
@@ -2726,8 +2754,9 @@ static void pathBranchWinnerStorageValidate() {
 }
 
 // Reopens only the adjacent-frame winner slot selected by the independent CPU ping-pong state.
-// Acceptance proves receiver/source reprojection and seeded source replay; it does not remap the
-// record, write either winner slot, promote committed history, or contribute to the estimator.
+// Acceptance proves receiver/source reprojection and seeded source replay. A later register-only
+// merge may write the current diagnostic winner slot, but committed history and the estimator stay
+// unreachable.
 static void pathBranchWinnerPreviousReplayValidate() {
     if (pc.debugView != PATH_SHIFTED_RADIANCE_DEBUG_VIEW
             || (pc.historyFlags
@@ -2770,17 +2799,11 @@ static void pathBranchWinnerPreviousReplayValidate() {
     PathSourceRoot root = ConstPtr<PathSourceRoot>(pathBranchWinnerRootAddress(
             previousScratch, pixelCount))[previousPixelIndex];
     uint currentGeneration = pc.historyGeneration & PATH_GENERATION_MASK;
-    uint winnerPriority = storedTag.z;
-    uint priorityAgeBand = winnerPriority >> 14u;
-    uint winnerAge = priorityAgeBand >= 1u && priorityAgeBand <= 3u
-            ? 4u - priorityAgeBand : 0u;
-    uint tagPriority = storedTag.w & PATH_BRANCH_RECEIVER_OWNER_PRIORITY_MASK;
-    uint outputMappingKind = (storedTag.w
-            >> PATH_BRANCH_RECEIVER_OWNER_OUTPUT_MAPPING_SHIFT) & 0xFu;
-    uint sourceMappingKind = (storedTag.w
-            >> PATH_BRANCH_RECEIVER_OWNER_SOURCE_MAPPING_SHIFT) & 0xFu;
-    uint replaySegments = (storedTag.w
-            >> PATH_BRANCH_RECEIVER_OWNER_SEGMENT_SHIFT) & 0xFu;
+    uint ownerReceiverIndex = storedTag.z;
+    uint sourceMappingKind = storedTag.w & 0xFFu;
+    uint outputMappingKind = (storedTag.w >> 8u) & 0xFFu;
+    uint previousOutputMappingKind = (storedTag.w >> 16u) & 0xFFu;
+    uint replaySegments = (storedTag.w >> 24u) & 0xFFu;
     uint sourceIndex = stored.identity.y;
     bool rootFinite = all(isfinite(root.sourcePositionMaterial))
             && all(isfinite(root.sourceNormalRoughness))
@@ -2795,15 +2818,13 @@ static void pathBranchWinnerPreviousReplayValidate() {
                     && root.segment1.nextRecord == PATH_NO_NEXT;
     bool metadataValid = storedTag.x == worldPush.frameIndex - 1u
             && storedTag.y == currentGeneration
-            && winnerPriority != 0u
-            && tagPriority == winnerPriority
-            && winnerAge >= 1u
-            && winnerAge < PATH_BRANCH_CANDIDATE_HISTORY_SLOT_COUNT
-            && (storedTag.w & 0xF0000000u) == 0u
+            && ownerReceiverIndex == previousPixelIndex
             && (outputMappingKind == PATH_MAPPING_IDENTITY
                     || outputMappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION)
             && (sourceMappingKind == PATH_MAPPING_IDENTITY
                     || sourceMappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION)
+            && (previousOutputMappingKind == PATH_MAPPING_IDENTITY
+                    || previousOutputMappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION)
             && pathMappingKind(stored) == outputMappingKind
             && stored.replayControl.y == replaySegments
             && all(isfinite(stored.weights))
@@ -3123,12 +3144,13 @@ static void pathBranchWinnerPreviousReplayValidate() {
             : PATH_GUIDE_BRANCH_WINNER_SELECTION_CURRENT_POSITIVE], 1u);
 
     // The local draw is independent of the aged-ring entry hash. Bind it to both reprojected
-    // winner ownership and the current receiver/frame so unrelated winners cannot share a draw.
+    // winner ownership, its complete promoted mapping control, and the current receiver/frame so
+    // unrelated winners cannot share a draw.
     InterlockedAdd(counters[PATH_GUIDE_BRANCH_WINNER_BERNOULLI_ELIGIBLE], 1u);
     uint bernoulliSeed = pathHash(receiverPixelIndex
             ^ previousPixelIndex * 747796405u
             ^ storedTag.x * 277803737u
-            ^ winnerPriority * 1597334677u
+            ^ storedTag.w * 1597334677u
             ^ worldPush.frameIndex * 2891336453u
             ^ 0xD1B54A35u);
     float bernoulliRandom = float(bernoulliSeed >> 8u) * (1.0 / 16777216.0);
@@ -3586,7 +3608,7 @@ static void pathBranchWinnerPreviousReplayValidate() {
 
                 // One invocation owns this current receiver index. Write the complete pair and its
                 // owner tag into the current winner slot only for the immediate post-barrier audit.
-                // The later aged-winner clear destroys this temporary payload before normal use.
+                // This current-frame output is the fresh candidate for mixed-slot arbitration.
                 InterlockedAdd(counters[
                         PATH_GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_WRITE_ELIGIBLE], 1u);
                 InterlockedAdd(counters[
@@ -3612,10 +3634,10 @@ static void pathBranchWinnerPreviousReplayValidate() {
                 InterlockedAdd(counters[
                         PATH_GUIDE_BRANCH_WINNER_DENSE_PAYLOAD_WRITE_COMPLETED], 1u);
 
-                // First device-storage proof for the newly merged current-frame pair. Expected
-                // and stored copies share the bounded capture arrays only until the immediate
-                // post-barrier validator consumes them; the later aged gate then reuses the same
-                // memory. No dense winner/history slot or estimator output is reachable here.
+                // Device-storage proof for the newly merged current-frame pair. Expected and
+                // stored copies share the bounded capture arrays only until the immediate
+                // post-barrier validator consumes them; arbitration then reuses that memory for
+                // the exact mixed population. No committed history or estimator output is reachable.
                 InterlockedAdd(counters[
                         PATH_GUIDE_BRANCH_WINNER_PAIR_STORAGE_WRITE_ELIGIBLE], 1u);
                 uint winnerPairCaptureIndex;

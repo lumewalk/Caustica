@@ -1224,9 +1224,6 @@ public final class RtComposite {
             ByteBuffer branchScratchValidatePushConstants = null;
             ByteBuffer branchCandidateRetentionPushConstants = null;
             ByteBuffer branchAgeReplayPushConstants = null;
-            ByteBuffer branchAgedStorageValidatePushConstants = null;
-            ByteBuffer branchReceiverOwnerValidatePushConstants = null;
-            ByteBuffer branchWinnerStorageValidatePushConstants = null;
             ByteBuffer branchWinnerPreviousReplayPushConstants = null;
             ByteBuffer branchWinnerPairStorageValidatePushConstants = null;
             ByteBuffer branchWinnerCandidateOwnerValidatePushConstants = null;
@@ -1326,75 +1323,6 @@ public final class RtComposite {
                                 | RtPathReservoirHistory.GUIDE_BRANCH_AGE_REPLAY_PASS_FLAG,
                         worldConstants.historyGeneration())
                         .write(branchAgeReplayPushConstants);
-                branchAgedStorageValidatePushConstants =
-                        stack.malloc(WorldPushConstantsData.BYTE_SIZE);
-                new WorldPushConstantsData(
-                        worldConstants.worldPushAddr(),
-                        worldConstants.tableAddr(),
-                        worldConstants.entityTableAddr(),
-                        worldConstants.materialTableAddr(),
-                        worldConstants.lightBufAddr(),
-                        worldConstants.lightAliasAddr(),
-                        worldConstants.lightLocalAliasAddr(),
-                        worldConstants.lightGridCellAddr(),
-                        worldConstants.lightGridSpanAddr(),
-                        worldConstants.pathQueueAddr(),
-                        worldConstants.directReservoirAddr(),
-                        worldConstants.pathReservoirAddr(),
-                        worldConstants.pathReservoirPreviousAddr(),
-                        worldConstants.frameIndex(),
-                        worldConstants.debugView(),
-                        worldConstants.historyFlags()
-                                | RtPathReservoirHistory
-                                        .GUIDE_BRANCH_AGED_STORAGE_VALIDATE_PASS_FLAG,
-                        worldConstants.historyGeneration())
-                        .write(branchAgedStorageValidatePushConstants);
-                branchReceiverOwnerValidatePushConstants =
-                        stack.malloc(WorldPushConstantsData.BYTE_SIZE);
-                new WorldPushConstantsData(
-                        worldConstants.worldPushAddr(),
-                        worldConstants.tableAddr(),
-                        worldConstants.entityTableAddr(),
-                        worldConstants.materialTableAddr(),
-                        worldConstants.lightBufAddr(),
-                        worldConstants.lightAliasAddr(),
-                        worldConstants.lightLocalAliasAddr(),
-                        worldConstants.lightGridCellAddr(),
-                        worldConstants.lightGridSpanAddr(),
-                        worldConstants.pathQueueAddr(),
-                        worldConstants.directReservoirAddr(),
-                        worldConstants.pathReservoirAddr(),
-                        worldConstants.pathReservoirPreviousAddr(),
-                        worldConstants.frameIndex(),
-                        worldConstants.debugView(),
-                        worldConstants.historyFlags()
-                                | RtPathReservoirHistory
-                                        .GUIDE_BRANCH_RECEIVER_OWNER_VALIDATE_PASS_FLAG,
-                        worldConstants.historyGeneration())
-                        .write(branchReceiverOwnerValidatePushConstants);
-                branchWinnerStorageValidatePushConstants =
-                        stack.malloc(WorldPushConstantsData.BYTE_SIZE);
-                new WorldPushConstantsData(
-                        worldConstants.worldPushAddr(),
-                        worldConstants.tableAddr(),
-                        worldConstants.entityTableAddr(),
-                        worldConstants.materialTableAddr(),
-                        worldConstants.lightBufAddr(),
-                        worldConstants.lightAliasAddr(),
-                        worldConstants.lightLocalAliasAddr(),
-                        worldConstants.lightGridCellAddr(),
-                        worldConstants.lightGridSpanAddr(),
-                        worldConstants.pathQueueAddr(),
-                        worldConstants.directReservoirAddr(),
-                        worldConstants.pathReservoirAddr(),
-                        worldConstants.pathReservoirPreviousAddr(),
-                        worldConstants.frameIndex(),
-                        worldConstants.debugView(),
-                        worldConstants.historyFlags()
-                                | RtPathReservoirHistory
-                                        .GUIDE_BRANCH_WINNER_STORAGE_VALIDATE_PASS_FLAG,
-                        worldConstants.historyGeneration())
-                        .write(branchWinnerStorageValidatePushConstants);
                 branchWinnerPreviousReplayPushConstants =
                         stack.malloc(WorldPushConstantsData.BYTE_SIZE);
                 new WorldPushConstantsData(
@@ -1615,8 +1543,9 @@ public final class RtComposite {
                     pathReservoirs.beginShiftedRadianceDiagnostics(
                             cmd, VIEW20_FULL_AUDIT);
                     if (VIEW20_FULL_AUDIT) {
-                        // Always clear the temporary fresh-candidate tags. With no adjacent winner,
-                        // arbitration must observe clean emptiness rather than an older slot lifetime.
+                        // Clear the write-slot ownership tags. The replay pass repopulates fresh
+                        // candidates and arbitration adds aged fallbacks before this exact mixed
+                        // population becomes the next adjacent-frame winner slot.
                         pathReservoirs.beginCurrentBranchWinnerCandidateOwnership(
                                 cmd, branchWinnerScratchFrame);
                         if (branchWinnerScratchFrame.previousAvailable()) {
@@ -1700,35 +1629,11 @@ public final class RtComposite {
                                     1, branchCandidatePayloadValidatePushConstants, 1);
                         }
                         VulkanCommandEncoder.memoryBarrier(cmd, stack);
-                        pathReservoirs.beginCurrentBranchWinnerScratch(
-                                cmd, branchWinnerScratchFrame);
-                        try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd,
-                                 "path branch receiver ownership validate");
-                             RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage(
-                                 "frame.pathBranchReceiverOwnershipValidate")) {
-                            active.trace(cmd, renderW, renderH,
-                                    branchReceiverOwnerValidatePushConstants, 1);
-                        }
-                        VulkanCommandEncoder.memoryBarrier(cmd, stack);
-                        try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd,
-                                 "path branch winner storage validate");
-                             RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage(
-                                 "frame.pathBranchWinnerStorageValidate")) {
-                            active.trace(cmd, renderW, renderH,
-                                    branchWinnerStorageValidatePushConstants, 1);
-                        }
-                        VulkanCommandEncoder.memoryBarrier(cmd, stack);
+                        // The payload validator has proved the exact receiver-indexed mixed
+                        // population. Promote this single fresh-first/aged-fallback slot directly;
+                        // no later aged-only clear or rewrite is allowed before next-frame replay.
                         pathReservoirs.commitBranchWinnerScratch(
                                 branchWinnerScratchFrame, pathReservoirFrame, frameCounter);
-                        try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd,
-                                 "path branch aged storage validate");
-                             RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage(
-                                 "frame.pathBranchAgedStorageValidate")) {
-                            active.trace(cmd,
-                                    RtPathReservoirHistory.PATH_BRANCH_SCRATCH_CAPTURE_CAPACITY,
-                                    1, branchAgedStorageValidatePushConstants, 1);
-                        }
-                        VulkanCommandEncoder.memoryBarrier(cmd, stack);
                         pathReservoirs.commitBranchScratch(
                                 branchScratchFrame, pathReservoirFrame, frameCounter);
                         // Previous guide records and roots have now been consumed. Reuse the same
