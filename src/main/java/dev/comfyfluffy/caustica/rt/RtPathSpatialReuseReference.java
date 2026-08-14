@@ -1127,6 +1127,14 @@ final class RtPathSpatialReuseReference {
         AGED_METADATA_REJECT
     }
 
+    enum BranchCandidatePayloadOutcome {
+        METADATA_REJECT,
+        RESERVOIR_MISMATCH,
+        ROOT_MISMATCH,
+        FRESH_ACCEPTED,
+        AGED_ACCEPTED
+    }
+
     enum BranchCandidateRetentionOutcome {
         EMPTY,
         FUTURE_REJECT,
@@ -2796,6 +2804,46 @@ final class RtPathSpatialReuseReference {
         return freshPresent
                 ? BranchCandidateArbitrationOutcome.FRESH_ONLY
                 : BranchCandidateArbitrationOutcome.AGED_ONLY;
+    }
+
+    /**
+     * CPU mirror for the bounded post-barrier mixed-candidate payload audit. Aged fallback tags
+     * must preserve the original source mapping as their previous-output mapping; fresh tags keep
+     * the already-proven adjacent-winner provenance.
+     */
+    static BranchCandidatePayloadOutcome branchCandidatePayloadOutcome(
+            boolean chosenAged,
+            boolean tagMatches,
+            MappingKind sourceMappingKind,
+            MappingKind outputMappingKind,
+            MappingKind previousOutputMappingKind,
+            int segmentCount,
+            int agedAge,
+            boolean reservoirBitsMatch,
+            boolean rootBitsMatch) {
+        boolean mappingValid = sourceMappingKind != null
+                && outputMappingKind != null
+                && previousOutputMappingKind != null;
+        boolean ageValid = chosenAged
+                ? agedAge >= 1
+                        && agedAge < RtPathReservoirHistory
+                                .PATH_BRANCH_CANDIDATE_HISTORY_SLOT_COUNT
+                        && previousOutputMappingKind == sourceMappingKind
+                : agedAge == 0;
+        if (!tagMatches || !mappingValid
+                || (segmentCount != 1 && segmentCount != 2)
+                || !ageValid) {
+            return BranchCandidatePayloadOutcome.METADATA_REJECT;
+        }
+        if (!reservoirBitsMatch) {
+            return BranchCandidatePayloadOutcome.RESERVOIR_MISMATCH;
+        }
+        if (!rootBitsMatch) {
+            return BranchCandidatePayloadOutcome.ROOT_MISMATCH;
+        }
+        return chosenAged
+                ? BranchCandidatePayloadOutcome.AGED_ACCEPTED
+                : BranchCandidatePayloadOutcome.FRESH_ACCEPTED;
     }
 
     /**

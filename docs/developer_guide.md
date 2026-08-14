@@ -921,15 +921,29 @@ must say either `RT debug view 20 mode: visual` or `full audit`; never use the l
 navigation. Both modes remain view-20-only, and ordinary rendering receives zero diagnostic scratch
 addresses.
 
-`RT path guide branch candidate arbitration` is the counter-only fresh-versus-aged ownership gate.
-It runs after aged claims exist but before the temporary fresh payload is cleared. A valid adjacent-
-frame fresh output always wins a collision; aged output is used only when fresh is absent. This
-prevents two correlated merges that both consumed the current reservoir from being combined
-implicitly. Correctness requires attempted to equal all mutually exclusive terminal categories,
-chosen to equal fresh-only + aged-only + both, and every branch/source/segment/aged-age delta to be
-zero. The reference full-audit readback classified 861440 pixels: 845993 empty, 3652 fresh-only,
-4003 aged-only and 7792 collisions won by fresh. Both metadata rejects and all deltas were zero.
-The pass writes no payload, tag, history or estimator state.
+`RT path guide branch candidate arbitration` is the fresh-versus-aged ownership gate. It runs after
+aged claims exist but before the temporary fresh payload is cleared. A valid adjacent-frame fresh
+output always wins a collision; aged output is used only when fresh is absent. This prevents two
+correlated merges that both consumed the current reservoir from being combined implicitly. The
+original counter-only proof classified 861440 pixels into 845993 empty, 3652 fresh-only, 4003
+aged-only and 7792 collisions won by fresh, with zero metadata rejects and deltas.
+
+The follow-on mixed-payload gate applies that policy only inside the isolated current-winner
+scratch. Fresh pairs remain in place; an aged-only owner copies its exact `PathReservoir` and
+`PathSourceRoot` into the empty receiver slot. Every chosen pair is copied into the existing 4096-
+entry bounded expected array, then a separate post-barrier pass compares the dense tag and every
+payload bit. A temporary aged marker uses the high control bit and the high generation byte for the
+exact age; it is valid only for this immediate validator. `beginCurrentBranchWinnerScratch` then
+clears the complete mixed slot before the pre-existing aged-winner lifecycle, so the marker and
+payload cannot reach committed history or the estimator.
+
+Correct accounting requires chosen = capture cursor, capture cursor = completed + overflow, aged
+chosen = aged write eligible = aged write completed, and validate attempted = metadata reject +
+pair accepted + pair reject. Every accepted origin/branch/source/segment/age partition and all
+deltas must be exact. Four reference full-audit readbacks offered 56201 chosen pairs, wrote all
+16047 aged fallbacks, and checked 16384 bounded pairs (11552 fresh + 4832 aged) bit-for-bit. Metadata,
+reservoir/root mismatch, pair reject and all deltas were zero. Counter storage is 756 uints / 3024 B;
+allocation sizes, 688 B `WorldPush`, 120 B inline push constants and replay ABI 10 are unchanged.
 
 For a fresh runtime check, use debug view 20 and inspect `run/logs/latest.log`. Normal operation
 requires `RT bring-up OK`, Vulkan, the intended NVIDIA device, exact zero-delta counter partitions,

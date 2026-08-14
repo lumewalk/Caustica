@@ -1158,20 +1158,20 @@ validators and synchronous counter readback while preserving the shifted-radianc
 reference machine measured about 16 FPS. This separation changes no estimator, history, replay ABI
 or proof result.
 
-The next arbitration boundary is now proven counter-only. After fresh adjacent-winner replay and
-aged claim construction, a full-resolution pass validates both ownership lanes before the existing
-clear. Fresh output has deterministic priority; aged output is a fallback only when fresh is absent,
-so two correlated merges of the same current reservoir are never silently combined. The pass does
-not alter either pair. One full-audit readback classified 861440 pixels into 845993 empty, 3652
-fresh-only, 4003 aged-only and 7792 collisions won by fresh. It chose 11444 fresh plus 4003 aged;
-metadata rejects and every terminal, chosen, branch, source, segment and aged-age delta were zero.
-Eighteen counters bring storage to 732 uints / 2928 B; allocations, `WorldPush`, inline push
-constants and replay ABI remain unchanged. The next safe gate may apply this policy only inside the
-isolated current winner scratch, retain zero tags for empty pixels and validate every chosen payload
-after a barrier. Committed history and ordinary-estimator use remain blocked.
-The next safe gate must first define deterministic arbitration between this previous-winner output
-and the later aged-winner candidate before either may own a surviving current slot. Persistent
-history and ordinary-estimator use remain blocked.
+Fresh-first/aged-fallback arbitration is now applied only inside the isolated current-winner
+scratch. Fresh pairs remain untouched; aged-only winners fill empty receiver slots from their exact
+owner pair. Every chosen tag and complete reservoir/root pair is captured into the existing bounded
+expected array and reopened by a separate post-barrier validator. A diagnostic-only aged marker
+records origin and age without growing the scratch, then the established full clear destroys the
+entire mixed set before the aged-winner lifecycle. Four full-audit readbacks offered 56201 chosen
+pairs, wrote all 16047 aged fallbacks, and validated 16384 bounded pairs (11552 fresh + 4832 aged)
+bit-for-bit. Metadata, reservoir/root mismatch, pair reject and all accounting deltas were zero.
+Twenty-four counters bring storage to 756 uints / 3024 B; allocations, `WorldPush`, inline push
+constants and replay ABI remain unchanged.
+
+The next safe gate must define a normal one-frame promotion/replay contract for this single mixed
+winner population. The temporary aged audit marker must not escape its immediate validator, and
+committed path history, mapping composition and ordinary-estimator use remain blocked.
 
 ## Delivery Phases
 

@@ -47,6 +47,7 @@ final class RtPathReservoirHistory {
     static final int GUIDE_BRANCH_WINNER_PAIR_STORAGE_VALIDATE_PASS_FLAG = 1 << 19;
     static final int GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_VALIDATE_PASS_FLAG = 1 << 20;
     static final int GUIDE_BRANCH_CANDIDATE_ARBITRATION_PASS_FLAG = 1 << 21;
+    static final int GUIDE_BRANCH_CANDIDATE_PAYLOAD_VALIDATE_PASS_FLAG = 1 << 22;
     static final int SPATIAL_DIAGNOSTIC_CATEGORY_COUNT = 9;
     static final int SPATIAL_DIAGNOSTIC_STRICT_PAIR_CURSOR_INDEX =
             SPATIAL_DIAGNOSTIC_CATEGORY_COUNT;
@@ -772,7 +773,31 @@ final class RtPathReservoirHistory {
     static final int GUIDE_BRANCH_CANDIDATE_ARBITRATION_AGED_AGE_ONE_INDEX = 729;
     static final int GUIDE_BRANCH_CANDIDATE_ARBITRATION_AGED_AGE_TWO_INDEX = 730;
     static final int GUIDE_BRANCH_CANDIDATE_ARBITRATION_AGED_AGE_THREE_INDEX = 731;
-    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 732;
+    static final int GUIDE_BRANCH_CANDIDATE_PAYLOAD_CAPTURE_CURSOR_INDEX = 732;
+    static final int GUIDE_BRANCH_CANDIDATE_PAYLOAD_CAPTURE_COMPLETED_INDEX = 733;
+    static final int GUIDE_BRANCH_CANDIDATE_PAYLOAD_CAPTURE_OVERFLOW_INDEX = 734;
+    static final int GUIDE_BRANCH_CANDIDATE_PAYLOAD_AGED_WRITE_ELIGIBLE_INDEX = 735;
+    static final int GUIDE_BRANCH_CANDIDATE_PAYLOAD_AGED_WRITE_COMPLETED_INDEX = 736;
+    static final int GUIDE_BRANCH_CANDIDATE_PAYLOAD_VALIDATE_ATTEMPTED_INDEX = 737;
+    static final int GUIDE_BRANCH_CANDIDATE_PAYLOAD_METADATA_REJECT_INDEX = 738;
+    static final int GUIDE_BRANCH_CANDIDATE_PAYLOAD_RESERVOIR_MATCH_INDEX = 739;
+    static final int GUIDE_BRANCH_CANDIDATE_PAYLOAD_RESERVOIR_MISMATCH_INDEX = 740;
+    static final int GUIDE_BRANCH_CANDIDATE_PAYLOAD_ROOT_MATCH_INDEX = 741;
+    static final int GUIDE_BRANCH_CANDIDATE_PAYLOAD_ROOT_MISMATCH_INDEX = 742;
+    static final int GUIDE_BRANCH_CANDIDATE_PAYLOAD_PAIR_ACCEPTED_INDEX = 743;
+    static final int GUIDE_BRANCH_CANDIDATE_PAYLOAD_PAIR_REJECT_INDEX = 744;
+    static final int GUIDE_BRANCH_CANDIDATE_PAYLOAD_FRESH_ACCEPTED_INDEX = 745;
+    static final int GUIDE_BRANCH_CANDIDATE_PAYLOAD_AGED_ACCEPTED_INDEX = 746;
+    static final int GUIDE_BRANCH_CANDIDATE_PAYLOAD_SELECTED_ACCEPTED_INDEX = 747;
+    static final int GUIDE_BRANCH_CANDIDATE_PAYLOAD_RETAINED_ACCEPTED_INDEX = 748;
+    static final int GUIDE_BRANCH_CANDIDATE_PAYLOAD_IDENTITY_SOURCE_INDEX = 749;
+    static final int GUIDE_BRANCH_CANDIDATE_PAYLOAD_MAPPED_SOURCE_INDEX = 750;
+    static final int GUIDE_BRANCH_CANDIDATE_PAYLOAD_ONE_SEGMENT_INDEX = 751;
+    static final int GUIDE_BRANCH_CANDIDATE_PAYLOAD_TWO_SEGMENT_INDEX = 752;
+    static final int GUIDE_BRANCH_CANDIDATE_PAYLOAD_AGED_AGE_ONE_INDEX = 753;
+    static final int GUIDE_BRANCH_CANDIDATE_PAYLOAD_AGED_AGE_TWO_INDEX = 754;
+    static final int GUIDE_BRANCH_CANDIDATE_PAYLOAD_AGED_AGE_THREE_INDEX = 755;
+    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 756;
     static final int SHIFTED_RECEIVER_GUIDE_STRIDE = 8 * Float.BYTES;
     static final int BRANCH_RECEIVER_OWNERSHIP_STRIDE = 2 * Integer.BYTES;
     static final int BRANCH_CANDIDATE_TAG_STRIDE = 2 * Integer.BYTES;
@@ -2665,6 +2690,54 @@ final class RtPathReservoirHistory {
                     counters.get(GUIDE_BRANCH_CANDIDATE_ARBITRATION_AGED_AGE_TWO_INDEX));
             long guideBranchCandidateArbitrationAgedAgeThree = Integer.toUnsignedLong(
                     counters.get(GUIDE_BRANCH_CANDIDATE_ARBITRATION_AGED_AGE_THREE_INDEX));
+            long guideBranchCandidatePayloadCaptureCursor = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_CANDIDATE_PAYLOAD_CAPTURE_CURSOR_INDEX));
+            long guideBranchCandidatePayloadCaptureCompleted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_CANDIDATE_PAYLOAD_CAPTURE_COMPLETED_INDEX));
+            long guideBranchCandidatePayloadCaptureOverflow = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_CANDIDATE_PAYLOAD_CAPTURE_OVERFLOW_INDEX));
+            long guideBranchCandidatePayloadAgedWriteEligible = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_CANDIDATE_PAYLOAD_AGED_WRITE_ELIGIBLE_INDEX));
+            long guideBranchCandidatePayloadAgedWriteCompleted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_CANDIDATE_PAYLOAD_AGED_WRITE_COMPLETED_INDEX));
+            long guideBranchCandidatePayloadValidateAttempted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_CANDIDATE_PAYLOAD_VALIDATE_ATTEMPTED_INDEX));
+            long guideBranchCandidatePayloadMetadataReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_CANDIDATE_PAYLOAD_METADATA_REJECT_INDEX));
+            long guideBranchCandidatePayloadReservoirMatch = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_CANDIDATE_PAYLOAD_RESERVOIR_MATCH_INDEX));
+            long guideBranchCandidatePayloadReservoirMismatch = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_CANDIDATE_PAYLOAD_RESERVOIR_MISMATCH_INDEX));
+            long guideBranchCandidatePayloadRootMatch = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_CANDIDATE_PAYLOAD_ROOT_MATCH_INDEX));
+            long guideBranchCandidatePayloadRootMismatch = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_CANDIDATE_PAYLOAD_ROOT_MISMATCH_INDEX));
+            long guideBranchCandidatePayloadPairAccepted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_CANDIDATE_PAYLOAD_PAIR_ACCEPTED_INDEX));
+            long guideBranchCandidatePayloadPairReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_CANDIDATE_PAYLOAD_PAIR_REJECT_INDEX));
+            long guideBranchCandidatePayloadFreshAccepted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_CANDIDATE_PAYLOAD_FRESH_ACCEPTED_INDEX));
+            long guideBranchCandidatePayloadAgedAccepted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_CANDIDATE_PAYLOAD_AGED_ACCEPTED_INDEX));
+            long guideBranchCandidatePayloadSelectedAccepted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_CANDIDATE_PAYLOAD_SELECTED_ACCEPTED_INDEX));
+            long guideBranchCandidatePayloadRetainedAccepted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_CANDIDATE_PAYLOAD_RETAINED_ACCEPTED_INDEX));
+            long guideBranchCandidatePayloadIdentitySource = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_CANDIDATE_PAYLOAD_IDENTITY_SOURCE_INDEX));
+            long guideBranchCandidatePayloadMappedSource = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_CANDIDATE_PAYLOAD_MAPPED_SOURCE_INDEX));
+            long guideBranchCandidatePayloadOneSegment = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_CANDIDATE_PAYLOAD_ONE_SEGMENT_INDEX));
+            long guideBranchCandidatePayloadTwoSegment = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_CANDIDATE_PAYLOAD_TWO_SEGMENT_INDEX));
+            long guideBranchCandidatePayloadAgedAgeOne = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_CANDIDATE_PAYLOAD_AGED_AGE_ONE_INDEX));
+            long guideBranchCandidatePayloadAgedAgeTwo = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_CANDIDATE_PAYLOAD_AGED_AGE_TWO_INDEX));
+            long guideBranchCandidatePayloadAgedAgeThree = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_CANDIDATE_PAYLOAD_AGED_AGE_THREE_INDEX));
             long crossFrameReceiverReject = crossFrameReceiverSurfaceReject
                     + crossFrameReceiverSampleReject + crossFrameReceiverEdgeReject
                     + crossFrameReceiverTopologyReject + crossFrameReceiverDepthReject
@@ -4922,6 +4995,80 @@ final class RtPathReservoirHistory {
                     guideBranchCandidateArbitrationAgedAgeThree,
                     guideBranchCandidateArbitrationChosenAged
                             - guideBranchCandidateArbitrationAgedAges);
+            long guideBranchCandidatePayloadTerminal =
+                    guideBranchCandidatePayloadMetadataReject
+                            + guideBranchCandidatePayloadPairAccepted
+                            + guideBranchCandidatePayloadPairReject;
+            long guideBranchCandidatePayloadOrigin =
+                    guideBranchCandidatePayloadFreshAccepted
+                            + guideBranchCandidatePayloadAgedAccepted;
+            long guideBranchCandidatePayloadBranch =
+                    guideBranchCandidatePayloadSelectedAccepted
+                            + guideBranchCandidatePayloadRetainedAccepted;
+            long guideBranchCandidatePayloadSource =
+                    guideBranchCandidatePayloadIdentitySource
+                            + guideBranchCandidatePayloadMappedSource;
+            long guideBranchCandidatePayloadSegments =
+                    guideBranchCandidatePayloadOneSegment
+                            + guideBranchCandidatePayloadTwoSegment;
+            long guideBranchCandidatePayloadAgedAges =
+                    guideBranchCandidatePayloadAgedAgeOne
+                            + guideBranchCandidatePayloadAgedAgeTwo
+                            + guideBranchCandidatePayloadAgedAgeThree;
+            CausticaMod.LOGGER.info(
+                    "RT path guide branch candidate payload: "
+                            + "capture[cursor={},completed={},overflow={},delta={}] "
+                            + "agedWrite[eligible={},completed={},delta={}] "
+                            + "validate[attempted={},metadataReject={},pairAccepted={},"
+                            + "pairReject={},terminal={},delta={}] "
+                            + "bits[reservoirMatch={},reservoirMismatch={},rootMatch={},"
+                            + "rootMismatch={}] origin[fresh={},aged={},delta={}] "
+                            + "branch[selected={},retained={},delta={}] "
+                            + "source[identity={},mapped={},delta={}] "
+                            + "segments[one={},two={},delta={}] "
+                            + "agedAge[one={},two={},three={},delta={}]",
+                    guideBranchCandidatePayloadCaptureCursor,
+                    guideBranchCandidatePayloadCaptureCompleted,
+                    guideBranchCandidatePayloadCaptureOverflow,
+                    guideBranchCandidatePayloadCaptureCursor
+                            - guideBranchCandidatePayloadCaptureCompleted
+                            - guideBranchCandidatePayloadCaptureOverflow,
+                    guideBranchCandidatePayloadAgedWriteEligible,
+                    guideBranchCandidatePayloadAgedWriteCompleted,
+                    guideBranchCandidatePayloadAgedWriteEligible
+                            - guideBranchCandidatePayloadAgedWriteCompleted,
+                    guideBranchCandidatePayloadValidateAttempted,
+                    guideBranchCandidatePayloadMetadataReject,
+                    guideBranchCandidatePayloadPairAccepted,
+                    guideBranchCandidatePayloadPairReject,
+                    guideBranchCandidatePayloadTerminal,
+                    guideBranchCandidatePayloadValidateAttempted
+                            - guideBranchCandidatePayloadTerminal,
+                    guideBranchCandidatePayloadReservoirMatch,
+                    guideBranchCandidatePayloadReservoirMismatch,
+                    guideBranchCandidatePayloadRootMatch,
+                    guideBranchCandidatePayloadRootMismatch,
+                    guideBranchCandidatePayloadFreshAccepted,
+                    guideBranchCandidatePayloadAgedAccepted,
+                    guideBranchCandidatePayloadPairAccepted
+                            - guideBranchCandidatePayloadOrigin,
+                    guideBranchCandidatePayloadSelectedAccepted,
+                    guideBranchCandidatePayloadRetainedAccepted,
+                    guideBranchCandidatePayloadPairAccepted
+                            - guideBranchCandidatePayloadBranch,
+                    guideBranchCandidatePayloadIdentitySource,
+                    guideBranchCandidatePayloadMappedSource,
+                    guideBranchCandidatePayloadPairAccepted
+                            - guideBranchCandidatePayloadSource,
+                    guideBranchCandidatePayloadOneSegment,
+                    guideBranchCandidatePayloadTwoSegment,
+                    guideBranchCandidatePayloadPairAccepted
+                            - guideBranchCandidatePayloadSegments,
+                    guideBranchCandidatePayloadAgedAgeOne,
+                    guideBranchCandidatePayloadAgedAgeTwo,
+                    guideBranchCandidatePayloadAgedAgeThree,
+                    guideBranchCandidatePayloadAgedAccepted
+                            - guideBranchCandidatePayloadAgedAges);
             spatialDiagnosticViewPending = 0;
             return;
         }
