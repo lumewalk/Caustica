@@ -1229,6 +1229,7 @@ public final class RtComposite {
             ByteBuffer branchWinnerCandidateOwnerValidatePushConstants = null;
             ByteBuffer branchCandidateArbitrationPushConstants = null;
             ByteBuffer branchCandidatePayloadValidatePushConstants = null;
+            ByteBuffer branchWinnerPersistencePolicyPushConstants = null;
             if (restirPt
                      && debugView == RtPathReservoirHistory.SHIFTED_RADIANCE_DEBUG_VIEW) {
                 guidePreviousReplayPushConstants =
@@ -1438,6 +1439,29 @@ public final class RtComposite {
                                         .GUIDE_BRANCH_CANDIDATE_PAYLOAD_VALIDATE_PASS_FLAG,
                         worldConstants.historyGeneration())
                         .write(branchCandidatePayloadValidatePushConstants);
+                branchWinnerPersistencePolicyPushConstants =
+                        stack.malloc(WorldPushConstantsData.BYTE_SIZE);
+                new WorldPushConstantsData(
+                        worldConstants.worldPushAddr(),
+                        worldConstants.tableAddr(),
+                        worldConstants.entityTableAddr(),
+                        worldConstants.materialTableAddr(),
+                        worldConstants.lightBufAddr(),
+                        worldConstants.lightAliasAddr(),
+                        worldConstants.lightLocalAliasAddr(),
+                        worldConstants.lightGridCellAddr(),
+                        worldConstants.lightGridSpanAddr(),
+                        worldConstants.pathQueueAddr(),
+                        worldConstants.directReservoirAddr(),
+                        worldConstants.pathReservoirAddr(),
+                        worldConstants.pathReservoirPreviousAddr(),
+                        worldConstants.frameIndex(),
+                        worldConstants.debugView(),
+                        worldConstants.historyFlags()
+                                | RtPathReservoirHistory
+                                        .GUIDE_BRANCH_WINNER_PERSISTENCE_POLICY_PASS_FLAG,
+                        worldConstants.historyGeneration())
+                        .write(branchWinnerPersistencePolicyPushConstants);
                 mappingReplayPushConstants =
                         stack.malloc(WorldPushConstantsData.BYTE_SIZE);
                 new WorldPushConstantsData(
@@ -1629,10 +1653,19 @@ public final class RtComposite {
                                     1, branchCandidatePayloadValidatePushConstants, 1);
                         }
                         VulkanCommandEncoder.memoryBarrier(cmd, stack);
+                        try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd,
+                                     "path branch winner persistence policy");
+                             RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage(
+                                     "frame.pathBranchWinnerPersistencePolicy")) {
+                            active.trace(cmd, renderW, renderH,
+                                    branchWinnerPersistencePolicyPushConstants, 1);
+                        }
+                        VulkanCommandEncoder.memoryBarrier(cmd, stack);
                         // The payload validator has proved the exact receiver-indexed mixed
-                        // population. Promote this single fresh-first/aged-fallback slot directly;
-                        // no later aged-only clear or rewrite is allowed before next-frame replay.
-                        pathReservoirs.commitBranchWinnerScratch(
+                        // population, and the policy pass has independently classified its
+                        // lifecycle/root authority without writing it. Promote this diagnostic
+                        // single-slot population only; committed path history remains untouched.
+                        pathReservoirs.commitDiagnosticBranchWinnerScratch(
                                 branchWinnerScratchFrame, pathReservoirFrame, frameCounter);
                         pathReservoirs.commitBranchScratch(
                                 branchScratchFrame, pathReservoirFrame, frameCounter);

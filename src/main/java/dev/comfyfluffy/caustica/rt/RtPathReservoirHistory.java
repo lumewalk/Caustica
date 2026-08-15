@@ -48,6 +48,7 @@ final class RtPathReservoirHistory {
     static final int GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_VALIDATE_PASS_FLAG = 1 << 20;
     static final int GUIDE_BRANCH_CANDIDATE_ARBITRATION_PASS_FLAG = 1 << 21;
     static final int GUIDE_BRANCH_CANDIDATE_PAYLOAD_VALIDATE_PASS_FLAG = 1 << 22;
+    static final int GUIDE_BRANCH_WINNER_PERSISTENCE_POLICY_PASS_FLAG = 1 << 23;
     static final int SPATIAL_DIAGNOSTIC_CATEGORY_COUNT = 9;
     static final int SPATIAL_DIAGNOSTIC_STRICT_PAIR_CURSOR_INDEX =
             SPATIAL_DIAGNOSTIC_CATEGORY_COUNT;
@@ -797,7 +798,23 @@ final class RtPathReservoirHistory {
     static final int GUIDE_BRANCH_CANDIDATE_PAYLOAD_AGED_AGE_ONE_INDEX = 753;
     static final int GUIDE_BRANCH_CANDIDATE_PAYLOAD_AGED_AGE_TWO_INDEX = 754;
     static final int GUIDE_BRANCH_CANDIDATE_PAYLOAD_AGED_AGE_THREE_INDEX = 755;
-    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 756;
+    static final int GUIDE_BRANCH_WINNER_PERSISTENCE_ATTEMPTED_INDEX = 756;
+    static final int GUIDE_BRANCH_WINNER_PERSISTENCE_EMPTY_INDEX = 757;
+    static final int GUIDE_BRANCH_WINNER_PERSISTENCE_LIFECYCLE_REJECT_INDEX = 758;
+    static final int GUIDE_BRANCH_WINNER_PERSISTENCE_CONTROL_REJECT_INDEX = 759;
+    static final int GUIDE_BRANCH_WINNER_PERSISTENCE_RESERVOIR_REJECT_INDEX = 760;
+    static final int GUIDE_BRANCH_WINNER_PERSISTENCE_SOURCE_KEY_REJECT_INDEX = 761;
+    static final int GUIDE_BRANCH_WINNER_PERSISTENCE_ROOT_CHAIN_REJECT_INDEX = 762;
+    static final int GUIDE_BRANCH_WINNER_PERSISTENCE_SOURCE_ROOT_REJECT_INDEX = 763;
+    static final int GUIDE_BRANCH_WINNER_PERSISTENCE_RECEIVER_ROOT_REJECT_INDEX = 764;
+    static final int GUIDE_BRANCH_WINNER_PERSISTENCE_ACCEPTED_INDEX = 765;
+    static final int GUIDE_BRANCH_WINNER_PERSISTENCE_SELECTED_INDEX = 766;
+    static final int GUIDE_BRANCH_WINNER_PERSISTENCE_RETAINED_INDEX = 767;
+    static final int GUIDE_BRANCH_WINNER_PERSISTENCE_IDENTITY_SOURCE_INDEX = 768;
+    static final int GUIDE_BRANCH_WINNER_PERSISTENCE_MAPPED_SOURCE_INDEX = 769;
+    static final int GUIDE_BRANCH_WINNER_PERSISTENCE_ONE_SEGMENT_INDEX = 770;
+    static final int GUIDE_BRANCH_WINNER_PERSISTENCE_TWO_SEGMENT_INDEX = 771;
+    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 772;
     static final int SHIFTED_RECEIVER_GUIDE_STRIDE = 8 * Float.BYTES;
     static final int BRANCH_RECEIVER_OWNERSHIP_STRIDE = 2 * Integer.BYTES;
     static final int BRANCH_CANDIDATE_TAG_STRIDE = 2 * Integer.BYTES;
@@ -1249,7 +1266,11 @@ final class RtPathReservoirHistory {
         branchScratchState.commit(frame, frameIndex, pathFrame.generation());
     }
 
-    void commitBranchWinnerScratch(
+    /**
+     * Publishes only the isolated view-20 winner ping-pong lifecycle. This state is reset with path
+     * history, but it never changes {@link State} and therefore cannot publish a committed path slot.
+     */
+    void commitDiagnosticBranchWinnerScratch(
             BranchScratchFrame frame, Frame pathFrame, long frameIndex) {
         branchWinnerScratchState.commit(frame, frameIndex, pathFrame.generation());
     }
@@ -2738,6 +2759,38 @@ final class RtPathReservoirHistory {
                     counters.get(GUIDE_BRANCH_CANDIDATE_PAYLOAD_AGED_AGE_TWO_INDEX));
             long guideBranchCandidatePayloadAgedAgeThree = Integer.toUnsignedLong(
                     counters.get(GUIDE_BRANCH_CANDIDATE_PAYLOAD_AGED_AGE_THREE_INDEX));
+            long guideBranchWinnerPersistenceAttempted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_PERSISTENCE_ATTEMPTED_INDEX));
+            long guideBranchWinnerPersistenceEmpty = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_PERSISTENCE_EMPTY_INDEX));
+            long guideBranchWinnerPersistenceLifecycleReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_PERSISTENCE_LIFECYCLE_REJECT_INDEX));
+            long guideBranchWinnerPersistenceControlReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_PERSISTENCE_CONTROL_REJECT_INDEX));
+            long guideBranchWinnerPersistenceReservoirReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_PERSISTENCE_RESERVOIR_REJECT_INDEX));
+            long guideBranchWinnerPersistenceSourceKeyReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_PERSISTENCE_SOURCE_KEY_REJECT_INDEX));
+            long guideBranchWinnerPersistenceRootChainReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_PERSISTENCE_ROOT_CHAIN_REJECT_INDEX));
+            long guideBranchWinnerPersistenceSourceRootReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_PERSISTENCE_SOURCE_ROOT_REJECT_INDEX));
+            long guideBranchWinnerPersistenceReceiverRootReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_PERSISTENCE_RECEIVER_ROOT_REJECT_INDEX));
+            long guideBranchWinnerPersistenceAccepted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_PERSISTENCE_ACCEPTED_INDEX));
+            long guideBranchWinnerPersistenceSelected = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_PERSISTENCE_SELECTED_INDEX));
+            long guideBranchWinnerPersistenceRetained = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_PERSISTENCE_RETAINED_INDEX));
+            long guideBranchWinnerPersistenceIdentitySource = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_PERSISTENCE_IDENTITY_SOURCE_INDEX));
+            long guideBranchWinnerPersistenceMappedSource = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_PERSISTENCE_MAPPED_SOURCE_INDEX));
+            long guideBranchWinnerPersistenceOneSegment = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_PERSISTENCE_ONE_SEGMENT_INDEX));
+            long guideBranchWinnerPersistenceTwoSegment = Integer.toUnsignedLong(
+                    counters.get(GUIDE_BRANCH_WINNER_PERSISTENCE_TWO_SEGMENT_INDEX));
             long crossFrameReceiverReject = crossFrameReceiverSurfaceReject
                     + crossFrameReceiverSampleReject + crossFrameReceiverEdgeReject
                     + crossFrameReceiverTopologyReject + crossFrameReceiverDepthReject
@@ -5079,6 +5132,58 @@ final class RtPathReservoirHistory {
                     guideBranchCandidatePayloadAgedAgeThree,
                     guideBranchCandidatePayloadAgedAccepted
                             - guideBranchCandidatePayloadAgedAges);
+            long guideBranchWinnerPersistenceTerminal =
+                    guideBranchWinnerPersistenceEmpty
+                            + guideBranchWinnerPersistenceLifecycleReject
+                            + guideBranchWinnerPersistenceControlReject
+                            + guideBranchWinnerPersistenceReservoirReject
+                            + guideBranchWinnerPersistenceSourceKeyReject
+                            + guideBranchWinnerPersistenceRootChainReject
+                            + guideBranchWinnerPersistenceSourceRootReject
+                            + guideBranchWinnerPersistenceReceiverRootReject
+                            + guideBranchWinnerPersistenceAccepted;
+            long guideBranchWinnerPersistenceBranch =
+                    guideBranchWinnerPersistenceSelected
+                            + guideBranchWinnerPersistenceRetained;
+            long guideBranchWinnerPersistenceSource =
+                    guideBranchWinnerPersistenceIdentitySource
+                            + guideBranchWinnerPersistenceMappedSource;
+            long guideBranchWinnerPersistenceSegments =
+                    guideBranchWinnerPersistenceOneSegment
+                            + guideBranchWinnerPersistenceTwoSegment;
+            CausticaMod.LOGGER.info(
+                    "RT path guide branch winner persistence policy: attempted={} empty={} "
+                            + "reject[lifecycle={},control={},reservoir={},sourceKey={},"
+                            + "rootChain={},sourceRoot={},receiverRoot={}] "
+                            + "accepted={} terminal={} delta={} "
+                            + "branch[selected={},retained={},delta={}] "
+                            + "source[identity={},mapped={},delta={}] "
+                            + "segments[one={},two={},delta={}]",
+                    guideBranchWinnerPersistenceAttempted,
+                    guideBranchWinnerPersistenceEmpty,
+                    guideBranchWinnerPersistenceLifecycleReject,
+                    guideBranchWinnerPersistenceControlReject,
+                    guideBranchWinnerPersistenceReservoirReject,
+                    guideBranchWinnerPersistenceSourceKeyReject,
+                    guideBranchWinnerPersistenceRootChainReject,
+                    guideBranchWinnerPersistenceSourceRootReject,
+                    guideBranchWinnerPersistenceReceiverRootReject,
+                    guideBranchWinnerPersistenceAccepted,
+                    guideBranchWinnerPersistenceTerminal,
+                    guideBranchWinnerPersistenceAttempted
+                            - guideBranchWinnerPersistenceTerminal,
+                    guideBranchWinnerPersistenceSelected,
+                    guideBranchWinnerPersistenceRetained,
+                    guideBranchWinnerPersistenceAccepted
+                            - guideBranchWinnerPersistenceBranch,
+                    guideBranchWinnerPersistenceIdentitySource,
+                    guideBranchWinnerPersistenceMappedSource,
+                    guideBranchWinnerPersistenceAccepted
+                            - guideBranchWinnerPersistenceSource,
+                    guideBranchWinnerPersistenceOneSegment,
+                    guideBranchWinnerPersistenceTwoSegment,
+                    guideBranchWinnerPersistenceAccepted
+                            - guideBranchWinnerPersistenceSegments);
             spatialDiagnosticViewPending = 0;
             return;
         }

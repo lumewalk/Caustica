@@ -964,6 +964,22 @@ metadata rejects and every terminal/branch/source/segment delta were zero. In th
 reservoir/root bit, including 671 aged samples. No Vulkan/device/GPU/shader failure was logged.
 Counter storage, allocation sizes, `WorldPush`, inline push constants and replay ABI are unchanged.
 
+`RT path guide branch winner persistence policy` is the final current-frame boundary before the
+host publishes the isolated winner ping-pong slot. It scans every receiver after the mixed payload
+barrier and is read-only. For a valid static scene, all lifecycle/control/reservoir/source-key/
+root-chain/source-root/receiver-root reject counters should be zero. Required identities are
+`attempted = empty + rejects + accepted`, `accepted = selected + retained`, `accepted = identity +
+mapped`, and `accepted = one + two`; every printed `delta` must be zero. Source and receiver root
+checks are performed independently against the current guides, so a mapped reservoir cannot stand
+in for missing source-root provenance.
+
+The reference full-audit run produced five readbacks at 569x320: 910400 attempted slots, 735697
+empty and 174703 accepted pairs (170662 selected, 4041 retained; 8364 identity-source, 166339
+mapped-source), with zero rejects and exact accounting. Counter storage is 772 uints / 3088 B;
+allocation sizes, 688 B `WorldPush`, 120 B inline push constants and replay ABI 10 are unchanged.
+This line proves only the view-20 diagnostic policy. It does not indicate that committed path
+history or the ordinary estimator consumes the mixed population.
+
 For a fresh runtime check, use debug view 20 and inspect `run/logs/latest.log`. Normal operation
 requires `RT bring-up OK`, Vulkan, the intended NVIDIA device, exact zero-delta counter partitions,
 and no `DEVICE_LOST`, `VK_ERROR`, GPU fault or shader compilation error. Debug colors and sparse

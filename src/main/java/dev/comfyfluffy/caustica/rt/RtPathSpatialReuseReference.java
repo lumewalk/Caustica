@@ -1135,6 +1135,19 @@ final class RtPathSpatialReuseReference {
         AGED_ACCEPTED
     }
 
+    enum BranchWinnerPersistenceOutcome {
+        EMPTY,
+        LIFECYCLE_REJECT,
+        CONTROL_REJECT,
+        RESERVOIR_REJECT,
+        SOURCE_KEY_REJECT,
+        ROOT_CHAIN_REJECT,
+        SOURCE_ROOT_REJECT,
+        RECEIVER_ROOT_REJECT,
+        SELECTED_ACCEPTED,
+        RETAINED_ACCEPTED
+    }
+
     enum BranchCandidateRetentionOutcome {
         EMPTY,
         FUTURE_REJECT,
@@ -2844,6 +2857,56 @@ final class RtPathSpatialReuseReference {
         return chosenAged
                 ? BranchCandidatePayloadOutcome.AGED_ACCEPTED
                 : BranchCandidatePayloadOutcome.FRESH_ACCEPTED;
+    }
+
+    /**
+     * Ordered CPU mirror for the diagnostic mixed-winner persistence boundary. The owner lifecycle
+     * is checked before payload, and the source/receiver guides belong to the separate root rather
+     * than being inferred from a mapped reservoir. Acceptance authorizes only the one-frame
+     * diagnostic ping-pong; it does not authorize committed path history or estimator use.
+     */
+    static BranchWinnerPersistenceOutcome branchWinnerPersistenceOutcome(
+            boolean empty,
+            boolean lifecycleValid,
+            MappingKind sourceMappingKind,
+            MappingKind outputMappingKind,
+            MappingKind previousOutputMappingKind,
+            int segmentCount,
+            boolean reservoirValid,
+            boolean sourceKeyValid,
+            boolean rootChainValid,
+            boolean sourceRootValid,
+            boolean receiverRootValid) {
+        if (empty) {
+            return BranchWinnerPersistenceOutcome.EMPTY;
+        }
+        if (!lifecycleValid) {
+            return BranchWinnerPersistenceOutcome.LIFECYCLE_REJECT;
+        }
+        if (sourceMappingKind == null
+                || outputMappingKind == null
+                || previousOutputMappingKind == null
+                || (segmentCount != 1 && segmentCount != 2)) {
+            return BranchWinnerPersistenceOutcome.CONTROL_REJECT;
+        }
+        if (!reservoirValid) {
+            return BranchWinnerPersistenceOutcome.RESERVOIR_REJECT;
+        }
+        if (!sourceKeyValid) {
+            return BranchWinnerPersistenceOutcome.SOURCE_KEY_REJECT;
+        }
+        if (!rootChainValid) {
+            return BranchWinnerPersistenceOutcome.ROOT_CHAIN_REJECT;
+        }
+        if (!sourceRootValid) {
+            return BranchWinnerPersistenceOutcome.SOURCE_ROOT_REJECT;
+        }
+        if (!receiverRootValid) {
+            return BranchWinnerPersistenceOutcome.RECEIVER_ROOT_REJECT;
+        }
+        return outputMappingKind == MappingKind.DIFFUSE_RECONNECTION
+                ? BranchWinnerPersistenceOutcome.SELECTED_ACCEPTED
+                : BranchWinnerPersistenceOutcome.RETAINED_ACCEPTED;
     }
 
     /**

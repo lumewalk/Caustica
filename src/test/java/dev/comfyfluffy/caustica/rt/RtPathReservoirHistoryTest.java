@@ -15,8 +15,8 @@ final class RtPathReservoirHistoryTest {
         assertEquals(176, PathReservoirData.BYTE_SIZE);
         assertEquals(176, RtPathReservoirHistory.BYTES_PER_RESERVOIR);
         assertEquals(688, WorldPushData.BYTE_SIZE);
-        assertEquals(756, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
-        assertEquals(3024, RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_COUNTER_BYTES);
+        assertEquals(772, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
+        assertEquals(3088, RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_COUNTER_BYTES);
         assertEquals(1 << 8, RtPathReservoirHistory.GUIDE_PREVIOUS_REPLAY_PASS_FLAG);
         assertEquals(1 << 9, RtPathReservoirHistory.GUIDE_PREVIOUS_AVAILABLE_FLAG);
         assertEquals(1 << 10, RtPathReservoirHistory.GUIDE_BRANCH_PREVIOUS_AVAILABLE_FLAG);
@@ -43,6 +43,8 @@ final class RtPathReservoirHistoryTest {
                 RtPathReservoirHistory.GUIDE_BRANCH_CANDIDATE_ARBITRATION_PASS_FLAG);
         assertEquals(1 << 22,
                 RtPathReservoirHistory.GUIDE_BRANCH_CANDIDATE_PAYLOAD_VALIDATE_PASS_FLAG);
+        assertEquals(1 << 23,
+                RtPathReservoirHistory.GUIDE_BRANCH_WINNER_PERSISTENCE_POLICY_PASS_FLAG);
     }
 
     @Test
@@ -122,6 +124,14 @@ final class RtPathReservoirHistoryTest {
         assertTrue(secondWinner.previousAvailable());
         assertEquals(firstWinner.writeSlot(), secondWinner.previousSlot());
         assertEquals(1 - firstWinner.writeSlot(), secondWinner.writeSlot());
+
+        winner.reset();
+        assertFalse(winner.begin(second, 11L).previousAvailable());
+
+        var nextGeneration = new RtPathReservoirHistory.Frame(8L, 0, 1, true);
+        var restarted = winner.begin(first, 10L);
+        winner.commit(restarted, 10L, first.generation());
+        assertFalse(winner.begin(nextGeneration, 11L).previousAvailable());
     }
 
     @Test

@@ -2145,7 +2145,8 @@ static void pathBranchWinnerCandidateOwnerValidate() {
 // reconstructed aged fallback. Fresh wins a collision so two correlated current-reservoir merges
 // are never combined implicitly. Aged-only payloads fill otherwise empty current-winner slots;
 // every chosen pair is also copied into the bounded expected array for the immediate post-barrier
-// audit. The later existing full clear destroys this mixed diagnostic state before normal use.
+// audit. The normalized mixed slot then remains isolated as the next adjacent-frame diagnostic
+// input; it is never aliased with committed path history or ordinary estimator output.
 static void pathBranchCandidateArbitrationValidate() {
     if (pc.debugView != PATH_SHIFTED_RADIANCE_DEBUG_VIEW
             || (pc.historyFlags
@@ -2482,6 +2483,156 @@ static void pathBranchCandidatePayloadValidate() {
                         ? PATH_GUIDE_BRANCH_CANDIDATE_PAYLOAD_AGED_AGE_TWO
                         : PATH_GUIDE_BRANCH_CANDIDATE_PAYLOAD_AGED_AGE_THREE], 1u);
     }
+}
+
+// Counter-only boundary between the normalized mixed winner population and any future persistent
+// history. A non-empty pair is admissible only when the dense owner tag belongs to this exact
+// producer frame/generation/receiver, the reservoir remains self-consistent, and its separate
+// PathSourceRoot is authoritative for independently current source and receiver guides. This pass
+// never writes the winner slot, committed path history, or estimator radiance.
+static void pathBranchWinnerPersistencePolicyValidate() {
+    if (pc.debugView != PATH_SHIFTED_RADIANCE_DEBUG_VIEW
+            || (pc.historyFlags
+                    & PATH_GUIDE_BRANCH_WINNER_PERSISTENCE_POLICY_PASS_FLAG) == 0u
+            || worldPush.pathShiftDiagnosticCounterAddr == 0u
+            || worldPush.pathShiftBranchWinnerScratchAddr == 0u) {
+        return;
+    }
+    uint2 pixel = DispatchRaysIndex().xy;
+    uint2 dimensions = DispatchRaysDimensions().xy;
+    uint pixelIndex = pixel.y * dimensions.x + pixel.x;
+    uint pixelCount = dimensions.x * dimensions.y;
+    DevicePtr<uint> counters = DevicePtr<uint>(worldPush.pathShiftDiagnosticCounterAddr);
+    InterlockedAdd(counters[PATH_GUIDE_BRANCH_WINNER_PERSISTENCE_ATTEMPTED], 1u);
+
+    ConstPtr<uint4> tags = ConstPtr<uint4>(pathBranchWinnerTagAddress(
+            worldPush.pathShiftBranchWinnerScratchAddr, pixelCount));
+    uint4 tag = tags[pixelIndex];
+    if (all(tag == uint4(0u))) {
+        InterlockedAdd(counters[PATH_GUIDE_BRANCH_WINNER_PERSISTENCE_EMPTY], 1u);
+        return;
+    }
+
+    uint currentGeneration = pc.historyGeneration & PATH_GENERATION_MASK;
+    if (tag.x != worldPush.frameIndex
+            || tag.y != currentGeneration
+            || tag.z != pixelIndex) {
+        InterlockedAdd(counters[
+                PATH_GUIDE_BRANCH_WINNER_PERSISTENCE_LIFECYCLE_REJECT], 1u);
+        return;
+    }
+
+    uint sourceMappingKind = tag.w & 0xFFu;
+    uint outputMappingKind = (tag.w >> 8u) & 0xFFu;
+    uint previousOutputMappingKind = (tag.w >> 16u) & 0xFFu;
+    uint replaySegments = (tag.w >> 24u) & 0xFFu;
+    bool controlValid = (sourceMappingKind == PATH_MAPPING_IDENTITY
+                    || sourceMappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION)
+            && (outputMappingKind == PATH_MAPPING_IDENTITY
+                    || outputMappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION)
+            && (previousOutputMappingKind == PATH_MAPPING_IDENTITY
+                    || previousOutputMappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION)
+            && (replaySegments == 1u || replaySegments == MAX_PATH_SEGMENTS);
+    if (!controlValid) {
+        InterlockedAdd(counters[
+                PATH_GUIDE_BRANCH_WINNER_PERSISTENCE_CONTROL_REJECT], 1u);
+        return;
+    }
+
+    ConstPtr<PathReservoir> reservoirs = ConstPtr<PathReservoir>(
+            worldPush.pathShiftBranchWinnerScratchAddr);
+    ConstPtr<PathSourceRoot> roots = ConstPtr<PathSourceRoot>(
+            pathBranchWinnerRootAddress(
+                    worldPush.pathShiftBranchWinnerScratchAddr, pixelCount));
+    PathReservoir reservoir = reservoirs[pixelIndex];
+    PathSourceRoot root = roots[pixelIndex];
+    bool reservoirValid = pathReservoirSampleMetadataReady(reservoir)
+            && all(isfinite(reservoir.weights))
+            && all(reservoir.weights > float4(0.0))
+            && (reservoir.identity.w & PATH_GENERATION_MASK) == currentGeneration
+            && pathMappingKind(reservoir) == outputMappingKind
+            && reservoir.replayControl.y == replaySegments;
+    if (!reservoirValid) {
+        InterlockedAdd(counters[
+                PATH_GUIDE_BRANCH_WINNER_PERSISTENCE_RESERVOIR_REJECT], 1u);
+        return;
+    }
+
+    uint sourceIndex = reservoir.identity.y;
+    if (sourceIndex >= pixelCount) {
+        InterlockedAdd(counters[
+                PATH_GUIDE_BRANCH_WINNER_PERSISTENCE_SOURCE_KEY_REJECT], 1u);
+        return;
+    }
+
+    bool rootFinite = all(isfinite(root.sourcePositionMaterial))
+            && all(isfinite(root.sourceNormalRoughness))
+            && all(isfinite(root.receiverPositionMaterial))
+            && all(isfinite(root.receiverNormalRoughness))
+            && all(isfinite(root.segment0.ro))
+            && all(isfinite(root.segment1.ro));
+    bool rootChainValid = rootFinite
+            && (replaySegments == 1u
+                    ? root.segment0.nextRecord == PATH_NO_NEXT
+                    : root.segment0.nextRecord != PATH_NO_NEXT
+                            && root.segment1.nextRecord == PATH_NO_NEXT);
+    if (!rootChainValid) {
+        InterlockedAdd(counters[
+                PATH_GUIDE_BRANCH_WINNER_PERSISTENCE_ROOT_CHAIN_REJECT], 1u);
+        return;
+    }
+
+    uint2 sourcePixel = uint2(sourceIndex % dimensions.x, sourceIndex / dimensions.x);
+    float4 currentSourcePositionMaterial =
+            gRestirPositionMaterial[int2(sourcePixel)];
+    float4 currentSourceNormalRoughness =
+            gRestirNormalRoughness[int2(sourcePixel)];
+    float4 sourcePositionMaterial = root.sourcePositionMaterial;
+    sourcePositionMaterial.xyz += worldPush.camOffset;
+    bool sourceRootValid = pathReplayPositionMatches(
+                    sourcePositionMaterial.xyz, currentSourcePositionMaterial.xyz)
+            && pathReplayColorMatches(
+                    root.sourceNormalRoughness.xyz, currentSourceNormalRoughness.xyz)
+            && pathReplayFloatMatches(
+                    root.sourceNormalRoughness.w, currentSourceNormalRoughness.w)
+            && uint(max(sourcePositionMaterial.w, 0.0))
+                    == uint(max(currentSourcePositionMaterial.w, 0.0));
+    if (!sourceRootValid) {
+        InterlockedAdd(counters[
+                PATH_GUIDE_BRANCH_WINNER_PERSISTENCE_SOURCE_ROOT_REJECT], 1u);
+        return;
+    }
+
+    float4 currentReceiverPositionMaterial =
+            gRestirPositionMaterial[int2(pixel)];
+    float4 currentReceiverNormalRoughness =
+            gRestirNormalRoughness[int2(pixel)];
+    float4 receiverPositionMaterial = root.receiverPositionMaterial;
+    receiverPositionMaterial.xyz += worldPush.camOffset;
+    bool receiverRootValid = pathReplayPositionMatches(
+                    receiverPositionMaterial.xyz, currentReceiverPositionMaterial.xyz)
+            && pathReplayColorMatches(
+                    root.receiverNormalRoughness.xyz, currentReceiverNormalRoughness.xyz)
+            && pathReplayFloatMatches(
+                    root.receiverNormalRoughness.w, currentReceiverNormalRoughness.w)
+            && uint(max(receiverPositionMaterial.w, 0.0))
+                    == uint(max(currentReceiverPositionMaterial.w, 0.0));
+    if (!receiverRootValid) {
+        InterlockedAdd(counters[
+                PATH_GUIDE_BRANCH_WINNER_PERSISTENCE_RECEIVER_ROOT_REJECT], 1u);
+        return;
+    }
+
+    InterlockedAdd(counters[PATH_GUIDE_BRANCH_WINNER_PERSISTENCE_ACCEPTED], 1u);
+    InterlockedAdd(counters[outputMappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION
+            ? PATH_GUIDE_BRANCH_WINNER_PERSISTENCE_SELECTED
+            : PATH_GUIDE_BRANCH_WINNER_PERSISTENCE_RETAINED], 1u);
+    InterlockedAdd(counters[sourceMappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION
+            ? PATH_GUIDE_BRANCH_WINNER_PERSISTENCE_MAPPED_SOURCE
+            : PATH_GUIDE_BRANCH_WINNER_PERSISTENCE_IDENTITY_SOURCE], 1u);
+    InterlockedAdd(counters[replaySegments == 1u
+            ? PATH_GUIDE_BRANCH_WINNER_PERSISTENCE_ONE_SEGMENT
+            : PATH_GUIDE_BRANCH_WINNER_PERSISTENCE_TWO_SEGMENT], 1u);
 }
 
 static void pathBranchReceiverOwnerValidate() {
@@ -6148,6 +6299,11 @@ public void pathGuideScratchValidate() {
 [shader("raygeneration")]
 void main() {
     worldPush = ConstPtr<WorldPush>(pc.worldPushAddr)[0];
+    if ((pc.historyFlags
+            & PATH_GUIDE_BRANCH_WINNER_PERSISTENCE_POLICY_PASS_FLAG) != 0u) {
+        pathBranchWinnerPersistencePolicyValidate();
+        return;
+    }
     if ((pc.historyFlags
             & PATH_GUIDE_BRANCH_CANDIDATE_PAYLOAD_VALIDATE_PASS_FLAG) != 0u) {
         pathBranchCandidatePayloadValidate();

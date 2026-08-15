@@ -1183,6 +1183,25 @@ samples, including 671 aged samples. Allocation sizes, 756-counter storage, 688 
 120 B inline push constants and replay ABI 10 remain unchanged. Committed path history, mapping
 composition and ordinary-estimator use remain blocked pending an explicit persistence policy gate.
 
+That explicit persistence boundary is now a separate full-resolution, counter-only pass after the
+mixed payload barrier and before the host publishes the isolated winner ping-pong slot. Empty tags
+are terminal. Every non-empty tag must name the exact current frame, 24-bit generation and receiver
+index; all three mapping-control fields and the one/two-segment count must be supported. The stored
+reservoir must retain valid weights, sample/replay metadata, current generation, output mapping and
+segment count. Its separate `PathSourceRoot` must have a finite valid chain, its source index must be
+in range, and its camera-relative source and receiver guides must independently match the current
+guide buffers. The output reservoir is never used as authority for either root surface.
+
+Sixteen counters bring view-20 storage to 772 uints / 3088 B. Five fresh Vulkan readbacks scanned
+910400 receiver slots and admitted 174703 non-empty pairs: 170662 selected plus 4041 retained, with
+8364 identity-source plus 166339 mapped-source records. Lifecycle, control, reservoir, source-key,
+root-chain, source-root and receiver-root rejects were all zero; terminal, branch, source and segment
+accounting were exact on every readback. CPU tests cover reset, frame discontinuity and generation
+changes in the independent winner lifecycle. The pass writes no payload and acceptance still
+authorizes only the view-20 diagnostic ping-pong. Existing committed path history, mapping
+composition and the ordinary estimator remain unchanged; the next architectural gate must define a
+paired persistent-history owner that cannot alias the legacy reservoir-only slots.
+
 ## Delivery Phases
 
 ### Phase 0 — Wavefront Integration Baseline
