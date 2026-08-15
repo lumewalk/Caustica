@@ -1202,6 +1202,30 @@ authorizes only the view-20 diagnostic ping-pong. Existing committed path histor
 composition and the ordinary estimator remain unchanged; the next architectural gate must define a
 paired persistent-history owner that cannot alias the legacy reservoir-only slots.
 
+The follow-on gate defines that owner explicitly. Two additional packed full-resolution slots each
+contain a 176 B `PathReservoir`, a 160 B `PathSourceRoot` and a 16 B lifecycle/control tag per pixel.
+Their Java lifecycle is independent from both the legacy reservoir-only `State` and the diagnostic
+winner scratch; allocation checks require every paired slot address range to be disjoint from both.
+The current paired slot is cleared in full. The persistence-policy pass publishes only accepted
+reservoir/root/tag triples into it, with the tag written last, and a separate post-barrier dispatch
+checks clean empty pixels plus exact tag, reservoir and root bits across the complete frame. The
+adjacent-frame address is exposed only when frame continuity and the 24-bit generation agree; it is
+not consumed yet.
+
+Eighteen new counters bring view-20 storage to 790 uints / 3160 B. The two isolated pair slots add
+606453760 bytes (578.36 MiB) at 1280x673, taking the lazy shifted diagnostic group to approximately
+2306.87 MiB. Reflected `WorldPush` is 704 B; replay ABI 10 and the 120 B inline push constants remain
+unchanged. This gate still does not write the legacy committed slots or estimator radiance. The next
+gate is read-only adjacent-frame admission and exact original-root replay from this paired owner;
+mapping composition remains forbidden.
+
+The first Vulkan proof produced twelve 569x320 readbacks / 2184960 full-resolution attempts. The
+cleared population contained 1887576 empty pixels and exactly stored 297384 accepted pairs: 291130
+selected plus 6254 retained, 13297 identity-source plus 284087 mapped-source. Tag, reservoir and root
+matches each equaled 297384; empty-dirty, policy, lifecycle and every exact-bit reject were zero, and
+all terminal/policy/branch/source/segment deltas were zero. Runtime exercised one-segment paths;
+CPU tests retain two-segment and reset/generation coverage.
+
 ## Delivery Phases
 
 ### Phase 0 — Wavefront Integration Baseline

@@ -86,6 +86,8 @@ public struct WorldPush {
     public uint64_t pathShiftBranchRootPreviousAddr; // previous isolated branch-root slot
     public uint64_t pathShiftBranchWinnerScratchAddr; // current cleared full-res owner-selected pair + tag
     public uint64_t pathShiftBranchWinnerPreviousAddr; // adjacent-frame validated winner slot
+    public uint64_t pathShiftPairedHistoryCurrentAddr; // isolated persistent pair write slot; never legacy history
+    public uint64_t pathShiftPairedHistoryPreviousAddr; // adjacent-frame pair, zero unless lifecycle-valid
 };
 
 // 32-byte hot area-light record. Radiance uses packed R11G11B10 and the grid-relative owner section

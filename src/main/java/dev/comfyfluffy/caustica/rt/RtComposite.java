@@ -943,6 +943,7 @@ public final class RtComposite {
         boolean previousGuideScratch = false;
         RtPathReservoirHistory.BranchScratchFrame branchScratchFrame = null;
         RtPathReservoirHistory.BranchScratchFrame branchWinnerScratchFrame = null;
+        RtPathReservoirHistory.PairedHistoryFrame pairedHistoryFrame = null;
         if (restirPt) {
             pathReservoirs.pollSpatialDiagnosticCounters(
                     ctx, frameCounter, VIEW20_FULL_AUDIT);
@@ -965,6 +966,8 @@ public final class RtComposite {
                     branchScratchFrame = pathReservoirs.beginBranchScratch(
                             pathReservoirFrame, frameCounter);
                     branchWinnerScratchFrame = pathReservoirs.beginBranchWinnerScratch(
+                            pathReservoirFrame, frameCounter);
+                    pairedHistoryFrame = pathReservoirs.beginPairedHistory(
                             pathReservoirFrame, frameCounter);
                 }
             } else {
@@ -1140,7 +1143,13 @@ public final class RtComposite {
                     restirPt && debugView == RtPathReservoirHistory.SHIFTED_RADIANCE_DEBUG_VIEW
                             && VIEW20_FULL_AUDIT
                             ? pathReservoirs.previousBranchWinnerScratchAddress(
-                                    branchWinnerScratchFrame) : 0L
+                                    branchWinnerScratchFrame) : 0L,
+                    restirPt && debugView == RtPathReservoirHistory.SHIFTED_RADIANCE_DEBUG_VIEW
+                            && VIEW20_FULL_AUDIT
+                            ? pathReservoirs.pairedHistoryCurrentAddress(pairedHistoryFrame) : 0L,
+                    restirPt && debugView == RtPathReservoirHistory.SHIFTED_RADIANCE_DEBUG_VIEW
+                            && VIEW20_FULL_AUDIT
+                            ? pathReservoirs.pairedHistoryPreviousAddress(pairedHistoryFrame) : 0L
             ).write(push);
             pushBuf.flush(0L, WORLD_PUSH_SIZE);
             // Upload any entity textures registered this frame into the bindless set before the trace.
@@ -1230,6 +1239,7 @@ public final class RtComposite {
             ByteBuffer branchCandidateArbitrationPushConstants = null;
             ByteBuffer branchCandidatePayloadValidatePushConstants = null;
             ByteBuffer branchWinnerPersistencePolicyPushConstants = null;
+            ByteBuffer pairedHistoryValidatePushConstants = null;
             if (restirPt
                      && debugView == RtPathReservoirHistory.SHIFTED_RADIANCE_DEBUG_VIEW) {
                 guidePreviousReplayPushConstants =
@@ -1462,6 +1472,29 @@ public final class RtComposite {
                                         .GUIDE_BRANCH_WINNER_PERSISTENCE_POLICY_PASS_FLAG,
                         worldConstants.historyGeneration())
                         .write(branchWinnerPersistencePolicyPushConstants);
+                pairedHistoryValidatePushConstants =
+                        stack.malloc(WorldPushConstantsData.BYTE_SIZE);
+                new WorldPushConstantsData(
+                        worldConstants.worldPushAddr(),
+                        worldConstants.tableAddr(),
+                        worldConstants.entityTableAddr(),
+                        worldConstants.materialTableAddr(),
+                        worldConstants.lightBufAddr(),
+                        worldConstants.lightAliasAddr(),
+                        worldConstants.lightLocalAliasAddr(),
+                        worldConstants.lightGridCellAddr(),
+                        worldConstants.lightGridSpanAddr(),
+                        worldConstants.pathQueueAddr(),
+                        worldConstants.directReservoirAddr(),
+                        worldConstants.pathReservoirAddr(),
+                        worldConstants.pathReservoirPreviousAddr(),
+                        worldConstants.frameIndex(),
+                        worldConstants.debugView(),
+                        worldConstants.historyFlags()
+                                | RtPathReservoirHistory
+                                        .GUIDE_PAIRED_HISTORY_VALIDATE_PASS_FLAG,
+                        worldConstants.historyGeneration())
+                        .write(pairedHistoryValidatePushConstants);
                 mappingReplayPushConstants =
                         stack.malloc(WorldPushConstantsData.BYTE_SIZE);
                 new WorldPushConstantsData(
@@ -1572,6 +1605,9 @@ public final class RtComposite {
                         // population becomes the next adjacent-frame winner slot.
                         pathReservoirs.beginCurrentBranchWinnerCandidateOwnership(
                                 cmd, branchWinnerScratchFrame);
+                        // The persistent pair owner has its own physical slots and lifecycle. Clear
+                        // the complete write slot before the policy pass can publish any pair.
+                        pathReservoirs.beginCurrentPairedHistory(cmd, pairedHistoryFrame);
                         if (branchWinnerScratchFrame.previousAvailable()) {
                             try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd,
                                          "path branch winner previous replay");
@@ -1661,10 +1697,19 @@ public final class RtComposite {
                                     branchWinnerPersistencePolicyPushConstants, 1);
                         }
                         VulkanCommandEncoder.memoryBarrier(cmd, stack);
-                        // The payload validator has proved the exact receiver-indexed mixed
-                        // population, and the policy pass has independently classified its
-                        // lifecycle/root authority without writing it. Promote this diagnostic
-                        // single-slot population only; committed path history remains untouched.
+                        try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd,
+                                     "path paired history storage validate");
+                             RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage(
+                                     "frame.pathPairedHistoryStorageValidate")) {
+                            active.trace(cmd, renderW, renderH,
+                                    pairedHistoryValidatePushConstants, 1);
+                        }
+                        VulkanCommandEncoder.memoryBarrier(cmd, stack);
+                        // Publish only the independently allocated complete-pair lifecycle after
+                        // its post-barrier exact validation. Legacy path history and the estimator
+                        // remain unchanged and cannot address these slots.
+                        pathReservoirs.commitPairedHistory(
+                                pairedHistoryFrame, pathReservoirFrame, frameCounter);
                         pathReservoirs.commitDiagnosticBranchWinnerScratch(
                                 branchWinnerScratchFrame, pathReservoirFrame, frameCounter);
                         pathReservoirs.commitBranchScratch(

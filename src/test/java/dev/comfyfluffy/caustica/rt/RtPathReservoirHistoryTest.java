@@ -14,9 +14,9 @@ final class RtPathReservoirHistoryTest {
     void reflectedAbiIncludesReplayAndReconnectionGeometryLanes() {
         assertEquals(176, PathReservoirData.BYTE_SIZE);
         assertEquals(176, RtPathReservoirHistory.BYTES_PER_RESERVOIR);
-        assertEquals(688, WorldPushData.BYTE_SIZE);
-        assertEquals(772, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
-        assertEquals(3088, RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_COUNTER_BYTES);
+        assertEquals(704, WorldPushData.BYTE_SIZE);
+        assertEquals(790, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
+        assertEquals(3160, RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_COUNTER_BYTES);
         assertEquals(1 << 8, RtPathReservoirHistory.GUIDE_PREVIOUS_REPLAY_PASS_FLAG);
         assertEquals(1 << 9, RtPathReservoirHistory.GUIDE_PREVIOUS_AVAILABLE_FLAG);
         assertEquals(1 << 10, RtPathReservoirHistory.GUIDE_BRANCH_PREVIOUS_AVAILABLE_FLAG);
@@ -45,6 +45,8 @@ final class RtPathReservoirHistoryTest {
                 RtPathReservoirHistory.GUIDE_BRANCH_CANDIDATE_PAYLOAD_VALIDATE_PASS_FLAG);
         assertEquals(1 << 23,
                 RtPathReservoirHistory.GUIDE_BRANCH_WINNER_PERSISTENCE_POLICY_PASS_FLAG);
+        assertEquals(1 << 24,
+                RtPathReservoirHistory.GUIDE_PAIRED_HISTORY_VALIDATE_PASS_FLAG);
     }
 
     @Test
@@ -135,6 +137,29 @@ final class RtPathReservoirHistoryTest {
     }
 
     @Test
+    void pairedHistoryLifecycleIsIndependentAndFailsClosedAcrossResetGapAndGeneration() {
+        var paired = new RtPathReservoirHistory.PairedHistoryState();
+        var first = new RtPathReservoirHistory.Frame(7L, 0, -1, false);
+        var adjacent = new RtPathReservoirHistory.Frame(7L, 1, 0, true);
+        var nextGeneration = new RtPathReservoirHistory.Frame(8L, 0, 1, true);
+
+        var firstPair = paired.begin(first, 20L);
+        assertEquals(0, firstPair.writeSlot());
+        assertFalse(firstPair.previousAvailable());
+        paired.commit(firstPair, 20L, first.generation());
+
+        var adjacentPair = paired.begin(adjacent, 21L);
+        assertTrue(adjacentPair.previousAvailable());
+        assertEquals(firstPair.writeSlot(), adjacentPair.previousSlot());
+        assertEquals(1 - firstPair.writeSlot(), adjacentPair.writeSlot());
+        assertFalse(paired.begin(adjacent, 22L).previousAvailable());
+        assertFalse(paired.begin(nextGeneration, 21L).previousAvailable());
+
+        paired.reset();
+        assertFalse(paired.begin(adjacent, 21L).previousAvailable());
+    }
+
+    @Test
     void shiftedSnapshotRequiresOneFrameContinuityAndMatchingGeneration() {
         var snapshots = new RtPathReservoirHistory.ShiftedSnapshotState();
         var first = new RtPathReservoirHistory.Frame(7L, 0, -1, false);
@@ -172,6 +197,20 @@ final class RtPathReservoirHistoryTest {
         assertEquals(16, RtPathReservoirHistory.PATH_BRANCH_WINNER_TAG_STRIDE);
         assertEquals(289_443_840L,
                 RtPathReservoirHistory.branchWinnerTagOffsetBytes(1280, 673));
+        // The complete-pair owner allocates two additional slots of the same packed layout.
+        assertEquals(606_453_760L, Math.multiplyExact(
+                RtPathReservoirHistory.branchWinnerScratchBytes(1280, 673),
+                RtPathReservoirHistory.SLOT_COUNT));
+    }
+
+    @Test
+    void pairedHistoryAddressRangesCannotAliasLegacyOrScratchStorage() {
+        assertTrue(RtPathReservoirHistory.addressRangesDisjoint(1_000L, 352L, 2_000L, 176L));
+        assertTrue(RtPathReservoirHistory.addressRangesDisjoint(2_000L, 176L, 1_000L, 352L));
+        assertFalse(RtPathReservoirHistory.addressRangesDisjoint(1_000L, 352L, 1_351L, 176L));
+        assertFalse(RtPathReservoirHistory.addressRangesDisjoint(1_000L, 352L, 1_000L, 352L));
+        assertThrows(IllegalArgumentException.class,
+                () -> RtPathReservoirHistory.addressRangesDisjoint(0L, 352L, 1_000L, 352L));
     }
 
     @Test

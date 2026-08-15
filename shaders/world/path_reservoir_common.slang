@@ -771,6 +771,24 @@ public static const uint PATH_GUIDE_BRANCH_WINNER_PERSISTENCE_IDENTITY_SOURCE = 
 public static const uint PATH_GUIDE_BRANCH_WINNER_PERSISTENCE_MAPPED_SOURCE = 769u;
 public static const uint PATH_GUIDE_BRANCH_WINNER_PERSISTENCE_ONE_SEGMENT = 770u;
 public static const uint PATH_GUIDE_BRANCH_WINNER_PERSISTENCE_TWO_SEGMENT = 771u;
+public static const uint PATH_GUIDE_PAIRED_HISTORY_VALIDATE_ATTEMPTED = 772u;
+public static const uint PATH_GUIDE_PAIRED_HISTORY_VALIDATE_EMPTY = 773u;
+public static const uint PATH_GUIDE_PAIRED_HISTORY_VALIDATE_EMPTY_DIRTY = 774u;
+public static const uint PATH_GUIDE_PAIRED_HISTORY_VALIDATE_POLICY_REJECT = 775u;
+public static const uint PATH_GUIDE_PAIRED_HISTORY_VALIDATE_LIFECYCLE_REJECT = 776u;
+public static const uint PATH_GUIDE_PAIRED_HISTORY_VALIDATE_TAG_MATCH = 777u;
+public static const uint PATH_GUIDE_PAIRED_HISTORY_VALIDATE_TAG_MISMATCH = 778u;
+public static const uint PATH_GUIDE_PAIRED_HISTORY_VALIDATE_RESERVOIR_MATCH = 779u;
+public static const uint PATH_GUIDE_PAIRED_HISTORY_VALIDATE_RESERVOIR_MISMATCH = 780u;
+public static const uint PATH_GUIDE_PAIRED_HISTORY_VALIDATE_ROOT_MATCH = 781u;
+public static const uint PATH_GUIDE_PAIRED_HISTORY_VALIDATE_ROOT_MISMATCH = 782u;
+public static const uint PATH_GUIDE_PAIRED_HISTORY_VALIDATE_ACCEPTED = 783u;
+public static const uint PATH_GUIDE_PAIRED_HISTORY_VALIDATE_SELECTED = 784u;
+public static const uint PATH_GUIDE_PAIRED_HISTORY_VALIDATE_RETAINED = 785u;
+public static const uint PATH_GUIDE_PAIRED_HISTORY_VALIDATE_IDENTITY_SOURCE = 786u;
+public static const uint PATH_GUIDE_PAIRED_HISTORY_VALIDATE_MAPPED_SOURCE = 787u;
+public static const uint PATH_GUIDE_PAIRED_HISTORY_VALIDATE_ONE_SEGMENT = 788u;
+public static const uint PATH_GUIDE_PAIRED_HISTORY_VALIDATE_TWO_SEGMENT = 789u;
 public static const uint PATH_SHIFT_DIAGNOSTIC_COUNTER_COUNT = 772u;
 public static const uint PATH_SHIFT_DIAGNOSTIC_PAIR_MASK = 3u;
 public static const uint PATH_SHIFT_DIAGNOSTIC_MERGE_PAIR_OFFSET =
@@ -892,6 +910,7 @@ public static const uint PATH_GUIDE_BRANCH_WINNER_CANDIDATE_OWNER_VALIDATE_PASS_
 public static const uint PATH_GUIDE_BRANCH_CANDIDATE_ARBITRATION_PASS_FLAG = 2097152u;
 public static const uint PATH_GUIDE_BRANCH_CANDIDATE_PAYLOAD_VALIDATE_PASS_FLAG = 4194304u;
 public static const uint PATH_GUIDE_BRANCH_WINNER_PERSISTENCE_POLICY_PASS_FLAG = 8388608u;
+public static const uint PATH_GUIDE_PAIRED_HISTORY_VALIDATE_PASS_FLAG = 16777216u;
 // replayControl.y == 0 keeps a terminal sentinel outside the valid replay-segment domain. The
 // magic prevents a cleared or partially written record from being mistaken for an intentional
 // sample-copy terminal state.

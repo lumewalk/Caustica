@@ -980,6 +980,26 @@ allocation sizes, 688 B `WorldPush`, 120 B inline push constants and replay ABI 
 This line proves only the view-20 diagnostic policy. It does not indicate that committed path
 history or the ordinary estimator consumes the mixed population.
 
+The next full-audit pass turns that accepted population into an isolated complete-pair history,
+without touching the legacy reservoir-only slots. `RT path paired history storage` must satisfy
+`attempted = empty + rejects + accepted`, `accepted = selected + retained`, `accepted = identity +
+mapped`, and `accepted = one + two`. `policyDelta` compares policy acceptance with exact stored-pair
+acceptance. For a stable proof run, `emptyDirty`, lifecycle, tag, reservoir and root rejects must be
+zero, the three match counters must equal `accepted`, and every printed delta must be zero. A policy
+reject is fail-closed and leaves the pre-cleared destination unpublished.
+
+The pair owner uses two separately allocated 352 B/pixel slots and refuses overlapping address
+ranges with either legacy path history or winner scratch. At 1280x673 these slots add 578.36 MiB;
+the complete lazy view-20 allocation is approximately 2306.87 MiB. Counter storage is 790 uints /
+3160 B and reflected `WorldPush` is 704 B. Replay ABI 10 and inline push constants remain 120 B.
+The previous paired address is lifecycle-gated but deliberately unread in this gate; no estimator
+integration is implied.
+
+The reference Vulkan run produced twelve 569x320 readbacks: 2184960 attempted pixels, 1887576 clean
+empty pixels and 297384 exact stored pairs. The accepted split was 291130 selected + 6254 retained
+and 13297 identity-source + 284087 mapped-source; tag/reservoir/root match counters each equaled the
+accepted count. All rejects and deltas were zero, and no Vulkan/device/GPU/shader fault was logged.
+
 For a fresh runtime check, use debug view 20 and inspect `run/logs/latest.log`. Normal operation
 requires `RT bring-up OK`, Vulkan, the intended NVIDIA device, exact zero-delta counter partitions,
 and no `DEVICE_LOST`, `VK_ERROR`, GPU fault or shader compilation error. Debug colors and sparse

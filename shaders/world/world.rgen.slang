@@ -2485,17 +2485,19 @@ static void pathBranchCandidatePayloadValidate() {
     }
 }
 
-// Counter-only boundary between the normalized mixed winner population and any future persistent
-// history. A non-empty pair is admissible only when the dense owner tag belongs to this exact
+// Boundary between the normalized mixed winner population and the isolated complete-pair history.
+// A non-empty pair is admissible only when the dense owner tag belongs to this exact
 // producer frame/generation/receiver, the reservoir remains self-consistent, and its separate
-// PathSourceRoot is authoritative for independently current source and receiver guides. This pass
-// never writes the winner slot, committed path history, or estimator radiance.
+// PathSourceRoot is authoritative for independently current source and receiver guides. Accepted
+// pairs are copied to a separately allocated cleared slot; this pass never writes the winner slot,
+// legacy reservoir-only committed history, or estimator radiance.
 static void pathBranchWinnerPersistencePolicyValidate() {
     if (pc.debugView != PATH_SHIFTED_RADIANCE_DEBUG_VIEW
             || (pc.historyFlags
                     & PATH_GUIDE_BRANCH_WINNER_PERSISTENCE_POLICY_PASS_FLAG) == 0u
             || worldPush.pathShiftDiagnosticCounterAddr == 0u
-            || worldPush.pathShiftBranchWinnerScratchAddr == 0u) {
+            || worldPush.pathShiftBranchWinnerScratchAddr == 0u
+            || worldPush.pathShiftPairedHistoryCurrentAddr == 0u) {
         return;
     }
     uint2 pixel = DispatchRaysIndex().xy;
@@ -2633,6 +2635,132 @@ static void pathBranchWinnerPersistencePolicyValidate() {
     InterlockedAdd(counters[replaySegments == 1u
             ? PATH_GUIDE_BRANCH_WINNER_PERSISTENCE_ONE_SEGMENT
             : PATH_GUIDE_BRANCH_WINNER_PERSISTENCE_TWO_SEGMENT], 1u);
+
+    DevicePtr<PathReservoir> pairedReservoirs = DevicePtr<PathReservoir>(
+            worldPush.pathShiftPairedHistoryCurrentAddr);
+    DevicePtr<PathSourceRoot> pairedRoots = DevicePtr<PathSourceRoot>(
+            pathBranchWinnerRootAddress(
+                    worldPush.pathShiftPairedHistoryCurrentAddr, pixelCount));
+    DevicePtr<uint4> pairedTags = DevicePtr<uint4>(pathBranchWinnerTagAddress(
+            worldPush.pathShiftPairedHistoryCurrentAddr, pixelCount));
+    pairedReservoirs[pixelIndex] = reservoir;
+    pairedRoots[pixelIndex] = root;
+    // Publish the owner tag last. The following dispatch is separated by a device-memory barrier.
+    pairedTags[pixelIndex] = tag;
+}
+
+static bool pathBranchPairedHistoryPayloadZero(
+        uint64_t slotAddress, uint pixelIndex, uint pixelCount) {
+    ConstPtr<uint> reservoirWords = ConstPtr<uint>(slotAddress
+            + uint64_t(pixelIndex) * uint64_t(PATH_RESERVOIR_STRIDE_BYTES));
+    [unroll]
+    for (uint lane = 0u; lane < PATH_RESERVOIR_STRIDE_BYTES / 4u; lane++) {
+        if (reservoirWords[lane] != 0u) {
+            return false;
+        }
+    }
+    uint64_t rootBase = pathBranchWinnerRootAddress(slotAddress, pixelCount);
+    ConstPtr<uint> rootWords = ConstPtr<uint>(rootBase
+            + uint64_t(pixelIndex) * uint64_t(PATH_SOURCE_ROOT_STRIDE_BYTES));
+    [unroll]
+    for (uint lane = 0u; lane < PATH_SOURCE_ROOT_STRIDE_BYTES / 4u; lane++) {
+        if (rootWords[lane] != 0u) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// Post-barrier proof that the separately owned persistent pair slot was cleared, received only
+// policy-approved records, and preserved every reservoir/root/tag bit exactly.
+static void pathBranchPairedHistoryValidate() {
+    if (pc.debugView != PATH_SHIFTED_RADIANCE_DEBUG_VIEW
+            || (pc.historyFlags & PATH_GUIDE_PAIRED_HISTORY_VALIDATE_PASS_FLAG) == 0u
+            || worldPush.pathShiftDiagnosticCounterAddr == 0u
+            || worldPush.pathShiftBranchWinnerScratchAddr == 0u
+            || worldPush.pathShiftPairedHistoryCurrentAddr == 0u) {
+        return;
+    }
+    uint2 pixel = DispatchRaysIndex().xy;
+    uint2 dimensions = DispatchRaysDimensions().xy;
+    uint pixelIndex = pixel.y * dimensions.x + pixel.x;
+    uint pixelCount = dimensions.x * dimensions.y;
+    DevicePtr<uint> counters = DevicePtr<uint>(worldPush.pathShiftDiagnosticCounterAddr);
+    InterlockedAdd(counters[PATH_GUIDE_PAIRED_HISTORY_VALIDATE_ATTEMPTED], 1u);
+
+    ConstPtr<uint4> sourceTags = ConstPtr<uint4>(pathBranchWinnerTagAddress(
+            worldPush.pathShiftBranchWinnerScratchAddr, pixelCount));
+    ConstPtr<uint4> storedTags = ConstPtr<uint4>(pathBranchWinnerTagAddress(
+            worldPush.pathShiftPairedHistoryCurrentAddr, pixelCount));
+    uint4 sourceTag = sourceTags[pixelIndex];
+    uint4 storedTag = storedTags[pixelIndex];
+    if (all(sourceTag == uint4(0u))) {
+        bool clean = all(storedTag == uint4(0u))
+                && pathBranchPairedHistoryPayloadZero(
+                        worldPush.pathShiftPairedHistoryCurrentAddr, pixelIndex, pixelCount);
+        InterlockedAdd(counters[clean
+                ? PATH_GUIDE_PAIRED_HISTORY_VALIDATE_EMPTY
+                : PATH_GUIDE_PAIRED_HISTORY_VALIDATE_EMPTY_DIRTY], 1u);
+        return;
+    }
+    if (all(storedTag == uint4(0u))) {
+        // The policy pass deliberately left a rejected source record unpublished.
+        InterlockedAdd(counters[PATH_GUIDE_PAIRED_HISTORY_VALIDATE_POLICY_REJECT], 1u);
+        return;
+    }
+
+    uint currentGeneration = pc.historyGeneration & PATH_GENERATION_MASK;
+    if (storedTag.x != worldPush.frameIndex
+            || storedTag.y != currentGeneration
+            || storedTag.z != pixelIndex) {
+        InterlockedAdd(counters[
+                PATH_GUIDE_PAIRED_HISTORY_VALIDATE_LIFECYCLE_REJECT], 1u);
+        return;
+    }
+    if (any(storedTag != sourceTag)) {
+        InterlockedAdd(counters[PATH_GUIDE_PAIRED_HISTORY_VALIDATE_TAG_MISMATCH], 1u);
+        return;
+    }
+    InterlockedAdd(counters[PATH_GUIDE_PAIRED_HISTORY_VALIDATE_TAG_MATCH], 1u);
+
+    ConstPtr<PathReservoir> sourceReservoirs = ConstPtr<PathReservoir>(
+            worldPush.pathShiftBranchWinnerScratchAddr);
+    ConstPtr<PathReservoir> storedReservoirs = ConstPtr<PathReservoir>(
+            worldPush.pathShiftPairedHistoryCurrentAddr);
+    PathReservoir sourceReservoir = sourceReservoirs[pixelIndex];
+    PathReservoir storedReservoir = storedReservoirs[pixelIndex];
+    if (!pathReservoirBitsMatch(storedReservoir, sourceReservoir)) {
+        InterlockedAdd(counters[
+                PATH_GUIDE_PAIRED_HISTORY_VALIDATE_RESERVOIR_MISMATCH], 1u);
+        return;
+    }
+    InterlockedAdd(counters[PATH_GUIDE_PAIRED_HISTORY_VALIDATE_RESERVOIR_MATCH], 1u);
+
+    ConstPtr<PathSourceRoot> sourceRoots = ConstPtr<PathSourceRoot>(
+            pathBranchWinnerRootAddress(
+                    worldPush.pathShiftBranchWinnerScratchAddr, pixelCount));
+    ConstPtr<PathSourceRoot> storedRoots = ConstPtr<PathSourceRoot>(
+            pathBranchWinnerRootAddress(
+                    worldPush.pathShiftPairedHistoryCurrentAddr, pixelCount));
+    if (!pathSourceRootBitsMatch(storedRoots[pixelIndex], sourceRoots[pixelIndex])) {
+        InterlockedAdd(counters[PATH_GUIDE_PAIRED_HISTORY_VALIDATE_ROOT_MISMATCH], 1u);
+        return;
+    }
+    InterlockedAdd(counters[PATH_GUIDE_PAIRED_HISTORY_VALIDATE_ROOT_MATCH], 1u);
+    InterlockedAdd(counters[PATH_GUIDE_PAIRED_HISTORY_VALIDATE_ACCEPTED], 1u);
+
+    uint sourceMappingKind = storedTag.w & 0xFFu;
+    uint outputMappingKind = (storedTag.w >> 8u) & 0xFFu;
+    uint replaySegments = (storedTag.w >> 24u) & 0xFFu;
+    InterlockedAdd(counters[outputMappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION
+            ? PATH_GUIDE_PAIRED_HISTORY_VALIDATE_SELECTED
+            : PATH_GUIDE_PAIRED_HISTORY_VALIDATE_RETAINED], 1u);
+    InterlockedAdd(counters[sourceMappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION
+            ? PATH_GUIDE_PAIRED_HISTORY_VALIDATE_MAPPED_SOURCE
+            : PATH_GUIDE_PAIRED_HISTORY_VALIDATE_IDENTITY_SOURCE], 1u);
+    InterlockedAdd(counters[replaySegments == 1u
+            ? PATH_GUIDE_PAIRED_HISTORY_VALIDATE_ONE_SEGMENT
+            : PATH_GUIDE_PAIRED_HISTORY_VALIDATE_TWO_SEGMENT], 1u);
 }
 
 static void pathBranchReceiverOwnerValidate() {
@@ -6299,6 +6427,10 @@ public void pathGuideScratchValidate() {
 [shader("raygeneration")]
 void main() {
     worldPush = ConstPtr<WorldPush>(pc.worldPushAddr)[0];
+    if ((pc.historyFlags & PATH_GUIDE_PAIRED_HISTORY_VALIDATE_PASS_FLAG) != 0u) {
+        pathBranchPairedHistoryValidate();
+        return;
+    }
     if ((pc.historyFlags
             & PATH_GUIDE_BRANCH_WINNER_PERSISTENCE_POLICY_PASS_FLAG) != 0u) {
         pathBranchWinnerPersistencePolicyValidate();

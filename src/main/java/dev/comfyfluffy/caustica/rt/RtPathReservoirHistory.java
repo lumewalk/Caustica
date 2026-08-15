@@ -49,6 +49,7 @@ final class RtPathReservoirHistory {
     static final int GUIDE_BRANCH_CANDIDATE_ARBITRATION_PASS_FLAG = 1 << 21;
     static final int GUIDE_BRANCH_CANDIDATE_PAYLOAD_VALIDATE_PASS_FLAG = 1 << 22;
     static final int GUIDE_BRANCH_WINNER_PERSISTENCE_POLICY_PASS_FLAG = 1 << 23;
+    static final int GUIDE_PAIRED_HISTORY_VALIDATE_PASS_FLAG = 1 << 24;
     static final int SPATIAL_DIAGNOSTIC_CATEGORY_COUNT = 9;
     static final int SPATIAL_DIAGNOSTIC_STRICT_PAIR_CURSOR_INDEX =
             SPATIAL_DIAGNOSTIC_CATEGORY_COUNT;
@@ -814,7 +815,25 @@ final class RtPathReservoirHistory {
     static final int GUIDE_BRANCH_WINNER_PERSISTENCE_MAPPED_SOURCE_INDEX = 769;
     static final int GUIDE_BRANCH_WINNER_PERSISTENCE_ONE_SEGMENT_INDEX = 770;
     static final int GUIDE_BRANCH_WINNER_PERSISTENCE_TWO_SEGMENT_INDEX = 771;
-    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 772;
+    static final int GUIDE_PAIRED_HISTORY_VALIDATE_ATTEMPTED_INDEX = 772;
+    static final int GUIDE_PAIRED_HISTORY_VALIDATE_EMPTY_INDEX = 773;
+    static final int GUIDE_PAIRED_HISTORY_VALIDATE_EMPTY_DIRTY_INDEX = 774;
+    static final int GUIDE_PAIRED_HISTORY_VALIDATE_POLICY_REJECT_INDEX = 775;
+    static final int GUIDE_PAIRED_HISTORY_VALIDATE_LIFECYCLE_REJECT_INDEX = 776;
+    static final int GUIDE_PAIRED_HISTORY_VALIDATE_TAG_MATCH_INDEX = 777;
+    static final int GUIDE_PAIRED_HISTORY_VALIDATE_TAG_MISMATCH_INDEX = 778;
+    static final int GUIDE_PAIRED_HISTORY_VALIDATE_RESERVOIR_MATCH_INDEX = 779;
+    static final int GUIDE_PAIRED_HISTORY_VALIDATE_RESERVOIR_MISMATCH_INDEX = 780;
+    static final int GUIDE_PAIRED_HISTORY_VALIDATE_ROOT_MATCH_INDEX = 781;
+    static final int GUIDE_PAIRED_HISTORY_VALIDATE_ROOT_MISMATCH_INDEX = 782;
+    static final int GUIDE_PAIRED_HISTORY_VALIDATE_ACCEPTED_INDEX = 783;
+    static final int GUIDE_PAIRED_HISTORY_VALIDATE_SELECTED_INDEX = 784;
+    static final int GUIDE_PAIRED_HISTORY_VALIDATE_RETAINED_INDEX = 785;
+    static final int GUIDE_PAIRED_HISTORY_VALIDATE_IDENTITY_SOURCE_INDEX = 786;
+    static final int GUIDE_PAIRED_HISTORY_VALIDATE_MAPPED_SOURCE_INDEX = 787;
+    static final int GUIDE_PAIRED_HISTORY_VALIDATE_ONE_SEGMENT_INDEX = 788;
+    static final int GUIDE_PAIRED_HISTORY_VALIDATE_TWO_SEGMENT_INDEX = 789;
+    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 790;
     static final int SHIFTED_RECEIVER_GUIDE_STRIDE = 8 * Float.BYTES;
     static final int BRANCH_RECEIVER_OWNERSHIP_STRIDE = 2 * Integer.BYTES;
     static final int BRANCH_CANDIDATE_TAG_STRIDE = 2 * Integer.BYTES;
@@ -955,11 +974,47 @@ final class RtPathReservoirHistory {
         }
     }
 
+    record PairedHistoryFrame(int writeSlot, int previousSlot, boolean previousAvailable) {}
+
+    /**
+     * Lifecycle owner for the complete reservoir/source-root pair. It is deliberately separate from
+     * both {@link State} (legacy reservoir-only committed history) and the diagnostic winner scratch.
+     */
+    static final class PairedHistoryState {
+        private long latestFrame = Long.MIN_VALUE;
+        private long latestGeneration = Long.MIN_VALUE;
+        private int latestSlot = -1;
+
+        PairedHistoryFrame begin(Frame frame, long frameIndex) {
+            boolean previousAvailable = frame.previousAvailable()
+                    && latestSlot >= 0
+                    && latestFrame != Long.MIN_VALUE
+                    && latestFrame + 1L == frameIndex
+                    && latestGeneration == frame.generation();
+            int writeSlot = latestSlot < 0 ? 0 : 1 - latestSlot;
+            return new PairedHistoryFrame(writeSlot,
+                    previousAvailable ? latestSlot : -1, previousAvailable);
+        }
+
+        void commit(PairedHistoryFrame frame, long frameIndex, long generation) {
+            latestSlot = frame.writeSlot();
+            latestFrame = frameIndex;
+            latestGeneration = generation;
+        }
+
+        void reset() {
+            latestFrame = Long.MIN_VALUE;
+            latestGeneration = Long.MIN_VALUE;
+            latestSlot = -1;
+        }
+    }
+
     private final State state = new State();
     private final ShiftedSnapshotState shiftedSnapshotState = new ShiftedSnapshotState();
     private final ShiftedSnapshotState guideScratchSnapshotState = new ShiftedSnapshotState();
     private final BranchScratchState branchScratchState = new BranchScratchState();
     private final BranchScratchState branchWinnerScratchState = new BranchScratchState();
+    private final PairedHistoryState pairedHistoryState = new PairedHistoryState();
     private final RtBuffer[] slots = new RtBuffer[SLOT_COUNT];
     private RtBuffer spatialDiagnosticCounters;
     private RtBuffer spatialDiagnosticPairs;
@@ -971,6 +1026,7 @@ final class RtPathReservoirHistory {
     private final RtBuffer[] branchScratchReservoirs = new RtBuffer[SLOT_COUNT];
     private final RtBuffer[] branchScratchSourceRoots = new RtBuffer[SLOT_COUNT];
     private final RtBuffer[] branchWinnerScratch = new RtBuffer[SLOT_COUNT];
+    private final RtBuffer[] pairedHistorySlots = new RtBuffer[SLOT_COUNT];
     private RtPathTemporalPipeline temporalPipeline;
     private int spatialDiagnosticViewPending;
     private boolean spatialDiagnosticPairsInitialized;
@@ -1088,7 +1144,8 @@ final class RtPathReservoirHistory {
                 && shiftedGuideScratchSourceRoots != null
                 && branchScratchReservoirs[0] != null && branchScratchReservoirs[1] != null
                 && branchScratchSourceRoots[0] != null && branchScratchSourceRoots[1] != null
-                && branchWinnerScratch[0] != null && branchWinnerScratch[1] != null) {
+                && branchWinnerScratch[0] != null && branchWinnerScratch[1] != null
+                && pairedHistorySlots[0] != null && pairedHistorySlots[1] != null) {
             return;
         }
         long rootBytes = Math.multiplyExact(Math.multiplyExact((long) width, height),
@@ -1125,7 +1182,11 @@ final class RtPathReservoirHistory {
             branchWinnerScratch[slot] = ctx.createBuffer(winnerScratchBytes,
                     VK10.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK10.VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                     false, "path branch winner scratch " + slot + " " + width + "x" + height);
+            pairedHistorySlots[slot] = ctx.createBuffer(winnerScratchBytes,
+                    VK10.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK10.VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                    false, "path paired history slot " + slot + " " + width + "x" + height);
         }
+        verifyPairedHistoryDoesNotAliasLegacyOrScratch(winnerScratchBytes);
         CausticaMod.LOGGER.info(
                 "RT path shifted snapshot: render={}x{}, rootStride={} B, mappedStride={} B, "
                         + "receiverGuideStride={} B, guideScratchStride={} B, "
@@ -1133,22 +1194,25 @@ final class RtPathReservoirHistory {
                         + "rootBytes={}, branchRootBytes={}, mappedBytes={}, "
                         + "receiverGuideBytes={}, receiverOwnershipBytes={}, "
                         + "receiverStorageBytes={}, guideScratchBytes={}, guideRootScratchBytes={}, "
-                        + "winnerScratchSlotBytes={}, winnerScratchSlots={}, gpuMiB={}",
+                        + "winnerScratchSlotBytes={}, winnerScratchSlots={}, "
+                        + "pairedHistorySlotBytes={}, pairedHistorySlots={}, gpuMiB={}",
                 width, height, PathSourceRootData.BYTE_SIZE, BYTES_PER_RESERVOIR,
                 SHIFTED_RECEIVER_GUIDE_STRIDE, BYTES_PER_RESERVOIR,
                 PathSourceRootData.BYTE_SIZE, BRANCH_CANDIDATE_TAG_STRIDE,
                 rootBytes, branchRootBytes, mappedBytes,
                 receiverGuideBytes, receiverOwnershipBytes, receiverStorageBytes,
                 mappedBytes, rootBytes, winnerScratchBytes, SLOT_COUNT,
+                winnerScratchBytes, SLOT_COUNT,
                 String.format(Locale.ROOT, "%.2f",
                         (rootBytes + mappedBytes + receiverStorageBytes + mappedBytes + rootBytes
                                 + (branchRootBytes + mappedBytes) * SLOT_COUNT
-                                + winnerScratchBytes * SLOT_COUNT)
+                                + winnerScratchBytes * SLOT_COUNT * 2L)
                                 / (1024.0 * 1024.0)));
         shiftedSnapshotState.reset();
         guideScratchSnapshotState.reset();
         branchScratchState.reset();
         branchWinnerScratchState.reset();
+        pairedHistoryState.reset();
     }
 
     long shiftedDiagnosticCounterAddress() {
@@ -1208,12 +1272,25 @@ final class RtPathReservoirHistory {
                 ? 0L : branchWinnerScratch[frame.previousSlot()].deviceAddress;
     }
 
+    long pairedHistoryCurrentAddress(PairedHistoryFrame frame) {
+        return frame == null ? 0L : pairedHistorySlots[frame.writeSlot()].deviceAddress;
+    }
+
+    long pairedHistoryPreviousAddress(PairedHistoryFrame frame) {
+        return frame == null || !frame.previousAvailable()
+                ? 0L : pairedHistorySlots[frame.previousSlot()].deviceAddress;
+    }
+
     BranchScratchFrame beginBranchScratch(Frame frame, long frameIndex) {
         return branchScratchState.begin(frame, frameIndex);
     }
 
     BranchScratchFrame beginBranchWinnerScratch(Frame frame, long frameIndex) {
         return branchWinnerScratchState.begin(frame, frameIndex);
+    }
+
+    PairedHistoryFrame beginPairedHistory(Frame frame, long frameIndex) {
+        return pairedHistoryState.begin(frame, frameIndex);
     }
 
     void beginCurrentBranchScratch(VkCommandBuffer cmd, BranchScratchFrame frame) {
@@ -1262,6 +1339,20 @@ final class RtPathReservoirHistory {
         }
     }
 
+    void beginCurrentPairedHistory(VkCommandBuffer cmd, PairedHistoryFrame frame) {
+        if (frame == null) {
+            throw new IllegalArgumentException("paired history frame is required");
+        }
+        RtBuffer slot = pairedHistorySlots[frame.writeSlot()];
+        if (slot == null) {
+            throw new IllegalStateException("Paired path history used before allocation");
+        }
+        VK10.vkCmdFillBuffer(cmd, slot.handle, 0L, slot.size, 0);
+        try (var stack = org.lwjgl.system.MemoryStack.stackPush()) {
+            VulkanCommandEncoder.memoryBarrier(cmd, stack);
+        }
+    }
+
     void commitBranchScratch(BranchScratchFrame frame, Frame pathFrame, long frameIndex) {
         branchScratchState.commit(frame, frameIndex, pathFrame.generation());
     }
@@ -1273,6 +1364,11 @@ final class RtPathReservoirHistory {
     void commitDiagnosticBranchWinnerScratch(
             BranchScratchFrame frame, Frame pathFrame, long frameIndex) {
         branchWinnerScratchState.commit(frame, frameIndex, pathFrame.generation());
+    }
+
+    /** Publishes only the independently allocated complete-pair history lifecycle. */
+    void commitPairedHistory(PairedHistoryFrame frame, Frame pathFrame, long frameIndex) {
+        pairedHistoryState.commit(frame, frameIndex, pathFrame.generation());
     }
 
     boolean previousShiftedSnapshotAvailable(Frame frame, long frameIndex) {
@@ -2791,6 +2887,42 @@ final class RtPathReservoirHistory {
                     counters.get(GUIDE_BRANCH_WINNER_PERSISTENCE_ONE_SEGMENT_INDEX));
             long guideBranchWinnerPersistenceTwoSegment = Integer.toUnsignedLong(
                     counters.get(GUIDE_BRANCH_WINNER_PERSISTENCE_TWO_SEGMENT_INDEX));
+            long pairedHistoryValidateAttempted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_VALIDATE_ATTEMPTED_INDEX));
+            long pairedHistoryValidateEmpty = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_VALIDATE_EMPTY_INDEX));
+            long pairedHistoryValidateEmptyDirty = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_VALIDATE_EMPTY_DIRTY_INDEX));
+            long pairedHistoryValidatePolicyReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_VALIDATE_POLICY_REJECT_INDEX));
+            long pairedHistoryValidateLifecycleReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_VALIDATE_LIFECYCLE_REJECT_INDEX));
+            long pairedHistoryValidateTagMatch = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_VALIDATE_TAG_MATCH_INDEX));
+            long pairedHistoryValidateTagMismatch = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_VALIDATE_TAG_MISMATCH_INDEX));
+            long pairedHistoryValidateReservoirMatch = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_VALIDATE_RESERVOIR_MATCH_INDEX));
+            long pairedHistoryValidateReservoirMismatch = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_VALIDATE_RESERVOIR_MISMATCH_INDEX));
+            long pairedHistoryValidateRootMatch = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_VALIDATE_ROOT_MATCH_INDEX));
+            long pairedHistoryValidateRootMismatch = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_VALIDATE_ROOT_MISMATCH_INDEX));
+            long pairedHistoryValidateAccepted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_VALIDATE_ACCEPTED_INDEX));
+            long pairedHistoryValidateSelected = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_VALIDATE_SELECTED_INDEX));
+            long pairedHistoryValidateRetained = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_VALIDATE_RETAINED_INDEX));
+            long pairedHistoryValidateIdentitySource = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_VALIDATE_IDENTITY_SOURCE_INDEX));
+            long pairedHistoryValidateMappedSource = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_VALIDATE_MAPPED_SOURCE_INDEX));
+            long pairedHistoryValidateOneSegment = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_VALIDATE_ONE_SEGMENT_INDEX));
+            long pairedHistoryValidateTwoSegment = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_VALIDATE_TWO_SEGMENT_INDEX));
             long crossFrameReceiverReject = crossFrameReceiverSurfaceReject
                     + crossFrameReceiverSampleReject + crossFrameReceiverEdgeReject
                     + crossFrameReceiverTopologyReject + crossFrameReceiverDepthReject
@@ -5184,6 +5316,48 @@ final class RtPathReservoirHistory {
                     guideBranchWinnerPersistenceTwoSegment,
                     guideBranchWinnerPersistenceAccepted
                             - guideBranchWinnerPersistenceSegments);
+            long pairedHistoryValidateTerminal = pairedHistoryValidateEmpty
+                    + pairedHistoryValidateEmptyDirty + pairedHistoryValidatePolicyReject
+                    + pairedHistoryValidateLifecycleReject + pairedHistoryValidateTagMismatch
+                    + pairedHistoryValidateReservoirMismatch + pairedHistoryValidateRootMismatch
+                    + pairedHistoryValidateAccepted;
+            long pairedHistoryValidateBranch = pairedHistoryValidateSelected
+                    + pairedHistoryValidateRetained;
+            long pairedHistoryValidateSource = pairedHistoryValidateIdentitySource
+                    + pairedHistoryValidateMappedSource;
+            long pairedHistoryValidateSegments = pairedHistoryValidateOneSegment
+                    + pairedHistoryValidateTwoSegment;
+            CausticaMod.LOGGER.info(
+                    "RT path paired history storage: attempted={} empty={} "
+                            + "reject[emptyDirty={},policy={},lifecycle={},tag={},reservoir={},root={}] "
+                            + "match[tag={},reservoir={},root={}] accepted={} terminal={} delta={} "
+                            + "policyDelta={} branch[selected={},retained={},delta={}] "
+                            + "source[identity={},mapped={},delta={}] "
+                            + "segments[one={},two={},delta={}]",
+                    pairedHistoryValidateAttempted,
+                    pairedHistoryValidateEmpty,
+                    pairedHistoryValidateEmptyDirty,
+                    pairedHistoryValidatePolicyReject,
+                    pairedHistoryValidateLifecycleReject,
+                    pairedHistoryValidateTagMismatch,
+                    pairedHistoryValidateReservoirMismatch,
+                    pairedHistoryValidateRootMismatch,
+                    pairedHistoryValidateTagMatch,
+                    pairedHistoryValidateReservoirMatch,
+                    pairedHistoryValidateRootMatch,
+                    pairedHistoryValidateAccepted,
+                    pairedHistoryValidateTerminal,
+                    pairedHistoryValidateAttempted - pairedHistoryValidateTerminal,
+                    guideBranchWinnerPersistenceAccepted - pairedHistoryValidateAccepted,
+                    pairedHistoryValidateSelected,
+                    pairedHistoryValidateRetained,
+                    pairedHistoryValidateAccepted - pairedHistoryValidateBranch,
+                    pairedHistoryValidateIdentitySource,
+                    pairedHistoryValidateMappedSource,
+                    pairedHistoryValidateAccepted - pairedHistoryValidateSource,
+                    pairedHistoryValidateOneSegment,
+                    pairedHistoryValidateTwoSegment,
+                    pairedHistoryValidateAccepted - pairedHistoryValidateSegments);
             spatialDiagnosticViewPending = 0;
             return;
         }
@@ -5263,6 +5437,7 @@ final class RtPathReservoirHistory {
         guideScratchSnapshotState.reset();
         branchScratchState.reset();
         branchWinnerScratchState.reset();
+        pairedHistoryState.reset();
     }
 
     RtBuffer finalBuffer(Frame frame) {
@@ -5313,6 +5488,41 @@ final class RtPathReservoirHistory {
         return Math.multiplyExact(pixelCount,
                 (long) PathReservoirData.BYTE_SIZE + PathSourceRootData.BYTE_SIZE
                         + PATH_BRANCH_WINNER_TAG_STRIDE);
+    }
+
+    static boolean addressRangesDisjoint(long firstAddress, long firstBytes,
+                                         long secondAddress, long secondBytes) {
+        if (firstAddress == 0L || secondAddress == 0L || firstBytes <= 0L || secondBytes <= 0L) {
+            throw new IllegalArgumentException("Buffer addresses must be nonzero and sizes positive");
+        }
+        long firstEnd = firstAddress + firstBytes;
+        long secondEnd = secondAddress + secondBytes;
+        if (Long.compareUnsigned(firstEnd, firstAddress) <= 0
+                || Long.compareUnsigned(secondEnd, secondAddress) <= 0) {
+            throw new IllegalArgumentException("Buffer address range wraps unsigned 64-bit space");
+        }
+        return Long.compareUnsigned(firstEnd, secondAddress) <= 0
+                || Long.compareUnsigned(secondEnd, firstAddress) <= 0;
+    }
+
+    private void verifyPairedHistoryDoesNotAliasLegacyOrScratch(long slotBytes) {
+        for (int pairedSlot = 0; pairedSlot < SLOT_COUNT; pairedSlot++) {
+            RtBuffer paired = pairedHistorySlots[pairedSlot];
+            for (int slot = 0; slot < SLOT_COUNT; slot++) {
+                if (!addressRangesDisjoint(paired.deviceAddress, paired.size,
+                        slots[slot].deviceAddress, slots[slot].size)
+                        || !addressRangesDisjoint(paired.deviceAddress, paired.size,
+                                branchWinnerScratch[slot].deviceAddress,
+                                branchWinnerScratch[slot].size)) {
+                    throw new IllegalStateException(
+                            "Paired path history aliases legacy history or winner scratch");
+                }
+            }
+        }
+        if (!addressRangesDisjoint(pairedHistorySlots[0].deviceAddress, slotBytes,
+                pairedHistorySlots[1].deviceAddress, slotBytes)) {
+            throw new IllegalStateException("Paired path history slots alias each other");
+        }
     }
 
     static long branchWinnerTagOffsetBytes(int width, int height) {
@@ -5384,6 +5594,10 @@ final class RtPathReservoirHistory {
                 branchWinnerScratch[slot].destroy();
                 branchWinnerScratch[slot] = null;
             }
+            if (pairedHistorySlots[slot] != null) {
+                pairedHistorySlots[slot].destroy();
+                pairedHistorySlots[slot] = null;
+            }
         }
         for (int slot = 0; slot < SLOT_COUNT; slot++) {
             if (slots[slot] != null) {
@@ -5399,6 +5613,7 @@ final class RtPathReservoirHistory {
         guideScratchSnapshotState.reset();
         branchScratchState.reset();
         branchWinnerScratchState.reset();
+        pairedHistoryState.reset();
     }
 
     private static String percent(long value, long total) {

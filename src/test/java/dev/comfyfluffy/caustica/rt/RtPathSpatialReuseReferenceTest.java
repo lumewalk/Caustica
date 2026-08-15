@@ -2199,6 +2199,43 @@ final class RtPathSpatialReuseReferenceTest {
     }
 
     @Test
+    void pairedHistoryStorageRequiresCleanResetAndExactPairBits() {
+        var identity = RtPathSpatialReuseReference.MappingKind.IDENTITY;
+        var mapped = RtPathSpatialReuseReference.MappingKind.DIFFUSE_RECONNECTION;
+
+        assertEquals(RtPathSpatialReuseReference.PairedHistoryStorageOutcome.EMPTY,
+                RtPathSpatialReuseReference.pairedHistoryStorageOutcome(
+                        true, true, false, false, false, false, false, null));
+        assertEquals(RtPathSpatialReuseReference.PairedHistoryStorageOutcome.EMPTY_DIRTY_REJECT,
+                RtPathSpatialReuseReference.pairedHistoryStorageOutcome(
+                        true, false, false, false, false, false, false, null));
+        assertEquals(RtPathSpatialReuseReference.PairedHistoryStorageOutcome.POLICY_REJECT,
+                RtPathSpatialReuseReference.pairedHistoryStorageOutcome(
+                        false, true, false, false, false, false, false, null));
+        assertEquals(RtPathSpatialReuseReference.PairedHistoryStorageOutcome.LIFECYCLE_REJECT,
+                RtPathSpatialReuseReference.pairedHistoryStorageOutcome(
+                        false, true, true, false, false, false, false, null));
+        assertEquals(RtPathSpatialReuseReference.PairedHistoryStorageOutcome.TAG_MISMATCH,
+                RtPathSpatialReuseReference.pairedHistoryStorageOutcome(
+                        false, true, true, true, false, false, false, null));
+        assertEquals(RtPathSpatialReuseReference.PairedHistoryStorageOutcome.RESERVOIR_MISMATCH,
+                RtPathSpatialReuseReference.pairedHistoryStorageOutcome(
+                        false, true, true, true, true, false, false, null));
+        assertEquals(RtPathSpatialReuseReference.PairedHistoryStorageOutcome.ROOT_MISMATCH,
+                RtPathSpatialReuseReference.pairedHistoryStorageOutcome(
+                        false, true, true, true, true, true, false, null));
+        assertEquals(RtPathSpatialReuseReference.PairedHistoryStorageOutcome.SELECTED_ACCEPTED,
+                RtPathSpatialReuseReference.pairedHistoryStorageOutcome(
+                        false, true, true, true, true, true, true, mapped));
+        assertEquals(RtPathSpatialReuseReference.PairedHistoryStorageOutcome.RETAINED_ACCEPTED,
+                RtPathSpatialReuseReference.pairedHistoryStorageOutcome(
+                        false, true, true, true, true, true, true, identity));
+        assertThrows(IllegalArgumentException.class,
+                () -> RtPathSpatialReuseReference.pairedHistoryStorageOutcome(
+                        false, true, true, true, true, true, true, null));
+    }
+
+    @Test
     void pairedMomentsExposeCovarianceAndCorrelationWithoutBatchStorage() {
         var moments = new RtPathSpatialReuseReference.PairMoments();
         moments.add(1.0, 2.0);
@@ -3556,8 +3593,14 @@ final class RtPathSpatialReuseReferenceTest {
                 RtPathReservoirHistory.GUIDE_BRANCH_WINNER_PERSISTENCE_ACCEPTED_INDEX);
         assertEquals(771,
                 RtPathReservoirHistory.GUIDE_BRANCH_WINNER_PERSISTENCE_TWO_SEGMENT_INDEX);
-        assertEquals(772, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
-        assertEquals(772 * Integer.BYTES,
+        assertEquals(772,
+                RtPathReservoirHistory.GUIDE_PAIRED_HISTORY_VALIDATE_ATTEMPTED_INDEX);
+        assertEquals(783,
+                RtPathReservoirHistory.GUIDE_PAIRED_HISTORY_VALIDATE_ACCEPTED_INDEX);
+        assertEquals(789,
+                RtPathReservoirHistory.GUIDE_PAIRED_HISTORY_VALIDATE_TWO_SEGMENT_INDEX);
+        assertEquals(790, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
+        assertEquals(790 * Integer.BYTES,
                 RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_COUNTER_BYTES);
         assertEquals(32, RtPathReservoirHistory.SHIFTED_RECEIVER_GUIDE_STRIDE);
         assertEquals(8, RtPathReservoirHistory.BRANCH_RECEIVER_OWNERSHIP_STRIDE);

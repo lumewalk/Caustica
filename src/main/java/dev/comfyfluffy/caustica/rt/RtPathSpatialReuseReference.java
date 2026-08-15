@@ -1148,6 +1148,18 @@ final class RtPathSpatialReuseReference {
         RETAINED_ACCEPTED
     }
 
+    enum PairedHistoryStorageOutcome {
+        EMPTY,
+        EMPTY_DIRTY_REJECT,
+        POLICY_REJECT,
+        LIFECYCLE_REJECT,
+        TAG_MISMATCH,
+        RESERVOIR_MISMATCH,
+        ROOT_MISMATCH,
+        SELECTED_ACCEPTED,
+        RETAINED_ACCEPTED
+    }
+
     enum BranchCandidateRetentionOutcome {
         EMPTY,
         FUTURE_REJECT,
@@ -2907,6 +2919,45 @@ final class RtPathSpatialReuseReference {
         return outputMappingKind == MappingKind.DIFFUSE_RECONNECTION
                 ? BranchWinnerPersistenceOutcome.SELECTED_ACCEPTED
                 : BranchWinnerPersistenceOutcome.RETAINED_ACCEPTED;
+    }
+
+    /** Ordered CPU mirror for publishing the policy-approved pair into separate persistent storage. */
+    static PairedHistoryStorageOutcome pairedHistoryStorageOutcome(
+            boolean sourceEmpty,
+            boolean destinationClean,
+            boolean policyAccepted,
+            boolean lifecycleValid,
+            boolean tagBitsMatch,
+            boolean reservoirBitsMatch,
+            boolean rootBitsMatch,
+            MappingKind outputMappingKind) {
+        if (sourceEmpty) {
+            return destinationClean
+                    ? PairedHistoryStorageOutcome.EMPTY
+                    : PairedHistoryStorageOutcome.EMPTY_DIRTY_REJECT;
+        }
+        if (!policyAccepted) {
+            return PairedHistoryStorageOutcome.POLICY_REJECT;
+        }
+        if (!lifecycleValid) {
+            return PairedHistoryStorageOutcome.LIFECYCLE_REJECT;
+        }
+        if (!tagBitsMatch) {
+            return PairedHistoryStorageOutcome.TAG_MISMATCH;
+        }
+        if (!reservoirBitsMatch) {
+            return PairedHistoryStorageOutcome.RESERVOIR_MISMATCH;
+        }
+        if (!rootBitsMatch) {
+            return PairedHistoryStorageOutcome.ROOT_MISMATCH;
+        }
+        if (outputMappingKind == null) {
+            throw new IllegalArgumentException(
+                    "accepted paired history record requires an output mapping kind");
+        }
+        return outputMappingKind == MappingKind.DIFFUSE_RECONNECTION
+                ? PairedHistoryStorageOutcome.SELECTED_ACCEPTED
+                : PairedHistoryStorageOutcome.RETAINED_ACCEPTED;
     }
 
     /**
