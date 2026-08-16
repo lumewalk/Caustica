@@ -1011,7 +1011,7 @@ The reference run produced seven 569x320 readbacks: 1274560 attempts, 455409 exa
 (448175 selected + 7234 retained; 15979 identity-source + 439430 mapped-source), 817472 empty, 29
 receiver-surface rejects, 2 source-reprojection rejects and 1648 source-replay rejects. All lifecycle,
 receiver-reprojection, metadata, source-surface and accounting deltas were zero. Counter storage is
-now 833 uints / 3332 B; reflected `WorldPush` remains 704 B and replay ABI remains 10.
+now 845 uints / 3380 B; reflected `WorldPush` remains 704 B and replay ABI remains 10.
 
 The follow-on line `RT path paired history direct remap` covers only records accepted by that exact
 replay gate. It must satisfy `replayAccepted = eligible`, `eligible = rejects + ready`, and exact
@@ -1032,13 +1032,27 @@ source second hit. Required visibility accounting is `eligible = clear + tinted 
 invalid`; valid visibility must equal target eligibility. Required target accounting is `eligible =
 positive + zero + invalid`, while positive plus zero must match the selected/retained,
 identity/mapped and one/two-segment ready partitions. Occlusion is valid and normally maps to a zero
-target. Successful paired invocations return here, before GRIS weight, selection or any write.
+target.
 
 Eight 569x320 reference readbacks covered 413643 remap-ready records. Visibility was 413638 clear +
 0 tinted + 5 occluded + 0 invalid; target was 413638 positive + 5 zero + 0 invalid. The target-ready
 population split into 408936 selected + 4707 retained, 14836 identity-source + 398807 mapped-source,
 and 413643 one-segment + 0 two-segment records. Every gate and partition delta was zero, and no
 Vulkan/device/GPU/shader fault was logged.
+
+`RT path paired history direct weight` consumes only target-ready records. It recomputes the GRIS
+weight as `shiftedTarget * sourceFinalWeight * min(sourceM, 8) * directPssJacobian`; the direct
+Jacobian is the fresh value already in registers, and no stored mapping Jacobian participates.
+Required accounting is `targetReady = eligible`, `eligible = positive + zero + invalid`; positive
+plus zero must equal uncapped plus capped M and the selected/retained, identity/mapped and
+one/two-segment ready partitions. Successful paired invocations return before probability,
+Bernoulli selection or any write.
+
+Eight 569x320 weight readbacks covered 382182 target-ready records. All 382182 were finite positive
+weights, with zero zero/invalid outcomes. Source M was uncapped for 324356 and capped to 8 for 57826
+records. The ready population split into 374822 selected + 7360 retained, 21462 identity-source +
+360720 mapped-source, and 382182 one-segment + 0 two-segment records. Every gate and partition delta
+was zero, and no Vulkan/device/GPU/shader fault was logged.
 
 For a fresh runtime check, use debug view 20 and inspect `run/logs/latest.log`. Normal operation
 requires `RT bring-up OK`, Vulkan, the intended NVIDIA device, exact zero-delta counter partitions,

@@ -1746,6 +1746,39 @@ final class RtPathSpatialReuseReferenceTest {
     }
 
     @Test
+    void pairedHistoryDirectWeightUsesFreshJacobianAndCapsSourceCount() {
+        var target = RtPathSpatialReuseReference.PairedHistoryDirectTargetOutcome.class;
+        var weight = RtPathSpatialReuseReference.PairedHistoryDirectWeightOutcome.class;
+        var count = RtPathSpatialReuseReference.BranchDirectSourceCountOutcome.class;
+
+        assertEquals(new RtPathSpatialReuseReference.PairedHistoryDirectWeightAudit(
+                        weight.getEnumConstants()[0], count.getEnumConstants()[0], 0.0),
+                RtPathSpatialReuseReference.pairedHistoryDirectWeightAudit(
+                        target.getEnumConstants()[3], 0.5, 2.0, 4.0, 1.5));
+        assertEquals(new RtPathSpatialReuseReference.PairedHistoryDirectWeightAudit(
+                        weight.getEnumConstants()[3], count.getEnumConstants()[0], 0.0),
+                RtPathSpatialReuseReference.pairedHistoryDirectWeightAudit(
+                        target.getEnumConstants()[1], Double.NaN, 2.0, 4.0, 1.5));
+        assertEquals(new RtPathSpatialReuseReference.PairedHistoryDirectWeightAudit(
+                        weight.getEnumConstants()[2], count.getEnumConstants()[1], 0.0),
+                RtPathSpatialReuseReference.pairedHistoryDirectWeightAudit(
+                        target.getEnumConstants()[2], 0.0, 2.0, 4.0, 1.5));
+        assertEquals(new RtPathSpatialReuseReference.PairedHistoryDirectWeightAudit(
+                        weight.getEnumConstants()[1], count.getEnumConstants()[1], 6.0),
+                RtPathSpatialReuseReference.pairedHistoryDirectWeightAudit(
+                        target.getEnumConstants()[1], 0.5, 2.0, 4.0, 1.5));
+        assertEquals(new RtPathSpatialReuseReference.PairedHistoryDirectWeightAudit(
+                        weight.getEnumConstants()[1], count.getEnumConstants()[2], 12.0),
+                RtPathSpatialReuseReference.pairedHistoryDirectWeightAudit(
+                        target.getEnumConstants()[1], 0.5, 2.0, 12.0, 1.5));
+        assertEquals(new RtPathSpatialReuseReference.PairedHistoryDirectWeightAudit(
+                        weight.getEnumConstants()[3], count.getEnumConstants()[0], 0.0),
+                RtPathSpatialReuseReference.pairedHistoryDirectWeightAudit(
+                        target.getEnumConstants()[1], Double.MAX_VALUE,
+                        Double.MAX_VALUE, 8.0, Double.MAX_VALUE));
+    }
+
+    @Test
     void branchWinnerDirectRemapRequiresAcceptedReplayAndOrdersRejects() {
         var replay = RtPathSpatialReuseReference.BranchWinnerPreviousReplayOutcome.class;
         var remap = RtPathSpatialReuseReference.BranchWinnerDirectRemapOutcome.class;
@@ -3723,8 +3756,16 @@ final class RtPathSpatialReuseReferenceTest {
                 RtPathReservoirHistory.GUIDE_PAIRED_HISTORY_DIRECT_TARGET_SELECTED_READY_INDEX);
         assertEquals(832,
                 RtPathReservoirHistory.GUIDE_PAIRED_HISTORY_DIRECT_TARGET_TWO_SEGMENT_READY_INDEX);
-        assertEquals(833, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
-        assertEquals(833 * Integer.BYTES,
+        assertEquals(833,
+                RtPathReservoirHistory.GUIDE_PAIRED_HISTORY_DIRECT_WEIGHT_ELIGIBLE_INDEX);
+        assertEquals(838,
+                RtPathReservoirHistory.GUIDE_PAIRED_HISTORY_DIRECT_WEIGHT_COUNT_CAPPED_INDEX);
+        assertEquals(839,
+                RtPathReservoirHistory.GUIDE_PAIRED_HISTORY_DIRECT_WEIGHT_SELECTED_READY_INDEX);
+        assertEquals(844,
+                RtPathReservoirHistory.GUIDE_PAIRED_HISTORY_DIRECT_WEIGHT_TWO_SEGMENT_READY_INDEX);
+        assertEquals(845, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
+        assertEquals(845 * Integer.BYTES,
                 RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_COUNTER_BYTES);
         assertEquals(32, RtPathReservoirHistory.SHIFTED_RECEIVER_GUIDE_STRIDE);
         assertEquals(8, RtPathReservoirHistory.BRANCH_RECEIVER_OWNERSHIP_STRIDE);

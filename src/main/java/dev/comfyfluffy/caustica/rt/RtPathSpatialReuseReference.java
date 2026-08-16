@@ -1203,6 +1203,19 @@ final class RtPathSpatialReuseReference {
             PairedHistoryDirectTargetOutcome target) {
     }
 
+    enum PairedHistoryDirectWeightOutcome {
+        TARGET_REJECT,
+        POSITIVE,
+        ZERO,
+        INVALID
+    }
+
+    record PairedHistoryDirectWeightAudit(
+            PairedHistoryDirectWeightOutcome outcome,
+            BranchDirectSourceCountOutcome sourceCount,
+            double mergeWeight) {
+    }
+
     enum BranchCandidateRetentionOutcome {
         EMPTY,
         FUTURE_REJECT,
@@ -2314,6 +2327,49 @@ final class RtPathSpatialReuseReference {
                         ? PairedHistoryDirectTargetOutcome.POSITIVE
                         : PairedHistoryDirectTargetOutcome.ZERO;
         return new PairedHistoryDirectTargetAudit(visibility, target);
+    }
+
+    /**
+     * CPU mirror for the paired-history GRIS weight. The only Jacobian input is the freshly
+     * recomputed immutable-source-to-current-receiver value; previous mapping Jacobians are absent.
+     */
+    static PairedHistoryDirectWeightAudit pairedHistoryDirectWeightAudit(
+            PairedHistoryDirectTargetOutcome targetOutcome,
+            double shiftedTarget, double sourceFinalWeight,
+            double sourceEffectiveCount, double directPssJacobian) {
+        boolean targetReady = targetOutcome == PairedHistoryDirectTargetOutcome.POSITIVE
+                || targetOutcome == PairedHistoryDirectTargetOutcome.ZERO;
+        if (!targetReady) {
+            return new PairedHistoryDirectWeightAudit(
+                    PairedHistoryDirectWeightOutcome.TARGET_REJECT,
+                    BranchDirectSourceCountOutcome.NOT_ELIGIBLE, 0.0);
+        }
+        boolean termsValid = nonNegativeFinite(shiftedTarget)
+                && nonNegativeFinite(sourceFinalWeight)
+                && nonNegativeFinite(sourceEffectiveCount)
+                && positiveFinite(directPssJacobian);
+        if (!termsValid) {
+            return new PairedHistoryDirectWeightAudit(
+                    PairedHistoryDirectWeightOutcome.INVALID,
+                    BranchDirectSourceCountOutcome.NOT_ELIGIBLE, 0.0);
+        }
+        double sourceCount = Math.min(sourceEffectiveCount, MAX_SPATIAL_SOURCE_COUNT);
+        double mergeWeight = shiftedTarget * sourceFinalWeight;
+        mergeWeight *= sourceCount;
+        mergeWeight *= directPssJacobian;
+        if (!Double.isFinite(mergeWeight) || mergeWeight < 0.0) {
+            return new PairedHistoryDirectWeightAudit(
+                    PairedHistoryDirectWeightOutcome.INVALID,
+                    BranchDirectSourceCountOutcome.NOT_ELIGIBLE, 0.0);
+        }
+        return new PairedHistoryDirectWeightAudit(
+                mergeWeight > 0.0
+                        ? PairedHistoryDirectWeightOutcome.POSITIVE
+                        : PairedHistoryDirectWeightOutcome.ZERO,
+                sourceEffectiveCount > MAX_SPATIAL_SOURCE_COUNT
+                        ? BranchDirectSourceCountOutcome.CAPPED
+                        : BranchDirectSourceCountOutcome.UNCAPPED,
+                mergeWeight);
     }
 
     enum BranchWinnerDirectRemapOutcome {

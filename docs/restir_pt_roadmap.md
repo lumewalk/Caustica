@@ -1235,10 +1235,11 @@ gate now recomputes the immutable-source-to-current-receiver diffuse remap direc
 geometry, directional PDF, PSS Jacobian and throughput are derived from the current receiver and the
 original source edge without reading or composing the previous mapping Jacobian. The same production
 shadow query then traces from the exact current biased receiver origin to the replayed second hit and
-reconstructs visible shifted luminance. Occlusion is a valid zero target. Successful paired
-invocations return immediately after target reconstruction, before weights, selection or any storage
-write. Forty-three counters bring view-20 storage to 833 uints / 3332 B; `WorldPush`, allocation
-sizes, inline push constants and replay ABI 10 are unchanged.
+reconstructs visible shifted luminance. Occlusion is a valid zero target. A final counter-only stage
+computes `shiftedTarget * sourceFinalWeight * min(sourceM, 8) * directPssJacobian`; it never reads a
+stored mapping Jacobian. Successful paired invocations return immediately after this GRIS weight,
+before selection or any storage write. Fifty-five counters bring view-20 storage to 845 uints /
+3380 B; `WorldPush`, allocation sizes, inline push constants and replay ABI 10 are unchanged.
 
 Seven 569x320 Vulkan readbacks covered 1274560 adjacent-frame attempts: 455409 exact accepted
 (448175 selected plus 7234 retained; 15979 identity-source plus 439430 mapped-source), 817472 empty,
@@ -1256,6 +1257,14 @@ target, branch, source and segment partitions all balanced exactly. No Vulkan/de
 failure occurred. The next gate may compute the counter-only GRIS merge weight from this target,
 stored final weight, capped source M and the freshly recomputed direct Jacobian, but still may not
 select, write history or contribute estimator radiance.
+
+Eight GRIS-weight readbacks then processed 382182 target-ready records. All 382182 produced finite
+positive weights; zero and invalid outcomes were absent. Source M was uncapped for 324356 records and
+capped to 8 for 57826 records, so both runtime branches were exercised. Selected/retained,
+identity/mapped-source, one/two-segment, terminal, count and gate partitions all balanced exactly,
+with no Vulkan/device/GPU/shader failure. The next gate may classify the overflow-stable relative
+selection probability against the current candidate, but must return before Bernoulli selection,
+storage or estimator use.
 
 ## Delivery Phases
 

@@ -3035,7 +3035,7 @@ static void pathBranchWinnerStorageValidate() {
 // Reopens either the adjacent-frame diagnostic winner or the separately owned paired-history slot.
 // Both paths share strict receiver/source reprojection, immutable-root seeded replay, a freshly
 // recomputed direct remap, production visibility, and shifted-target reconstruction. The paired-
-// history audit returns immediately after the target, before weights, selection, scratch writes,
+// history audit returns immediately after the GRIS weight, before selection, scratch writes,
 // committed history, or estimator radiance become reachable.
 static void pathPreviousPairReplayValidate(bool pairedHistory) {
     bool winnerReplayPass = (pc.historyFlags
@@ -3477,12 +3477,29 @@ static void pathPreviousPairReplayValidate(bool pairedHistory) {
         InterlockedAdd(counters[replaySegments == 1u
                 ? PATH_GUIDE_PAIRED_HISTORY_DIRECT_TARGET_ONE_SEGMENT_READY
                 : PATH_GUIDE_PAIRED_HISTORY_DIRECT_TARGET_TWO_SEGMENT_READY], 1u);
-        return;
     }
 
     // GRIS weight uses only the freshly reconstructed target/Jacobian plus stored final weight and
     // capped source M. The previous winner's mapping Jacobian is never read or multiplied here.
-    InterlockedAdd(counters[PATH_GUIDE_BRANCH_WINNER_DIRECT_WEIGHT_ELIGIBLE], 1u);
+    uint directWeightEligibleCounter = pairedHistory
+            ? PATH_GUIDE_PAIRED_HISTORY_DIRECT_WEIGHT_ELIGIBLE
+            : PATH_GUIDE_BRANCH_WINNER_DIRECT_WEIGHT_ELIGIBLE;
+    uint directWeightPositiveCounter = pairedHistory
+            ? PATH_GUIDE_PAIRED_HISTORY_DIRECT_WEIGHT_POSITIVE
+            : PATH_GUIDE_BRANCH_WINNER_DIRECT_WEIGHT_POSITIVE;
+    uint directWeightZeroCounter = pairedHistory
+            ? PATH_GUIDE_PAIRED_HISTORY_DIRECT_WEIGHT_ZERO
+            : PATH_GUIDE_BRANCH_WINNER_DIRECT_WEIGHT_ZERO;
+    uint directWeightInvalidCounter = pairedHistory
+            ? PATH_GUIDE_PAIRED_HISTORY_DIRECT_WEIGHT_INVALID
+            : PATH_GUIDE_BRANCH_WINNER_DIRECT_WEIGHT_INVALID;
+    uint directWeightCountUncappedCounter = pairedHistory
+            ? PATH_GUIDE_PAIRED_HISTORY_DIRECT_WEIGHT_COUNT_UNCAPPED
+            : PATH_GUIDE_BRANCH_WINNER_DIRECT_WEIGHT_COUNT_UNCAPPED;
+    uint directWeightCountCappedCounter = pairedHistory
+            ? PATH_GUIDE_PAIRED_HISTORY_DIRECT_WEIGHT_COUNT_CAPPED
+            : PATH_GUIDE_BRANCH_WINNER_DIRECT_WEIGHT_COUNT_CAPPED;
+    InterlockedAdd(counters[directWeightEligibleCounter], 1u);
     float sourceFinalWeight = stored.weights.z;
     float sourceEffectiveCount = stored.weights.y;
     float sourceCount = min(sourceEffectiveCount, PATH_TEMPORAL_MAX_SOURCE_COUNT);
@@ -3497,15 +3514,27 @@ static void pathPreviousPairReplayValidate(bool pairedHistory) {
     bool weightValid = weightTermsValid
             && isfinite(mergeWeight) && mergeWeight >= 0.0;
     InterlockedAdd(counters[!weightValid
-            ? PATH_GUIDE_BRANCH_WINNER_DIRECT_WEIGHT_INVALID
+            ? directWeightInvalidCounter
             : mergeWeight > 0.0
-                    ? PATH_GUIDE_BRANCH_WINNER_DIRECT_WEIGHT_POSITIVE
-                    : PATH_GUIDE_BRANCH_WINNER_DIRECT_WEIGHT_ZERO], 1u);
+                    ? directWeightPositiveCounter
+                    : directWeightZeroCounter], 1u);
     if (!weightValid) return;
 
     InterlockedAdd(counters[sourceEffectiveCount > PATH_TEMPORAL_MAX_SOURCE_COUNT
-            ? PATH_GUIDE_BRANCH_WINNER_DIRECT_WEIGHT_COUNT_CAPPED
-            : PATH_GUIDE_BRANCH_WINNER_DIRECT_WEIGHT_COUNT_UNCAPPED], 1u);
+            ? directWeightCountCappedCounter
+            : directWeightCountUncappedCounter], 1u);
+    if (pairedHistory) {
+        InterlockedAdd(counters[outputMappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION
+                ? PATH_GUIDE_PAIRED_HISTORY_DIRECT_WEIGHT_SELECTED_READY
+                : PATH_GUIDE_PAIRED_HISTORY_DIRECT_WEIGHT_RETAINED_READY], 1u);
+        InterlockedAdd(counters[sourceMappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION
+                ? PATH_GUIDE_PAIRED_HISTORY_DIRECT_WEIGHT_MAPPED_SOURCE_READY
+                : PATH_GUIDE_PAIRED_HISTORY_DIRECT_WEIGHT_IDENTITY_SOURCE_READY], 1u);
+        InterlockedAdd(counters[replaySegments == 1u
+                ? PATH_GUIDE_PAIRED_HISTORY_DIRECT_WEIGHT_ONE_SEGMENT_READY
+                : PATH_GUIDE_PAIRED_HISTORY_DIRECT_WEIGHT_TWO_SEGMENT_READY], 1u);
+        return;
+    }
     InterlockedAdd(counters[outputMappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION
             ? PATH_GUIDE_BRANCH_WINNER_DIRECT_SELECTED_READY
             : PATH_GUIDE_BRANCH_WINNER_DIRECT_RETAINED_READY], 1u);

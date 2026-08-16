@@ -878,7 +878,19 @@ final class RtPathReservoirHistory {
     static final int GUIDE_PAIRED_HISTORY_DIRECT_TARGET_MAPPED_SOURCE_READY_INDEX = 830;
     static final int GUIDE_PAIRED_HISTORY_DIRECT_TARGET_ONE_SEGMENT_READY_INDEX = 831;
     static final int GUIDE_PAIRED_HISTORY_DIRECT_TARGET_TWO_SEGMENT_READY_INDEX = 832;
-    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 833;
+    static final int GUIDE_PAIRED_HISTORY_DIRECT_WEIGHT_ELIGIBLE_INDEX = 833;
+    static final int GUIDE_PAIRED_HISTORY_DIRECT_WEIGHT_POSITIVE_INDEX = 834;
+    static final int GUIDE_PAIRED_HISTORY_DIRECT_WEIGHT_ZERO_INDEX = 835;
+    static final int GUIDE_PAIRED_HISTORY_DIRECT_WEIGHT_INVALID_INDEX = 836;
+    static final int GUIDE_PAIRED_HISTORY_DIRECT_WEIGHT_COUNT_UNCAPPED_INDEX = 837;
+    static final int GUIDE_PAIRED_HISTORY_DIRECT_WEIGHT_COUNT_CAPPED_INDEX = 838;
+    static final int GUIDE_PAIRED_HISTORY_DIRECT_WEIGHT_SELECTED_READY_INDEX = 839;
+    static final int GUIDE_PAIRED_HISTORY_DIRECT_WEIGHT_RETAINED_READY_INDEX = 840;
+    static final int GUIDE_PAIRED_HISTORY_DIRECT_WEIGHT_IDENTITY_SOURCE_READY_INDEX = 841;
+    static final int GUIDE_PAIRED_HISTORY_DIRECT_WEIGHT_MAPPED_SOURCE_READY_INDEX = 842;
+    static final int GUIDE_PAIRED_HISTORY_DIRECT_WEIGHT_ONE_SEGMENT_READY_INDEX = 843;
+    static final int GUIDE_PAIRED_HISTORY_DIRECT_WEIGHT_TWO_SEGMENT_READY_INDEX = 844;
+    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 845;
     static final int SHIFTED_RECEIVER_GUIDE_STRIDE = 8 * Float.BYTES;
     static final int BRANCH_RECEIVER_OWNERSHIP_STRIDE = 2 * Integer.BYTES;
     static final int BRANCH_CANDIDATE_TAG_STRIDE = 2 * Integer.BYTES;
@@ -3058,6 +3070,31 @@ final class RtPathReservoirHistory {
                     counters.get(GUIDE_PAIRED_HISTORY_DIRECT_TARGET_ONE_SEGMENT_READY_INDEX));
             long pairedHistoryDirectTargetTwoSegmentReady = Integer.toUnsignedLong(
                     counters.get(GUIDE_PAIRED_HISTORY_DIRECT_TARGET_TWO_SEGMENT_READY_INDEX));
+            long pairedHistoryDirectWeightEligible = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_DIRECT_WEIGHT_ELIGIBLE_INDEX));
+            long pairedHistoryDirectWeightPositive = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_DIRECT_WEIGHT_POSITIVE_INDEX));
+            long pairedHistoryDirectWeightZero = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_DIRECT_WEIGHT_ZERO_INDEX));
+            long pairedHistoryDirectWeightInvalid = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_DIRECT_WEIGHT_INVALID_INDEX));
+            long pairedHistoryDirectWeightCountUncapped = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_DIRECT_WEIGHT_COUNT_UNCAPPED_INDEX));
+            long pairedHistoryDirectWeightCountCapped = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_DIRECT_WEIGHT_COUNT_CAPPED_INDEX));
+            long pairedHistoryDirectWeightSelectedReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_DIRECT_WEIGHT_SELECTED_READY_INDEX));
+            long pairedHistoryDirectWeightRetainedReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_DIRECT_WEIGHT_RETAINED_READY_INDEX));
+            long pairedHistoryDirectWeightIdentitySourceReady = Integer.toUnsignedLong(
+                    counters.get(
+                            GUIDE_PAIRED_HISTORY_DIRECT_WEIGHT_IDENTITY_SOURCE_READY_INDEX));
+            long pairedHistoryDirectWeightMappedSourceReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_DIRECT_WEIGHT_MAPPED_SOURCE_READY_INDEX));
+            long pairedHistoryDirectWeightOneSegmentReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_DIRECT_WEIGHT_ONE_SEGMENT_READY_INDEX));
+            long pairedHistoryDirectWeightTwoSegmentReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_DIRECT_WEIGHT_TWO_SEGMENT_READY_INDEX));
             long crossFrameReceiverReject = crossFrameReceiverSurfaceReject
                     + crossFrameReceiverSampleReject + crossFrameReceiverEdgeReject
                     + crossFrameReceiverTopologyReject + crossFrameReceiverDepthReject
@@ -5630,6 +5667,46 @@ final class RtPathReservoirHistory {
                     pairedHistoryDirectTargetOneSegmentReady,
                     pairedHistoryDirectTargetTwoSegmentReady,
                     pairedHistoryDirectTargetReady - pairedHistoryDirectTargetSegments);
+            long pairedHistoryDirectWeightTerminal = pairedHistoryDirectWeightPositive
+                    + pairedHistoryDirectWeightZero + pairedHistoryDirectWeightInvalid;
+            long pairedHistoryDirectWeightReady = pairedHistoryDirectWeightPositive
+                    + pairedHistoryDirectWeightZero;
+            long pairedHistoryDirectWeightCount = pairedHistoryDirectWeightCountUncapped
+                    + pairedHistoryDirectWeightCountCapped;
+            long pairedHistoryDirectWeightBranch = pairedHistoryDirectWeightSelectedReady
+                    + pairedHistoryDirectWeightRetainedReady;
+            long pairedHistoryDirectWeightSource = pairedHistoryDirectWeightIdentitySourceReady
+                    + pairedHistoryDirectWeightMappedSourceReady;
+            long pairedHistoryDirectWeightSegments = pairedHistoryDirectWeightOneSegmentReady
+                    + pairedHistoryDirectWeightTwoSegmentReady;
+            CausticaMod.LOGGER.info(
+                    "RT path paired history direct weight: targetReady={} eligible={} "
+                            + "positive={} zero={} invalid={} ready={} terminal={} delta={} "
+                            + "gateDelta={} count[uncapped={},capped={},delta={}] "
+                            + "branch[selected={},retained={},delta={}] "
+                            + "source[identity={},mapped={},delta={}] "
+                            + "segments[one={},two={},delta={}]",
+                    pairedHistoryDirectTargetReady,
+                    pairedHistoryDirectWeightEligible,
+                    pairedHistoryDirectWeightPositive,
+                    pairedHistoryDirectWeightZero,
+                    pairedHistoryDirectWeightInvalid,
+                    pairedHistoryDirectWeightReady,
+                    pairedHistoryDirectWeightTerminal,
+                    pairedHistoryDirectWeightEligible - pairedHistoryDirectWeightTerminal,
+                    pairedHistoryDirectTargetReady - pairedHistoryDirectWeightEligible,
+                    pairedHistoryDirectWeightCountUncapped,
+                    pairedHistoryDirectWeightCountCapped,
+                    pairedHistoryDirectWeightReady - pairedHistoryDirectWeightCount,
+                    pairedHistoryDirectWeightSelectedReady,
+                    pairedHistoryDirectWeightRetainedReady,
+                    pairedHistoryDirectWeightReady - pairedHistoryDirectWeightBranch,
+                    pairedHistoryDirectWeightIdentitySourceReady,
+                    pairedHistoryDirectWeightMappedSourceReady,
+                    pairedHistoryDirectWeightReady - pairedHistoryDirectWeightSource,
+                    pairedHistoryDirectWeightOneSegmentReady,
+                    pairedHistoryDirectWeightTwoSegmentReady,
+                    pairedHistoryDirectWeightReady - pairedHistoryDirectWeightSegments);
             spatialDiagnosticViewPending = 0;
             return;
         }
