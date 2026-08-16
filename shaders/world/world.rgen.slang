@@ -3033,10 +3033,10 @@ static void pathBranchWinnerStorageValidate() {
 }
 
 // Reopens either the adjacent-frame diagnostic winner or the separately owned paired-history slot.
-// Both paths share strict receiver/source reprojection, immutable-root seeded replay, and a freshly
-// recomputed direct remap. The paired-history audit returns immediately after the remap, before
-// visibility, weights, selection, scratch writes, committed history, or estimator radiance become
-// reachable.
+// Both paths share strict receiver/source reprojection, immutable-root seeded replay, a freshly
+// recomputed direct remap, production visibility, and shifted-target reconstruction. The paired-
+// history audit returns immediately after the target, before weights, selection, scratch writes,
+// committed history, or estimator radiance become reachable.
 static void pathPreviousPairReplayValidate(bool pairedHistory) {
     bool winnerReplayPass = (pc.historyFlags
             & PATH_GUIDE_BRANCH_WINNER_PREVIOUS_REPLAY_PASS_FLAG) != 0u;
@@ -3402,17 +3402,42 @@ static void pathPreviousPairReplayValidate(bool pairedHistory) {
         InterlockedAdd(counters[replaySegments == 1u
                 ? PATH_GUIDE_PAIRED_HISTORY_DIRECT_REMAP_ONE_SEGMENT_READY
                 : PATH_GUIDE_PAIRED_HISTORY_DIRECT_REMAP_TWO_SEGMENT_READY], 1u);
-        return;
     }
 
     // Use the production shadow query from the exact current biased receiver origin. Occlusion is
     // a valid zero-target result. Arithmetic failure terminates before target/weight admission.
-    InterlockedAdd(counters[PATH_GUIDE_BRANCH_WINNER_DIRECT_VISIBILITY_ELIGIBLE], 1u);
+    uint directVisibilityEligibleCounter = pairedHistory
+            ? PATH_GUIDE_PAIRED_HISTORY_DIRECT_VISIBILITY_ELIGIBLE
+            : PATH_GUIDE_BRANCH_WINNER_DIRECT_VISIBILITY_ELIGIBLE;
+    uint directVisibilityClearCounter = pairedHistory
+            ? PATH_GUIDE_PAIRED_HISTORY_DIRECT_VISIBILITY_CLEAR
+            : PATH_GUIDE_BRANCH_WINNER_DIRECT_VISIBILITY_CLEAR;
+    uint directVisibilityTintedCounter = pairedHistory
+            ? PATH_GUIDE_PAIRED_HISTORY_DIRECT_VISIBILITY_TINTED
+            : PATH_GUIDE_BRANCH_WINNER_DIRECT_VISIBILITY_TINTED;
+    uint directVisibilityOccludedCounter = pairedHistory
+            ? PATH_GUIDE_PAIRED_HISTORY_DIRECT_VISIBILITY_OCCLUDED
+            : PATH_GUIDE_BRANCH_WINNER_DIRECT_VISIBILITY_OCCLUDED;
+    uint directVisibilityInvalidCounter = pairedHistory
+            ? PATH_GUIDE_PAIRED_HISTORY_DIRECT_VISIBILITY_INVALID
+            : PATH_GUIDE_BRANCH_WINNER_DIRECT_VISIBILITY_INVALID;
+    uint directTargetEligibleCounter = pairedHistory
+            ? PATH_GUIDE_PAIRED_HISTORY_DIRECT_TARGET_ELIGIBLE
+            : PATH_GUIDE_BRANCH_WINNER_DIRECT_TARGET_ELIGIBLE;
+    uint directTargetPositiveCounter = pairedHistory
+            ? PATH_GUIDE_PAIRED_HISTORY_DIRECT_TARGET_POSITIVE
+            : PATH_GUIDE_BRANCH_WINNER_DIRECT_TARGET_POSITIVE;
+    uint directTargetZeroCounter = pairedHistory
+            ? PATH_GUIDE_PAIRED_HISTORY_DIRECT_TARGET_ZERO
+            : PATH_GUIDE_BRANCH_WINNER_DIRECT_TARGET_ZERO;
+    uint directTargetInvalidCounter = pairedHistory
+            ? PATH_GUIDE_PAIRED_HISTORY_DIRECT_TARGET_INVALID
+            : PATH_GUIDE_BRANCH_WINNER_DIRECT_TARGET_INVALID;
+    InterlockedAdd(counters[directVisibilityEligibleCounter], 1u);
     float3 toShared = sharedVertex - receiverRayOrigin.xyz;
     float visibilityDistance = length(toShared);
     if (!isfinite(visibilityDistance) || visibilityDistance <= 1.0e-4) {
-        InterlockedAdd(counters[
-                PATH_GUIDE_BRANCH_WINNER_DIRECT_VISIBILITY_INVALID], 1u);
+        InterlockedAdd(counters[directVisibilityInvalidCounter], 1u);
         return;
     }
     VisibilityResult directVisibility = visibility(receiverRayOrigin.xyz,
@@ -3422,26 +3447,38 @@ static void pathPreviousPairReplayValidate(bool pairedHistory) {
             && all(transmittance >= float3(0.0))
             && all(transmittance <= float3(1.0));
     InterlockedAdd(counters[!visibilityValid
-            ? PATH_GUIDE_BRANCH_WINNER_DIRECT_VISIBILITY_INVALID
+            ? directVisibilityInvalidCounter
             : max(transmittance.x, max(transmittance.y, transmittance.z)) <= 0.0
-                    ? PATH_GUIDE_BRANCH_WINNER_DIRECT_VISIBILITY_OCCLUDED
+                    ? directVisibilityOccludedCounter
                     : all(transmittance == float3(1.0))
-                            ? PATH_GUIDE_BRANCH_WINNER_DIRECT_VISIBILITY_CLEAR
-                            : PATH_GUIDE_BRANCH_WINNER_DIRECT_VISIBILITY_TINTED], 1u);
+                            ? directVisibilityClearCounter
+                            : directVisibilityTintedCounter], 1u);
     if (!visibilityValid) return;
 
-    InterlockedAdd(counters[PATH_GUIDE_BRANCH_WINNER_DIRECT_TARGET_ELIGIBLE], 1u);
+    InterlockedAdd(counters[directTargetEligibleCounter], 1u);
     float3 visibleRadiance = shiftedRadiance * transmittance;
     float shiftedTarget = pathLuminance(visibleRadiance);
     bool targetValid = all(isfinite(visibleRadiance))
             && all(visibleRadiance >= float3(0.0))
             && isfinite(shiftedTarget) && shiftedTarget >= 0.0;
     InterlockedAdd(counters[!targetValid
-            ? PATH_GUIDE_BRANCH_WINNER_DIRECT_TARGET_INVALID
+            ? directTargetInvalidCounter
             : shiftedTarget > 0.0
-                    ? PATH_GUIDE_BRANCH_WINNER_DIRECT_TARGET_POSITIVE
-                    : PATH_GUIDE_BRANCH_WINNER_DIRECT_TARGET_ZERO], 1u);
+                    ? directTargetPositiveCounter
+                    : directTargetZeroCounter], 1u);
     if (!targetValid) return;
+    if (pairedHistory) {
+        InterlockedAdd(counters[outputMappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION
+                ? PATH_GUIDE_PAIRED_HISTORY_DIRECT_TARGET_SELECTED_READY
+                : PATH_GUIDE_PAIRED_HISTORY_DIRECT_TARGET_RETAINED_READY], 1u);
+        InterlockedAdd(counters[sourceMappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION
+                ? PATH_GUIDE_PAIRED_HISTORY_DIRECT_TARGET_MAPPED_SOURCE_READY
+                : PATH_GUIDE_PAIRED_HISTORY_DIRECT_TARGET_IDENTITY_SOURCE_READY], 1u);
+        InterlockedAdd(counters[replaySegments == 1u
+                ? PATH_GUIDE_PAIRED_HISTORY_DIRECT_TARGET_ONE_SEGMENT_READY
+                : PATH_GUIDE_PAIRED_HISTORY_DIRECT_TARGET_TWO_SEGMENT_READY], 1u);
+        return;
+    }
 
     // GRIS weight uses only the freshly reconstructed target/Jacobian plus stored final weight and
     // capped source M. The previous winner's mapping Jacobian is never read or multiplied here.

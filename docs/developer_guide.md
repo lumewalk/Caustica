@@ -1011,21 +1011,34 @@ The reference run produced seven 569x320 readbacks: 1274560 attempts, 455409 exa
 (448175 selected + 7234 retained; 15979 identity-source + 439430 mapped-source), 817472 empty, 29
 receiver-surface rejects, 2 source-reprojection rejects and 1648 source-replay rejects. All lifecycle,
 receiver-reprojection, metadata, source-surface and accounting deltas were zero. Counter storage is
-now 818 uints / 3272 B; reflected `WorldPush` remains 704 B and replay ABI remains 10.
+now 833 uints / 3332 B; reflected `WorldPush` remains 704 B and replay ABI remains 10.
 
 The follow-on line `RT path paired history direct remap` covers only records accepted by that exact
 replay gate. It must satisfy `replayAccepted = eligible`, `eligible = rejects + ready`, and exact
 ready partitions for selected/retained, identity/mapped source and one/two segments. The shader
 recomputes current receiver geometry, receiver directional PDF, the direct PSS Jacobian and
 throughput ratio from the immutable source edge; it never reads or composes the previous mapping
-Jacobian. Unsupported edge kinds reject explicitly. A successful invocation returns before
-visibility, target reconstruction, weights, selection or any write.
+Jacobian. Unsupported edge kinds reject explicitly.
 
 The direct-remap reference run produced twenty-four 569x320 readbacks: 424752 replay-approved and
 eligible records, 423420 ready and 1332 unsupported-edge rejects. Guide, geometry, PDF and throughput
 rejects were zero. The ready set split into 419461 selected + 3959 retained, 18025 identity-source
 and 405395 mapped-source, and 423420 one-segment + 0 two-segment records. Every terminal, gate and
 partition delta was zero, and no Vulkan/device/GPU/shader fault was logged.
+
+The next line, `RT path paired history direct target`, starts only from remap-ready records. The
+production shadow query uses the exact current biased receiver origin and the replayed immutable
+source second hit. Required visibility accounting is `eligible = clear + tinted + occluded +
+invalid`; valid visibility must equal target eligibility. Required target accounting is `eligible =
+positive + zero + invalid`, while positive plus zero must match the selected/retained,
+identity/mapped and one/two-segment ready partitions. Occlusion is valid and normally maps to a zero
+target. Successful paired invocations return here, before GRIS weight, selection or any write.
+
+Eight 569x320 reference readbacks covered 413643 remap-ready records. Visibility was 413638 clear +
+0 tinted + 5 occluded + 0 invalid; target was 413638 positive + 5 zero + 0 invalid. The target-ready
+population split into 408936 selected + 4707 retained, 14836 identity-source + 398807 mapped-source,
+and 413643 one-segment + 0 two-segment records. Every gate and partition delta was zero, and no
+Vulkan/device/GPU/shader fault was logged.
 
 For a fresh runtime check, use debug view 20 and inspect `run/logs/latest.log`. Normal operation
 requires `RT bring-up OK`, Vulkan, the intended NVIDIA device, exact zero-delta counter partitions,

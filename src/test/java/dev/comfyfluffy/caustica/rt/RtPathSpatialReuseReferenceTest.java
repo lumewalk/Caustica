@@ -1718,6 +1718,34 @@ final class RtPathSpatialReuseReferenceTest {
     }
 
     @Test
+    void pairedHistoryDirectTargetOrdersVisibilityAndTargetOutcomes() {
+        var remap = RtPathSpatialReuseReference.PairedHistoryDirectRemapOutcome.class;
+        var visibility = RtPathSpatialReuseReference.PairedHistoryDirectVisibilityOutcome.class;
+        var target = RtPathSpatialReuseReference.PairedHistoryDirectTargetOutcome.class;
+
+        assertEquals(new RtPathSpatialReuseReference.PairedHistoryDirectTargetAudit(
+                        visibility.getEnumConstants()[0], target.getEnumConstants()[0]),
+                RtPathSpatialReuseReference.pairedHistoryDirectTargetAudit(
+                        remap.getEnumConstants()[2], true, true, true, true, true));
+        assertEquals(new RtPathSpatialReuseReference.PairedHistoryDirectTargetAudit(
+                        visibility.getEnumConstants()[4], target.getEnumConstants()[0]),
+                RtPathSpatialReuseReference.pairedHistoryDirectTargetAudit(
+                        remap.getEnumConstants()[6], false, true, true, true, true));
+        assertEquals(new RtPathSpatialReuseReference.PairedHistoryDirectTargetAudit(
+                        visibility.getEnumConstants()[3], target.getEnumConstants()[2]),
+                RtPathSpatialReuseReference.pairedHistoryDirectTargetAudit(
+                        remap.getEnumConstants()[6], true, false, false, true, false));
+        assertEquals(new RtPathSpatialReuseReference.PairedHistoryDirectTargetAudit(
+                        visibility.getEnumConstants()[1], target.getEnumConstants()[1]),
+                RtPathSpatialReuseReference.pairedHistoryDirectTargetAudit(
+                        remap.getEnumConstants()[6], true, true, true, true, true));
+        assertEquals(new RtPathSpatialReuseReference.PairedHistoryDirectTargetAudit(
+                        visibility.getEnumConstants()[2], target.getEnumConstants()[3]),
+                RtPathSpatialReuseReference.pairedHistoryDirectTargetAudit(
+                        remap.getEnumConstants()[6], true, true, false, false, false));
+    }
+
+    @Test
     void branchWinnerDirectRemapRequiresAcceptedReplayAndOrdersRejects() {
         var replay = RtPathSpatialReuseReference.BranchWinnerPreviousReplayOutcome.class;
         var remap = RtPathSpatialReuseReference.BranchWinnerDirectRemapOutcome.class;
@@ -3687,8 +3715,16 @@ final class RtPathSpatialReuseReferenceTest {
                 RtPathReservoirHistory.GUIDE_PAIRED_HISTORY_DIRECT_REMAP_READY_INDEX);
         assertEquals(817,
                 RtPathReservoirHistory.GUIDE_PAIRED_HISTORY_DIRECT_REMAP_TWO_SEGMENT_READY_INDEX);
-        assertEquals(818, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
-        assertEquals(818 * Integer.BYTES,
+        assertEquals(818,
+                RtPathReservoirHistory.GUIDE_PAIRED_HISTORY_DIRECT_VISIBILITY_ELIGIBLE_INDEX);
+        assertEquals(826,
+                RtPathReservoirHistory.GUIDE_PAIRED_HISTORY_DIRECT_TARGET_INVALID_INDEX);
+        assertEquals(827,
+                RtPathReservoirHistory.GUIDE_PAIRED_HISTORY_DIRECT_TARGET_SELECTED_READY_INDEX);
+        assertEquals(832,
+                RtPathReservoirHistory.GUIDE_PAIRED_HISTORY_DIRECT_TARGET_TWO_SEGMENT_READY_INDEX);
+        assertEquals(833, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
+        assertEquals(833 * Integer.BYTES,
                 RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_COUNTER_BYTES);
         assertEquals(32, RtPathReservoirHistory.SHIFTED_RECEIVER_GUIDE_STRIDE);
         assertEquals(8, RtPathReservoirHistory.BRANCH_RECEIVER_OWNERSHIP_STRIDE);

@@ -863,7 +863,22 @@ final class RtPathReservoirHistory {
     static final int GUIDE_PAIRED_HISTORY_DIRECT_REMAP_MAPPED_SOURCE_READY_INDEX = 815;
     static final int GUIDE_PAIRED_HISTORY_DIRECT_REMAP_ONE_SEGMENT_READY_INDEX = 816;
     static final int GUIDE_PAIRED_HISTORY_DIRECT_REMAP_TWO_SEGMENT_READY_INDEX = 817;
-    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 818;
+    static final int GUIDE_PAIRED_HISTORY_DIRECT_VISIBILITY_ELIGIBLE_INDEX = 818;
+    static final int GUIDE_PAIRED_HISTORY_DIRECT_VISIBILITY_CLEAR_INDEX = 819;
+    static final int GUIDE_PAIRED_HISTORY_DIRECT_VISIBILITY_TINTED_INDEX = 820;
+    static final int GUIDE_PAIRED_HISTORY_DIRECT_VISIBILITY_OCCLUDED_INDEX = 821;
+    static final int GUIDE_PAIRED_HISTORY_DIRECT_VISIBILITY_INVALID_INDEX = 822;
+    static final int GUIDE_PAIRED_HISTORY_DIRECT_TARGET_ELIGIBLE_INDEX = 823;
+    static final int GUIDE_PAIRED_HISTORY_DIRECT_TARGET_POSITIVE_INDEX = 824;
+    static final int GUIDE_PAIRED_HISTORY_DIRECT_TARGET_ZERO_INDEX = 825;
+    static final int GUIDE_PAIRED_HISTORY_DIRECT_TARGET_INVALID_INDEX = 826;
+    static final int GUIDE_PAIRED_HISTORY_DIRECT_TARGET_SELECTED_READY_INDEX = 827;
+    static final int GUIDE_PAIRED_HISTORY_DIRECT_TARGET_RETAINED_READY_INDEX = 828;
+    static final int GUIDE_PAIRED_HISTORY_DIRECT_TARGET_IDENTITY_SOURCE_READY_INDEX = 829;
+    static final int GUIDE_PAIRED_HISTORY_DIRECT_TARGET_MAPPED_SOURCE_READY_INDEX = 830;
+    static final int GUIDE_PAIRED_HISTORY_DIRECT_TARGET_ONE_SEGMENT_READY_INDEX = 831;
+    static final int GUIDE_PAIRED_HISTORY_DIRECT_TARGET_TWO_SEGMENT_READY_INDEX = 832;
+    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 833;
     static final int SHIFTED_RECEIVER_GUIDE_STRIDE = 8 * Float.BYTES;
     static final int BRANCH_RECEIVER_OWNERSHIP_STRIDE = 2 * Integer.BYTES;
     static final int BRANCH_CANDIDATE_TAG_STRIDE = 2 * Integer.BYTES;
@@ -3012,6 +3027,37 @@ final class RtPathReservoirHistory {
                     counters.get(GUIDE_PAIRED_HISTORY_DIRECT_REMAP_ONE_SEGMENT_READY_INDEX));
             long pairedHistoryDirectRemapTwoSegmentReady = Integer.toUnsignedLong(
                     counters.get(GUIDE_PAIRED_HISTORY_DIRECT_REMAP_TWO_SEGMENT_READY_INDEX));
+            long pairedHistoryDirectVisibilityEligible = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_DIRECT_VISIBILITY_ELIGIBLE_INDEX));
+            long pairedHistoryDirectVisibilityClear = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_DIRECT_VISIBILITY_CLEAR_INDEX));
+            long pairedHistoryDirectVisibilityTinted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_DIRECT_VISIBILITY_TINTED_INDEX));
+            long pairedHistoryDirectVisibilityOccluded = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_DIRECT_VISIBILITY_OCCLUDED_INDEX));
+            long pairedHistoryDirectVisibilityInvalid = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_DIRECT_VISIBILITY_INVALID_INDEX));
+            long pairedHistoryDirectTargetEligible = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_DIRECT_TARGET_ELIGIBLE_INDEX));
+            long pairedHistoryDirectTargetPositive = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_DIRECT_TARGET_POSITIVE_INDEX));
+            long pairedHistoryDirectTargetZero = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_DIRECT_TARGET_ZERO_INDEX));
+            long pairedHistoryDirectTargetInvalid = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_DIRECT_TARGET_INVALID_INDEX));
+            long pairedHistoryDirectTargetSelectedReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_DIRECT_TARGET_SELECTED_READY_INDEX));
+            long pairedHistoryDirectTargetRetainedReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_DIRECT_TARGET_RETAINED_READY_INDEX));
+            long pairedHistoryDirectTargetIdentitySourceReady = Integer.toUnsignedLong(
+                    counters.get(
+                            GUIDE_PAIRED_HISTORY_DIRECT_TARGET_IDENTITY_SOURCE_READY_INDEX));
+            long pairedHistoryDirectTargetMappedSourceReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_DIRECT_TARGET_MAPPED_SOURCE_READY_INDEX));
+            long pairedHistoryDirectTargetOneSegmentReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_DIRECT_TARGET_ONE_SEGMENT_READY_INDEX));
+            long pairedHistoryDirectTargetTwoSegmentReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_DIRECT_TARGET_TWO_SEGMENT_READY_INDEX));
             long crossFrameReceiverReject = crossFrameReceiverSurfaceReject
                     + crossFrameReceiverSampleReject + crossFrameReceiverEdgeReject
                     + crossFrameReceiverTopologyReject + crossFrameReceiverDepthReject
@@ -5531,6 +5577,59 @@ final class RtPathReservoirHistory {
                     pairedHistoryDirectRemapOneSegmentReady,
                     pairedHistoryDirectRemapTwoSegmentReady,
                     pairedHistoryDirectRemapReady - pairedHistoryDirectRemapSegments);
+            long pairedHistoryDirectVisibilityTerminal = pairedHistoryDirectVisibilityClear
+                    + pairedHistoryDirectVisibilityTinted
+                    + pairedHistoryDirectVisibilityOccluded
+                    + pairedHistoryDirectVisibilityInvalid;
+            long pairedHistoryDirectVisibilityValid = pairedHistoryDirectVisibilityClear
+                    + pairedHistoryDirectVisibilityTinted
+                    + pairedHistoryDirectVisibilityOccluded;
+            long pairedHistoryDirectTargetTerminal = pairedHistoryDirectTargetPositive
+                    + pairedHistoryDirectTargetZero + pairedHistoryDirectTargetInvalid;
+            long pairedHistoryDirectTargetReady = pairedHistoryDirectTargetPositive
+                    + pairedHistoryDirectTargetZero;
+            long pairedHistoryDirectTargetBranch = pairedHistoryDirectTargetSelectedReady
+                    + pairedHistoryDirectTargetRetainedReady;
+            long pairedHistoryDirectTargetSource = pairedHistoryDirectTargetIdentitySourceReady
+                    + pairedHistoryDirectTargetMappedSourceReady;
+            long pairedHistoryDirectTargetSegments = pairedHistoryDirectTargetOneSegmentReady
+                    + pairedHistoryDirectTargetTwoSegmentReady;
+            CausticaMod.LOGGER.info(
+                    "RT path paired history direct target: remapReady={} "
+                            + "visibility[eligible={},clear={},tinted={},occluded={},invalid={},"
+                            + "terminal={},delta={},gateDelta={}] "
+                            + "target[eligible={},positive={},zero={},invalid={},ready={},"
+                            + "terminal={},delta={},gateDelta={}] "
+                            + "branch[selected={},retained={},delta={}] "
+                            + "source[identity={},mapped={},delta={}] "
+                            + "segments[one={},two={},delta={}]",
+                    pairedHistoryDirectRemapReady,
+                    pairedHistoryDirectVisibilityEligible,
+                    pairedHistoryDirectVisibilityClear,
+                    pairedHistoryDirectVisibilityTinted,
+                    pairedHistoryDirectVisibilityOccluded,
+                    pairedHistoryDirectVisibilityInvalid,
+                    pairedHistoryDirectVisibilityTerminal,
+                    pairedHistoryDirectVisibilityEligible
+                            - pairedHistoryDirectVisibilityTerminal,
+                    pairedHistoryDirectRemapReady - pairedHistoryDirectVisibilityEligible,
+                    pairedHistoryDirectTargetEligible,
+                    pairedHistoryDirectTargetPositive,
+                    pairedHistoryDirectTargetZero,
+                    pairedHistoryDirectTargetInvalid,
+                    pairedHistoryDirectTargetReady,
+                    pairedHistoryDirectTargetTerminal,
+                    pairedHistoryDirectTargetEligible - pairedHistoryDirectTargetTerminal,
+                    pairedHistoryDirectVisibilityValid - pairedHistoryDirectTargetEligible,
+                    pairedHistoryDirectTargetSelectedReady,
+                    pairedHistoryDirectTargetRetainedReady,
+                    pairedHistoryDirectTargetReady - pairedHistoryDirectTargetBranch,
+                    pairedHistoryDirectTargetIdentitySourceReady,
+                    pairedHistoryDirectTargetMappedSourceReady,
+                    pairedHistoryDirectTargetReady - pairedHistoryDirectTargetSource,
+                    pairedHistoryDirectTargetOneSegmentReady,
+                    pairedHistoryDirectTargetTwoSegmentReady,
+                    pairedHistoryDirectTargetReady - pairedHistoryDirectTargetSegments);
             spatialDiagnosticViewPending = 0;
             return;
         }

@@ -1183,6 +1183,26 @@ final class RtPathSpatialReuseReference {
         READY
     }
 
+    enum PairedHistoryDirectVisibilityOutcome {
+        DIRECT_REMAP_REJECT,
+        CLEAR,
+        TINTED,
+        OCCLUDED,
+        INVALID
+    }
+
+    enum PairedHistoryDirectTargetOutcome {
+        NOT_ELIGIBLE,
+        POSITIVE,
+        ZERO,
+        INVALID
+    }
+
+    record PairedHistoryDirectTargetAudit(
+            PairedHistoryDirectVisibilityOutcome visibility,
+            PairedHistoryDirectTargetOutcome target) {
+    }
+
     enum BranchCandidateRetentionOutcome {
         EMPTY,
         FUTURE_REJECT,
@@ -2266,6 +2286,34 @@ final class RtPathSpatialReuseReference {
             return PairedHistoryDirectRemapOutcome.THROUGHPUT_REJECT;
         }
         return PairedHistoryDirectRemapOutcome.READY;
+    }
+
+    /** Ordered CPU mirror for paired-history production visibility and shifted target. */
+    static PairedHistoryDirectTargetAudit pairedHistoryDirectTargetAudit(
+            PairedHistoryDirectRemapOutcome remapOutcome,
+            boolean visibilityArithmeticValid, boolean anyTransmission, boolean fullyClear,
+            boolean targetArithmeticValid, boolean positiveTarget) {
+        if (remapOutcome != PairedHistoryDirectRemapOutcome.READY) {
+            return new PairedHistoryDirectTargetAudit(
+                    PairedHistoryDirectVisibilityOutcome.DIRECT_REMAP_REJECT,
+                    PairedHistoryDirectTargetOutcome.NOT_ELIGIBLE);
+        }
+        if (!visibilityArithmeticValid) {
+            return new PairedHistoryDirectTargetAudit(
+                    PairedHistoryDirectVisibilityOutcome.INVALID,
+                    PairedHistoryDirectTargetOutcome.NOT_ELIGIBLE);
+        }
+        PairedHistoryDirectVisibilityOutcome visibility = !anyTransmission
+                ? PairedHistoryDirectVisibilityOutcome.OCCLUDED
+                : fullyClear
+                        ? PairedHistoryDirectVisibilityOutcome.CLEAR
+                        : PairedHistoryDirectVisibilityOutcome.TINTED;
+        PairedHistoryDirectTargetOutcome target = !targetArithmeticValid
+                ? PairedHistoryDirectTargetOutcome.INVALID
+                : positiveTarget
+                        ? PairedHistoryDirectTargetOutcome.POSITIVE
+                        : PairedHistoryDirectTargetOutcome.ZERO;
+        return new PairedHistoryDirectTargetAudit(visibility, target);
     }
 
     enum BranchWinnerDirectRemapOutcome {

@@ -1233,10 +1233,12 @@ replays the saved original root seeds. Diffuse-mapped outputs compare only immut
 lanes; retained identity outputs use the complete exact replay comparator. A follow-on register-only
 gate now recomputes the immutable-source-to-current-receiver diffuse remap directly: receiver
 geometry, directional PDF, PSS Jacobian and throughput are derived from the current receiver and the
-original source edge without reading or composing the previous mapping Jacobian. Successful paired
-invocations return immediately after this remap, before visibility, target reconstruction, weights,
-selection or any storage write. Twenty-eight counters bring view-20 storage to 818 uints / 3272 B;
-`WorldPush`, allocation sizes, inline push constants and replay ABI 10 are unchanged.
+original source edge without reading or composing the previous mapping Jacobian. The same production
+shadow query then traces from the exact current biased receiver origin to the replayed second hit and
+reconstructs visible shifted luminance. Occlusion is a valid zero target. Successful paired
+invocations return immediately after target reconstruction, before weights, selection or any storage
+write. Forty-three counters bring view-20 storage to 833 uints / 3332 B; `WorldPush`, allocation
+sizes, inline push constants and replay ABI 10 are unchanged.
 
 Seven 569x320 Vulkan readbacks covered 1274560 adjacent-frame attempts: 455409 exact accepted
 (448175 selected plus 7234 retained; 15979 identity-source plus 439430 mapped-source), 817472 empty,
@@ -1247,9 +1249,13 @@ branch, source and segment delta was zero. The direct-remap reference run then p
 explicitly rejected as unsupported edge events. Guide, geometry, PDF and throughput rejects were
 zero; the ready population split exactly into 419461 selected + 3959 retained, 18025 identity-source
 and 405395 mapped-source, and 423420 one-segment + 0 two-segment records. Every terminal and partition
-delta was zero, with no Vulkan/device/GPU/shader failure. The next gate may trace production
-visibility and reconstruct the shifted target from this register-only result, but still may not
-write legacy history, weights, selection state or estimator radiance.
+delta was zero, with no Vulkan/device/GPU/shader failure. Eight follow-on 569x320 readbacks then
+processed all 413643 remap-ready records through visibility and shifted-target reconstruction:
+413638 were clear/positive and 5 were occluded/zero. Tinted and invalid counts were zero; visibility,
+target, branch, source and segment partitions all balanced exactly. No Vulkan/device/GPU/shader
+failure occurred. The next gate may compute the counter-only GRIS merge weight from this target,
+stored final weight, capped source M and the freshly recomputed direct Jacobian, but still may not
+select, write history or contribute estimator radiance.
 
 ## Delivery Phases
 
