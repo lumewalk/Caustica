@@ -1646,6 +1646,47 @@ final class RtPathSpatialReuseReferenceTest {
     }
 
     @Test
+    void pairedHistoryPreviousReplayIncludesLifecycleAndStopsAtExactReplay() {
+        var identity = RtPathSpatialReuseReference.MappingKind.IDENTITY;
+        var mapped = RtPathSpatialReuseReference.MappingKind.DIFFUSE_RECONNECTION;
+        var expected = RtPathSpatialReuseReference.PairedHistoryPreviousReplayOutcome.class;
+
+        assertEquals(expected.getEnumConstants()[0],
+                RtPathSpatialReuseReference.pairedHistoryPreviousReplayOutcome(
+                        false, false, false, false, false, false, false, false, null));
+        assertEquals(expected.getEnumConstants()[1],
+                RtPathSpatialReuseReference.pairedHistoryPreviousReplayOutcome(
+                        true, false, false, false, false, false, false, false, null));
+        assertEquals(expected.getEnumConstants()[2],
+                RtPathSpatialReuseReference.pairedHistoryPreviousReplayOutcome(
+                        true, true, false, false, false, false, false, false, null));
+        assertEquals(expected.getEnumConstants()[3],
+                RtPathSpatialReuseReference.pairedHistoryPreviousReplayOutcome(
+                        true, true, true, false, false, false, false, false, null));
+        assertEquals(expected.getEnumConstants()[4],
+                RtPathSpatialReuseReference.pairedHistoryPreviousReplayOutcome(
+                        true, true, true, true, false, false, false, false, null));
+        assertEquals(expected.getEnumConstants()[5],
+                RtPathSpatialReuseReference.pairedHistoryPreviousReplayOutcome(
+                        true, true, true, true, true, false, false, false, null));
+        assertEquals(expected.getEnumConstants()[6],
+                RtPathSpatialReuseReference.pairedHistoryPreviousReplayOutcome(
+                        true, true, true, true, true, true, false, false, null));
+        assertEquals(expected.getEnumConstants()[7],
+                RtPathSpatialReuseReference.pairedHistoryPreviousReplayOutcome(
+                        true, true, true, true, true, true, true, false, null));
+        assertEquals(expected.getEnumConstants()[8],
+                RtPathSpatialReuseReference.pairedHistoryPreviousReplayOutcome(
+                        true, true, true, true, true, true, true, true, mapped));
+        assertEquals(expected.getEnumConstants()[9],
+                RtPathSpatialReuseReference.pairedHistoryPreviousReplayOutcome(
+                        true, true, true, true, true, true, true, true, identity));
+        assertThrows(IllegalArgumentException.class,
+                () -> RtPathSpatialReuseReference.pairedHistoryPreviousReplayOutcome(
+                        true, true, true, true, true, true, true, true, null));
+    }
+
+    @Test
     void branchWinnerDirectRemapRequiresAcceptedReplayAndOrdersRejects() {
         var replay = RtPathSpatialReuseReference.BranchWinnerPreviousReplayOutcome.class;
         var remap = RtPathSpatialReuseReference.BranchWinnerDirectRemapOutcome.class;
@@ -3599,8 +3640,16 @@ final class RtPathSpatialReuseReferenceTest {
                 RtPathReservoirHistory.GUIDE_PAIRED_HISTORY_VALIDATE_ACCEPTED_INDEX);
         assertEquals(789,
                 RtPathReservoirHistory.GUIDE_PAIRED_HISTORY_VALIDATE_TWO_SEGMENT_INDEX);
-        assertEquals(790, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
-        assertEquals(790 * Integer.BYTES,
+        assertEquals(790,
+                RtPathReservoirHistory.GUIDE_PAIRED_HISTORY_REPLAY_ATTEMPTED_INDEX);
+        assertEquals(798,
+                RtPathReservoirHistory.GUIDE_PAIRED_HISTORY_REPLAY_SOURCE_REPLAY_REJECT_INDEX);
+        assertEquals(799,
+                RtPathReservoirHistory.GUIDE_PAIRED_HISTORY_REPLAY_SELECTED_ACCEPTED_INDEX);
+        assertEquals(804,
+                RtPathReservoirHistory.GUIDE_PAIRED_HISTORY_REPLAY_TWO_SEGMENT_ACCEPTED_INDEX);
+        assertEquals(805, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
+        assertEquals(805 * Integer.BYTES,
                 RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_COUNTER_BYTES);
         assertEquals(32, RtPathReservoirHistory.SHIFTED_RECEIVER_GUIDE_STRIDE);
         assertEquals(8, RtPathReservoirHistory.BRANCH_RECEIVER_OWNERSHIP_STRIDE);

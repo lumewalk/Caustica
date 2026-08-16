@@ -3032,44 +3032,100 @@ static void pathBranchWinnerStorageValidate() {
             : PATH_GUIDE_BRANCH_WINNER_STORAGE_TWO_SEGMENT_ACCEPTED], 1u);
 }
 
-// Reopens only the adjacent-frame winner slot selected by the independent CPU ping-pong state.
-// Acceptance proves receiver/source reprojection and seeded source replay. A later register-only
-// merge may write the current diagnostic winner slot, but committed history and the estimator stay
-// unreachable.
-static void pathBranchWinnerPreviousReplayValidate() {
+// Reopens either the adjacent-frame diagnostic winner or the separately owned paired-history slot.
+// Both paths share the strict receiver/source reprojection and immutable-root seeded replay. The
+// paired-history audit returns immediately after replay, before direct remap, visibility, weights,
+// selection, scratch writes, committed history, or estimator radiance become reachable.
+static void pathPreviousPairReplayValidate(bool pairedHistory) {
+    bool winnerReplayPass = (pc.historyFlags
+            & PATH_GUIDE_BRANCH_WINNER_PREVIOUS_REPLAY_PASS_FLAG) != 0u;
+    bool pairedReplayPass = (pc.historyFlags
+            & PATH_GUIDE_PAIRED_HISTORY_PREVIOUS_REPLAY_PASS_FLAG) != 0u;
     if (pc.debugView != PATH_SHIFTED_RADIANCE_DEBUG_VIEW
-            || (pc.historyFlags
-                    & PATH_GUIDE_BRANCH_WINNER_PREVIOUS_REPLAY_PASS_FLAG) == 0u
-            || (pc.historyFlags
-                    & PATH_GUIDE_BRANCH_WINNER_PREVIOUS_AVAILABLE_FLAG) == 0u
             || worldPush.pathShiftDiagnosticCounterAddr == 0u
-            || worldPush.pathShiftDiagnosticPairAddr == 0u
-            || worldPush.pathShiftReceiverGuideAddr == 0u
-            || worldPush.pathShiftBranchWinnerScratchAddr == 0u
-            || worldPush.pathShiftBranchWinnerPreviousAddr == 0u) {
+            || (pairedHistory ? !pairedReplayPass : !winnerReplayPass)) {
         return;
     }
     uint2 pixel = DispatchRaysIndex().xy;
     uint2 dimensions = DispatchRaysDimensions().xy;
     uint pixelCount = dimensions.x * dimensions.y;
     DevicePtr<uint> counters = DevicePtr<uint>(worldPush.pathShiftDiagnosticCounterAddr);
-    InterlockedAdd(counters[PATH_GUIDE_BRANCH_WINNER_REPLAY_ATTEMPTED], 1u);
+    uint attemptedCounter = pairedHistory
+            ? PATH_GUIDE_PAIRED_HISTORY_REPLAY_ATTEMPTED
+            : PATH_GUIDE_BRANCH_WINNER_REPLAY_ATTEMPTED;
+    uint receiverReprojectionRejectCounter = pairedHistory
+            ? PATH_GUIDE_PAIRED_HISTORY_REPLAY_RECEIVER_REPROJECTION_REJECT
+            : PATH_GUIDE_BRANCH_WINNER_REPLAY_RECEIVER_REPROJECTION_REJECT;
+    uint emptyCounter = pairedHistory
+            ? PATH_GUIDE_PAIRED_HISTORY_REPLAY_EMPTY
+            : PATH_GUIDE_BRANCH_WINNER_REPLAY_EMPTY;
+    uint metadataRejectCounter = pairedHistory
+            ? PATH_GUIDE_PAIRED_HISTORY_REPLAY_METADATA_REJECT
+            : PATH_GUIDE_BRANCH_WINNER_REPLAY_METADATA_REJECT;
+    uint receiverSurfaceRejectCounter = pairedHistory
+            ? PATH_GUIDE_PAIRED_HISTORY_REPLAY_RECEIVER_SURFACE_REJECT
+            : PATH_GUIDE_BRANCH_WINNER_REPLAY_RECEIVER_SURFACE_REJECT;
+    uint sourceReprojectionRejectCounter = pairedHistory
+            ? PATH_GUIDE_PAIRED_HISTORY_REPLAY_SOURCE_REPROJECTION_REJECT
+            : PATH_GUIDE_BRANCH_WINNER_REPLAY_SOURCE_REPROJECTION_REJECT;
+    uint sourceSurfaceRejectCounter = pairedHistory
+            ? PATH_GUIDE_PAIRED_HISTORY_REPLAY_SOURCE_SURFACE_REJECT
+            : PATH_GUIDE_BRANCH_WINNER_REPLAY_SOURCE_SURFACE_REJECT;
+    uint sourceReplayRejectCounter = pairedHistory
+            ? PATH_GUIDE_PAIRED_HISTORY_REPLAY_SOURCE_REPLAY_REJECT
+            : PATH_GUIDE_BRANCH_WINNER_REPLAY_SOURCE_REPLAY_REJECT;
+    uint selectedAcceptedCounter = pairedHistory
+            ? PATH_GUIDE_PAIRED_HISTORY_REPLAY_SELECTED_ACCEPTED
+            : PATH_GUIDE_BRANCH_WINNER_REPLAY_SELECTED_ACCEPTED;
+    uint retainedAcceptedCounter = pairedHistory
+            ? PATH_GUIDE_PAIRED_HISTORY_REPLAY_RETAINED_ACCEPTED
+            : PATH_GUIDE_BRANCH_WINNER_REPLAY_RETAINED_ACCEPTED;
+    uint identitySourceAcceptedCounter = pairedHistory
+            ? PATH_GUIDE_PAIRED_HISTORY_REPLAY_IDENTITY_SOURCE_ACCEPTED
+            : PATH_GUIDE_BRANCH_WINNER_REPLAY_IDENTITY_SOURCE_ACCEPTED;
+    uint mappedSourceAcceptedCounter = pairedHistory
+            ? PATH_GUIDE_PAIRED_HISTORY_REPLAY_MAPPED_SOURCE_ACCEPTED
+            : PATH_GUIDE_BRANCH_WINNER_REPLAY_MAPPED_SOURCE_ACCEPTED;
+    uint oneSegmentAcceptedCounter = pairedHistory
+            ? PATH_GUIDE_PAIRED_HISTORY_REPLAY_ONE_SEGMENT_ACCEPTED
+            : PATH_GUIDE_BRANCH_WINNER_REPLAY_ONE_SEGMENT_ACCEPTED;
+    uint twoSegmentAcceptedCounter = pairedHistory
+            ? PATH_GUIDE_PAIRED_HISTORY_REPLAY_TWO_SEGMENT_ACCEPTED
+            : PATH_GUIDE_BRANCH_WINNER_REPLAY_TWO_SEGMENT_ACCEPTED;
+    InterlockedAdd(counters[attemptedCounter], 1u);
+
+    if (pairedHistory) {
+        if ((pc.historyFlags & PATH_GUIDE_PAIRED_HISTORY_PREVIOUS_AVAILABLE_FLAG) == 0u
+                || worldPush.pathShiftPairedHistoryPreviousAddr == 0u) {
+            InterlockedAdd(counters[
+                    PATH_GUIDE_PAIRED_HISTORY_REPLAY_LIFECYCLE_REJECT], 1u);
+            return;
+        }
+    } else if ((pc.historyFlags
+                    & PATH_GUIDE_BRANCH_WINNER_PREVIOUS_AVAILABLE_FLAG) == 0u
+            || worldPush.pathShiftDiagnosticPairAddr == 0u
+            || worldPush.pathShiftReceiverGuideAddr == 0u
+            || worldPush.pathShiftBranchWinnerScratchAddr == 0u
+            || worldPush.pathShiftBranchWinnerPreviousAddr == 0u) {
+        return;
+    }
 
     float2 previousPixel = float2(pixel) + 0.5 + gMotion[int2(pixel)];
     int2 previousTexel = int2(floor(previousPixel));
     if (any(previousTexel < int2(0, 0))
             || any(previousTexel >= int2(dimensions))) {
-        InterlockedAdd(counters[
-                PATH_GUIDE_BRANCH_WINNER_REPLAY_RECEIVER_REPROJECTION_REJECT], 1u);
+        InterlockedAdd(counters[receiverReprojectionRejectCounter], 1u);
         return;
     }
     uint previousPixelIndex = uint(previousTexel.y) * dimensions.x
             + uint(previousTexel.x);
-    uint64_t previousScratch = worldPush.pathShiftBranchWinnerPreviousAddr;
+    uint64_t previousScratch = pairedHistory
+            ? worldPush.pathShiftPairedHistoryPreviousAddr
+            : worldPush.pathShiftBranchWinnerPreviousAddr;
     uint4 storedTag = ConstPtr<uint4>(pathBranchWinnerTagAddress(
             previousScratch, pixelCount))[previousPixelIndex];
     if (all(storedTag == uint4(0u))) {
-        InterlockedAdd(counters[PATH_GUIDE_BRANCH_WINNER_REPLAY_EMPTY], 1u);
+        InterlockedAdd(counters[emptyCounter], 1u);
         return;
     }
 
@@ -3113,7 +3169,7 @@ static void pathBranchWinnerPreviousReplayValidate() {
             && sourceIndex < pixelCount
             && rootFinite && rootChainValid;
     if (!metadataValid) {
-        InterlockedAdd(counters[PATH_GUIDE_BRANCH_WINNER_REPLAY_METADATA_REJECT], 1u);
+        InterlockedAdd(counters[metadataRejectCounter], 1u);
         return;
     }
 
@@ -3130,8 +3186,7 @@ static void pathBranchWinnerPreviousReplayValidate() {
                 receiverNormalRoughness.w)
             || uint(max(retainedReceiverPositionMaterial.w, 0.0))
                     != uint(max(receiverPositionMaterial.w, 0.0))) {
-        InterlockedAdd(counters[
-                PATH_GUIDE_BRANCH_WINNER_REPLAY_RECEIVER_SURFACE_REJECT], 1u);
+        InterlockedAdd(counters[receiverSurfaceRejectCounter], 1u);
         return;
     }
 
@@ -3176,13 +3231,11 @@ static void pathBranchWinnerPreviousReplayValidate() {
         }
     }
     if (!sourceMotionFound) {
-        InterlockedAdd(counters[
-                PATH_GUIDE_BRANCH_WINNER_REPLAY_SOURCE_REPROJECTION_REJECT], 1u);
+        InterlockedAdd(counters[sourceReprojectionRejectCounter], 1u);
         return;
     }
     if (!sourceReprojected) {
-        InterlockedAdd(counters[
-                PATH_GUIDE_BRANCH_WINNER_REPLAY_SOURCE_SURFACE_REJECT], 1u);
+        InterlockedAdd(counters[sourceSurfaceRejectCounter], 1u);
         return;
     }
 
@@ -3202,20 +3255,19 @@ static void pathBranchWinnerPreviousReplayValidate() {
             ? pathMappingSourceReplayMatches(stored, replay)
             : pathReplayCompare(stored, replay) == 0u;
     if (!replayMatches) {
-        InterlockedAdd(counters[
-                PATH_GUIDE_BRANCH_WINNER_REPLAY_SOURCE_REPLAY_REJECT], 1u);
+        InterlockedAdd(counters[sourceReplayRejectCounter], 1u);
         return;
     }
 
     InterlockedAdd(counters[outputMappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION
-            ? PATH_GUIDE_BRANCH_WINNER_REPLAY_SELECTED_ACCEPTED
-            : PATH_GUIDE_BRANCH_WINNER_REPLAY_RETAINED_ACCEPTED], 1u);
+            ? selectedAcceptedCounter : retainedAcceptedCounter], 1u);
     InterlockedAdd(counters[sourceMappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION
-            ? PATH_GUIDE_BRANCH_WINNER_REPLAY_MAPPED_SOURCE_ACCEPTED
-            : PATH_GUIDE_BRANCH_WINNER_REPLAY_IDENTITY_SOURCE_ACCEPTED], 1u);
+            ? mappedSourceAcceptedCounter : identitySourceAcceptedCounter], 1u);
     InterlockedAdd(counters[replaySegments == 1u
-            ? PATH_GUIDE_BRANCH_WINNER_REPLAY_ONE_SEGMENT_ACCEPTED
-            : PATH_GUIDE_BRANCH_WINNER_REPLAY_TWO_SEGMENT_ACCEPTED], 1u);
+            ? oneSegmentAcceptedCounter : twoSegmentAcceptedCounter], 1u);
+    if (pairedHistory) {
+        return;
+    }
 
     // Rebuild the direct immutable-original-source -> current-receiver shift in registers. The
     // previous winner's mapping descriptor and proposalShift Jacobian are deliberately ignored:
@@ -6427,6 +6479,11 @@ public void pathGuideScratchValidate() {
 [shader("raygeneration")]
 void main() {
     worldPush = ConstPtr<WorldPush>(pc.worldPushAddr)[0];
+    if ((pc.historyFlags
+            & PATH_GUIDE_PAIRED_HISTORY_PREVIOUS_REPLAY_PASS_FLAG) != 0u) {
+        pathPreviousPairReplayValidate(true);
+        return;
+    }
     if ((pc.historyFlags & PATH_GUIDE_PAIRED_HISTORY_VALIDATE_PASS_FLAG) != 0u) {
         pathBranchPairedHistoryValidate();
         return;
@@ -6456,7 +6513,7 @@ void main() {
         return;
     }
     if ((pc.historyFlags & PATH_GUIDE_BRANCH_WINNER_PREVIOUS_REPLAY_PASS_FLAG) != 0u) {
-        pathBranchWinnerPreviousReplayValidate();
+        pathPreviousPairReplayValidate(false);
         return;
     }
     if ((pc.historyFlags & PATH_GUIDE_BRANCH_WINNER_STORAGE_VALIDATE_PASS_FLAG) != 0u) {

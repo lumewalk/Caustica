@@ -50,6 +50,8 @@ final class RtPathReservoirHistory {
     static final int GUIDE_BRANCH_CANDIDATE_PAYLOAD_VALIDATE_PASS_FLAG = 1 << 22;
     static final int GUIDE_BRANCH_WINNER_PERSISTENCE_POLICY_PASS_FLAG = 1 << 23;
     static final int GUIDE_PAIRED_HISTORY_VALIDATE_PASS_FLAG = 1 << 24;
+    static final int GUIDE_PAIRED_HISTORY_PREVIOUS_REPLAY_PASS_FLAG = 1 << 25;
+    static final int GUIDE_PAIRED_HISTORY_PREVIOUS_AVAILABLE_FLAG = 1 << 26;
     static final int SPATIAL_DIAGNOSTIC_CATEGORY_COUNT = 9;
     static final int SPATIAL_DIAGNOSTIC_STRICT_PAIR_CURSOR_INDEX =
             SPATIAL_DIAGNOSTIC_CATEGORY_COUNT;
@@ -833,7 +835,22 @@ final class RtPathReservoirHistory {
     static final int GUIDE_PAIRED_HISTORY_VALIDATE_MAPPED_SOURCE_INDEX = 787;
     static final int GUIDE_PAIRED_HISTORY_VALIDATE_ONE_SEGMENT_INDEX = 788;
     static final int GUIDE_PAIRED_HISTORY_VALIDATE_TWO_SEGMENT_INDEX = 789;
-    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 790;
+    static final int GUIDE_PAIRED_HISTORY_REPLAY_ATTEMPTED_INDEX = 790;
+    static final int GUIDE_PAIRED_HISTORY_REPLAY_LIFECYCLE_REJECT_INDEX = 791;
+    static final int GUIDE_PAIRED_HISTORY_REPLAY_RECEIVER_REPROJECTION_REJECT_INDEX = 792;
+    static final int GUIDE_PAIRED_HISTORY_REPLAY_EMPTY_INDEX = 793;
+    static final int GUIDE_PAIRED_HISTORY_REPLAY_METADATA_REJECT_INDEX = 794;
+    static final int GUIDE_PAIRED_HISTORY_REPLAY_RECEIVER_SURFACE_REJECT_INDEX = 795;
+    static final int GUIDE_PAIRED_HISTORY_REPLAY_SOURCE_REPROJECTION_REJECT_INDEX = 796;
+    static final int GUIDE_PAIRED_HISTORY_REPLAY_SOURCE_SURFACE_REJECT_INDEX = 797;
+    static final int GUIDE_PAIRED_HISTORY_REPLAY_SOURCE_REPLAY_REJECT_INDEX = 798;
+    static final int GUIDE_PAIRED_HISTORY_REPLAY_SELECTED_ACCEPTED_INDEX = 799;
+    static final int GUIDE_PAIRED_HISTORY_REPLAY_RETAINED_ACCEPTED_INDEX = 800;
+    static final int GUIDE_PAIRED_HISTORY_REPLAY_IDENTITY_SOURCE_ACCEPTED_INDEX = 801;
+    static final int GUIDE_PAIRED_HISTORY_REPLAY_MAPPED_SOURCE_ACCEPTED_INDEX = 802;
+    static final int GUIDE_PAIRED_HISTORY_REPLAY_ONE_SEGMENT_ACCEPTED_INDEX = 803;
+    static final int GUIDE_PAIRED_HISTORY_REPLAY_TWO_SEGMENT_ACCEPTED_INDEX = 804;
+    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 805;
     static final int SHIFTED_RECEIVER_GUIDE_STRIDE = 8 * Float.BYTES;
     static final int BRANCH_RECEIVER_OWNERSHIP_STRIDE = 2 * Integer.BYTES;
     static final int BRANCH_CANDIDATE_TAG_STRIDE = 2 * Integer.BYTES;
@@ -2923,6 +2940,38 @@ final class RtPathReservoirHistory {
                     counters.get(GUIDE_PAIRED_HISTORY_VALIDATE_ONE_SEGMENT_INDEX));
             long pairedHistoryValidateTwoSegment = Integer.toUnsignedLong(
                     counters.get(GUIDE_PAIRED_HISTORY_VALIDATE_TWO_SEGMENT_INDEX));
+            long pairedHistoryReplayAttempted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_REPLAY_ATTEMPTED_INDEX));
+            long pairedHistoryReplayLifecycleReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_REPLAY_LIFECYCLE_REJECT_INDEX));
+            long pairedHistoryReplayReceiverReprojectionReject = Integer.toUnsignedLong(
+                    counters.get(
+                            GUIDE_PAIRED_HISTORY_REPLAY_RECEIVER_REPROJECTION_REJECT_INDEX));
+            long pairedHistoryReplayEmpty = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_REPLAY_EMPTY_INDEX));
+            long pairedHistoryReplayMetadataReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_REPLAY_METADATA_REJECT_INDEX));
+            long pairedHistoryReplayReceiverSurfaceReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_REPLAY_RECEIVER_SURFACE_REJECT_INDEX));
+            long pairedHistoryReplaySourceReprojectionReject = Integer.toUnsignedLong(
+                    counters.get(
+                            GUIDE_PAIRED_HISTORY_REPLAY_SOURCE_REPROJECTION_REJECT_INDEX));
+            long pairedHistoryReplaySourceSurfaceReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_REPLAY_SOURCE_SURFACE_REJECT_INDEX));
+            long pairedHistoryReplaySourceReplayReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_REPLAY_SOURCE_REPLAY_REJECT_INDEX));
+            long pairedHistoryReplaySelectedAccepted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_REPLAY_SELECTED_ACCEPTED_INDEX));
+            long pairedHistoryReplayRetainedAccepted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_REPLAY_RETAINED_ACCEPTED_INDEX));
+            long pairedHistoryReplayIdentitySourceAccepted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_REPLAY_IDENTITY_SOURCE_ACCEPTED_INDEX));
+            long pairedHistoryReplayMappedSourceAccepted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_REPLAY_MAPPED_SOURCE_ACCEPTED_INDEX));
+            long pairedHistoryReplayOneSegmentAccepted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_REPLAY_ONE_SEGMENT_ACCEPTED_INDEX));
+            long pairedHistoryReplayTwoSegmentAccepted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_REPLAY_TWO_SEGMENT_ACCEPTED_INDEX));
             long crossFrameReceiverReject = crossFrameReceiverSurfaceReject
                     + crossFrameReceiverSampleReject + crossFrameReceiverEdgeReject
                     + crossFrameReceiverTopologyReject + crossFrameReceiverDepthReject
@@ -5358,6 +5407,51 @@ final class RtPathReservoirHistory {
                     pairedHistoryValidateOneSegment,
                     pairedHistoryValidateTwoSegment,
                     pairedHistoryValidateAccepted - pairedHistoryValidateSegments);
+            long pairedHistoryReplayAccepted = pairedHistoryReplaySelectedAccepted
+                    + pairedHistoryReplayRetainedAccepted;
+            long pairedHistoryReplayTerminal = pairedHistoryReplayLifecycleReject
+                    + pairedHistoryReplayReceiverReprojectionReject
+                    + pairedHistoryReplayEmpty + pairedHistoryReplayMetadataReject
+                    + pairedHistoryReplayReceiverSurfaceReject
+                    + pairedHistoryReplaySourceReprojectionReject
+                    + pairedHistoryReplaySourceSurfaceReject
+                    + pairedHistoryReplaySourceReplayReject
+                    + pairedHistoryReplayAccepted;
+            long pairedHistoryReplaySource = pairedHistoryReplayIdentitySourceAccepted
+                    + pairedHistoryReplayMappedSourceAccepted;
+            long pairedHistoryReplaySegments = pairedHistoryReplayOneSegmentAccepted
+                    + pairedHistoryReplayTwoSegmentAccepted;
+            CausticaMod.LOGGER.info(
+                    "RT path paired history previous replay: attempted={} "
+                            + "reject[lifecycle={},receiverReprojection={},empty={},metadata={},"
+                            + "receiverSurface={},sourceReprojection={},sourceSurface={},replay={}] "
+                            + "accepted={} terminal={} delta={} "
+                            + "branch[selected={},retained={},delta={}] "
+                            + "source[identity={},mapped={},delta={}] "
+                            + "segments[one={},two={},delta={}]",
+                    pairedHistoryReplayAttempted,
+                    pairedHistoryReplayLifecycleReject,
+                    pairedHistoryReplayReceiverReprojectionReject,
+                    pairedHistoryReplayEmpty,
+                    pairedHistoryReplayMetadataReject,
+                    pairedHistoryReplayReceiverSurfaceReject,
+                    pairedHistoryReplaySourceReprojectionReject,
+                    pairedHistoryReplaySourceSurfaceReject,
+                    pairedHistoryReplaySourceReplayReject,
+                    pairedHistoryReplayAccepted,
+                    pairedHistoryReplayTerminal,
+                    pairedHistoryReplayAttempted - pairedHistoryReplayTerminal,
+                    pairedHistoryReplaySelectedAccepted,
+                    pairedHistoryReplayRetainedAccepted,
+                    pairedHistoryReplayAccepted
+                            - pairedHistoryReplaySelectedAccepted
+                            - pairedHistoryReplayRetainedAccepted,
+                    pairedHistoryReplayIdentitySourceAccepted,
+                    pairedHistoryReplayMappedSourceAccepted,
+                    pairedHistoryReplayAccepted - pairedHistoryReplaySource,
+                    pairedHistoryReplayOneSegmentAccepted,
+                    pairedHistoryReplayTwoSegmentAccepted,
+                    pairedHistoryReplayAccepted - pairedHistoryReplaySegments);
             spatialDiagnosticViewPending = 0;
             return;
         }

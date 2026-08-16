@@ -1214,6 +1214,11 @@ public final class RtComposite {
                 pathHistoryFlags |=
                         RtPathReservoirHistory.GUIDE_BRANCH_WINNER_PREVIOUS_AVAILABLE_FLAG;
             }
+            if (restirPt && debugView == RtPathReservoirHistory.SHIFTED_RADIANCE_DEBUG_VIEW
+                    && pairedHistoryFrame != null && pairedHistoryFrame.previousAvailable()) {
+                pathHistoryFlags |=
+                        RtPathReservoirHistory.GUIDE_PAIRED_HISTORY_PREVIOUS_AVAILABLE_FLAG;
+            }
             WorldPushConstantsData worldConstants = new WorldPushConstantsData(
                     pushBuf.deviceAddress, terrain.tableAddress(), fe.geomTableAddr(),
                     RtMaterialRegistry.INSTANCE.tableAddress(),
@@ -1240,6 +1245,7 @@ public final class RtComposite {
             ByteBuffer branchCandidatePayloadValidatePushConstants = null;
             ByteBuffer branchWinnerPersistencePolicyPushConstants = null;
             ByteBuffer pairedHistoryValidatePushConstants = null;
+            ByteBuffer pairedHistoryPreviousReplayPushConstants = null;
             if (restirPt
                      && debugView == RtPathReservoirHistory.SHIFTED_RADIANCE_DEBUG_VIEW) {
                 guidePreviousReplayPushConstants =
@@ -1495,6 +1501,29 @@ public final class RtComposite {
                                         .GUIDE_PAIRED_HISTORY_VALIDATE_PASS_FLAG,
                         worldConstants.historyGeneration())
                         .write(pairedHistoryValidatePushConstants);
+                pairedHistoryPreviousReplayPushConstants =
+                        stack.malloc(WorldPushConstantsData.BYTE_SIZE);
+                new WorldPushConstantsData(
+                        worldConstants.worldPushAddr(),
+                        worldConstants.tableAddr(),
+                        worldConstants.entityTableAddr(),
+                        worldConstants.materialTableAddr(),
+                        worldConstants.lightBufAddr(),
+                        worldConstants.lightAliasAddr(),
+                        worldConstants.lightLocalAliasAddr(),
+                        worldConstants.lightGridCellAddr(),
+                        worldConstants.lightGridSpanAddr(),
+                        worldConstants.pathQueueAddr(),
+                        worldConstants.directReservoirAddr(),
+                        worldConstants.pathReservoirAddr(),
+                        worldConstants.pathReservoirPreviousAddr(),
+                        worldConstants.frameIndex(),
+                        worldConstants.debugView(),
+                        worldConstants.historyFlags()
+                                | RtPathReservoirHistory
+                                        .GUIDE_PAIRED_HISTORY_PREVIOUS_REPLAY_PASS_FLAG,
+                        worldConstants.historyGeneration())
+                        .write(pairedHistoryPreviousReplayPushConstants);
                 mappingReplayPushConstants =
                         stack.malloc(WorldPushConstantsData.BYTE_SIZE);
                 new WorldPushConstantsData(
@@ -1608,6 +1637,14 @@ public final class RtComposite {
                         // The persistent pair owner has its own physical slots and lifecycle. Clear
                         // the complete write slot before the policy pass can publish any pair.
                         pathReservoirs.beginCurrentPairedHistory(cmd, pairedHistoryFrame);
+                        try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd,
+                                     "path paired history previous replay");
+                             RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage(
+                                     "frame.pathPairedHistoryPreviousReplay")) {
+                            active.trace(cmd, renderW, renderH,
+                                    pairedHistoryPreviousReplayPushConstants, 1);
+                        }
+                        VulkanCommandEncoder.memoryBarrier(cmd, stack);
                         if (branchWinnerScratchFrame.previousAvailable()) {
                             try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd,
                                          "path branch winner previous replay");

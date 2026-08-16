@@ -1226,6 +1226,23 @@ matches each equaled 297384; empty-dirty, policy, lifecycle and every exact-bit 
 all terminal/policy/branch/source/segment deltas were zero. Runtime exercised one-segment paths;
 CPU tests retain two-segment and reset/generation coverage.
 
+The adjacent-frame paired owner is now consumed by a distinct read-only replay pass. It first gates
+the previous address on exact frame continuity and generation, reprojects the receiver through the
+current motion field, independently reprojects the immutable source root into current guides, and
+replays the saved original root seeds. Diffuse-mapped outputs compare only immutable source replay
+lanes; retained identity outputs use the complete exact replay comparator. Successful invocations
+return immediately after replay, before direct remap, visibility, weights, selection or any storage
+write. Fifteen counters bring view-20 storage to 805 uints / 3220 B; `WorldPush`, allocation sizes,
+inline push constants and replay ABI 10 are unchanged.
+
+Seven 569x320 Vulkan readbacks covered 1274560 adjacent-frame attempts: 455409 exact accepted
+(448175 selected plus 7234 retained; 15979 identity-source plus 439430 mapped-source), 817472 empty,
+29 receiver-surface rejects, 2 source-reprojection rejects and 1648 strict source-replay rejects.
+Lifecycle, receiver-reprojection, metadata and source-surface rejects were zero; every terminal,
+branch, source and segment delta was zero. The next gate may recompute the direct immutable-source
+to current-receiver remap in registers from this accepted paired record, but it must not read or
+compose a previous Jacobian and still may not write legacy history or estimator radiance.
+
 ## Delivery Phases
 
 ### Phase 0 — Wavefront Integration Baseline

@@ -1000,6 +1000,21 @@ empty pixels and 297384 exact stored pairs. The accepted split was 291130 select
 and 13297 identity-source + 284087 mapped-source; tag/reservoir/root match counters each equaled the
 accepted count. All rejects and deltas were zero, and no Vulkan/device/GPU/shader fault was logged.
 
+The next full-audit line is `RT path paired history previous replay`. It reads only the lifecycle-
+approved previous paired slot. Required accounting is `attempted = lifecycle + receiverReprojection
++ empty + metadata + receiverSurface + sourceReprojection + sourceSurface + replay + accepted`,
+followed by the same selected/retained, identity/mapped and one/two-segment exact partitions. Normal
+stable frames have zero lifecycle and metadata rejects; motion, changed surfaces and exact replay
+failures remain explicit safe rejects and must not be hidden by wider tolerances. This pass returns
+immediately after seeded original-root replay and therefore does not authorize direct remap,
+visibility, weights, selection, history writes or estimator use.
+
+The reference run produced seven 569x320 readbacks: 1274560 attempts, 455409 exact accepted
+(448175 selected + 7234 retained; 15979 identity-source + 439430 mapped-source), 817472 empty, 29
+receiver-surface rejects, 2 source-reprojection rejects and 1648 source-replay rejects. All lifecycle,
+receiver-reprojection, metadata, source-surface and accounting deltas were zero. Counter storage is
+805 uints / 3220 B; reflected `WorldPush` remains 704 B and replay ABI remains 10.
+
 For a fresh runtime check, use debug view 20 and inspect `run/logs/latest.log`. Normal operation
 requires `RT bring-up OK`, Vulkan, the intended NVIDIA device, exact zero-delta counter partitions,
 and no `DEVICE_LOST`, `VK_ERROR`, GPU fault or shader compilation error. Debug colors and sparse

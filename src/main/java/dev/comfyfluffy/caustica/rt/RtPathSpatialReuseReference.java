@@ -1160,6 +1160,19 @@ final class RtPathSpatialReuseReference {
         RETAINED_ACCEPTED
     }
 
+    enum PairedHistoryPreviousReplayOutcome {
+        LIFECYCLE_REJECT,
+        RECEIVER_REPROJECTION_REJECT,
+        PREVIOUS_EMPTY,
+        METADATA_REJECT,
+        RECEIVER_SURFACE_REJECT,
+        SOURCE_REPROJECTION_REJECT,
+        SOURCE_SURFACE_REJECT,
+        SOURCE_REPLAY_REJECT,
+        SELECTED_ACCEPTED,
+        RETAINED_ACCEPTED
+    }
+
     enum BranchCandidateRetentionOutcome {
         EMPTY,
         FUTURE_REJECT,
@@ -2170,6 +2183,50 @@ final class RtPathSpatialReuseReference {
         return outputMappingKind == MappingKind.DIFFUSE_RECONNECTION
                 ? BranchWinnerPreviousReplayOutcome.SELECTED_ACCEPTED
                 : BranchWinnerPreviousReplayOutcome.RETAINED_ACCEPTED;
+    }
+
+    /**
+     * Ordered CPU authority for read-only replay from the independently owned paired-history slot.
+     * The lifecycle check is explicit because this pass runs on every full-audit frame, including
+     * the first frame after a reset, resize, camera cut, or generation change.
+     */
+    static PairedHistoryPreviousReplayOutcome pairedHistoryPreviousReplayOutcome(
+            boolean previousAvailable, boolean receiverReprojected,
+            boolean previousPresent, boolean metadataValid,
+            boolean receiverSurfaceValid, boolean sourceReprojected,
+            boolean sourceSurfaceValid, boolean sourceReplayValid,
+            MappingKind outputMappingKind) {
+        if (!previousAvailable) {
+            return PairedHistoryPreviousReplayOutcome.LIFECYCLE_REJECT;
+        }
+        if (!receiverReprojected) {
+            return PairedHistoryPreviousReplayOutcome.RECEIVER_REPROJECTION_REJECT;
+        }
+        if (!previousPresent) {
+            return PairedHistoryPreviousReplayOutcome.PREVIOUS_EMPTY;
+        }
+        if (!metadataValid) {
+            return PairedHistoryPreviousReplayOutcome.METADATA_REJECT;
+        }
+        if (!receiverSurfaceValid) {
+            return PairedHistoryPreviousReplayOutcome.RECEIVER_SURFACE_REJECT;
+        }
+        if (!sourceReprojected) {
+            return PairedHistoryPreviousReplayOutcome.SOURCE_REPROJECTION_REJECT;
+        }
+        if (!sourceSurfaceValid) {
+            return PairedHistoryPreviousReplayOutcome.SOURCE_SURFACE_REJECT;
+        }
+        if (!sourceReplayValid) {
+            return PairedHistoryPreviousReplayOutcome.SOURCE_REPLAY_REJECT;
+        }
+        if (outputMappingKind == null) {
+            throw new IllegalArgumentException(
+                    "accepted paired-history replay requires an output mapping kind");
+        }
+        return outputMappingKind == MappingKind.DIFFUSE_RECONNECTION
+                ? PairedHistoryPreviousReplayOutcome.SELECTED_ACCEPTED
+                : PairedHistoryPreviousReplayOutcome.RETAINED_ACCEPTED;
     }
 
     enum BranchWinnerDirectRemapOutcome {
