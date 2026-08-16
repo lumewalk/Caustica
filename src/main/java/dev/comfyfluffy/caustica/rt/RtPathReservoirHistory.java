@@ -850,7 +850,20 @@ final class RtPathReservoirHistory {
     static final int GUIDE_PAIRED_HISTORY_REPLAY_MAPPED_SOURCE_ACCEPTED_INDEX = 802;
     static final int GUIDE_PAIRED_HISTORY_REPLAY_ONE_SEGMENT_ACCEPTED_INDEX = 803;
     static final int GUIDE_PAIRED_HISTORY_REPLAY_TWO_SEGMENT_ACCEPTED_INDEX = 804;
-    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 805;
+    static final int GUIDE_PAIRED_HISTORY_DIRECT_REMAP_ELIGIBLE_INDEX = 805;
+    static final int GUIDE_PAIRED_HISTORY_DIRECT_REMAP_GUIDE_REJECT_INDEX = 806;
+    static final int GUIDE_PAIRED_HISTORY_DIRECT_REMAP_EDGE_REJECT_INDEX = 807;
+    static final int GUIDE_PAIRED_HISTORY_DIRECT_REMAP_GEOMETRY_REJECT_INDEX = 808;
+    static final int GUIDE_PAIRED_HISTORY_DIRECT_REMAP_PDF_REJECT_INDEX = 809;
+    static final int GUIDE_PAIRED_HISTORY_DIRECT_REMAP_THROUGHPUT_REJECT_INDEX = 810;
+    static final int GUIDE_PAIRED_HISTORY_DIRECT_REMAP_READY_INDEX = 811;
+    static final int GUIDE_PAIRED_HISTORY_DIRECT_REMAP_SELECTED_READY_INDEX = 812;
+    static final int GUIDE_PAIRED_HISTORY_DIRECT_REMAP_RETAINED_READY_INDEX = 813;
+    static final int GUIDE_PAIRED_HISTORY_DIRECT_REMAP_IDENTITY_SOURCE_READY_INDEX = 814;
+    static final int GUIDE_PAIRED_HISTORY_DIRECT_REMAP_MAPPED_SOURCE_READY_INDEX = 815;
+    static final int GUIDE_PAIRED_HISTORY_DIRECT_REMAP_ONE_SEGMENT_READY_INDEX = 816;
+    static final int GUIDE_PAIRED_HISTORY_DIRECT_REMAP_TWO_SEGMENT_READY_INDEX = 817;
+    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 818;
     static final int SHIFTED_RECEIVER_GUIDE_STRIDE = 8 * Float.BYTES;
     static final int BRANCH_RECEIVER_OWNERSHIP_STRIDE = 2 * Integer.BYTES;
     static final int BRANCH_CANDIDATE_TAG_STRIDE = 2 * Integer.BYTES;
@@ -2972,6 +2985,33 @@ final class RtPathReservoirHistory {
                     counters.get(GUIDE_PAIRED_HISTORY_REPLAY_ONE_SEGMENT_ACCEPTED_INDEX));
             long pairedHistoryReplayTwoSegmentAccepted = Integer.toUnsignedLong(
                     counters.get(GUIDE_PAIRED_HISTORY_REPLAY_TWO_SEGMENT_ACCEPTED_INDEX));
+            long pairedHistoryDirectRemapEligible = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_DIRECT_REMAP_ELIGIBLE_INDEX));
+            long pairedHistoryDirectRemapGuideReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_DIRECT_REMAP_GUIDE_REJECT_INDEX));
+            long pairedHistoryDirectRemapEdgeReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_DIRECT_REMAP_EDGE_REJECT_INDEX));
+            long pairedHistoryDirectRemapGeometryReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_DIRECT_REMAP_GEOMETRY_REJECT_INDEX));
+            long pairedHistoryDirectRemapPdfReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_DIRECT_REMAP_PDF_REJECT_INDEX));
+            long pairedHistoryDirectRemapThroughputReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_DIRECT_REMAP_THROUGHPUT_REJECT_INDEX));
+            long pairedHistoryDirectRemapReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_DIRECT_REMAP_READY_INDEX));
+            long pairedHistoryDirectRemapSelectedReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_DIRECT_REMAP_SELECTED_READY_INDEX));
+            long pairedHistoryDirectRemapRetainedReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_DIRECT_REMAP_RETAINED_READY_INDEX));
+            long pairedHistoryDirectRemapIdentitySourceReady = Integer.toUnsignedLong(
+                    counters.get(
+                            GUIDE_PAIRED_HISTORY_DIRECT_REMAP_IDENTITY_SOURCE_READY_INDEX));
+            long pairedHistoryDirectRemapMappedSourceReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_DIRECT_REMAP_MAPPED_SOURCE_READY_INDEX));
+            long pairedHistoryDirectRemapOneSegmentReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_DIRECT_REMAP_ONE_SEGMENT_READY_INDEX));
+            long pairedHistoryDirectRemapTwoSegmentReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_DIRECT_REMAP_TWO_SEGMENT_READY_INDEX));
             long crossFrameReceiverReject = crossFrameReceiverSurfaceReject
                     + crossFrameReceiverSampleReject + crossFrameReceiverEdgeReject
                     + crossFrameReceiverTopologyReject + crossFrameReceiverDepthReject
@@ -5452,6 +5492,45 @@ final class RtPathReservoirHistory {
                     pairedHistoryReplayOneSegmentAccepted,
                     pairedHistoryReplayTwoSegmentAccepted,
                     pairedHistoryReplayAccepted - pairedHistoryReplaySegments);
+            long pairedHistoryDirectRemapTerminal = pairedHistoryDirectRemapGuideReject
+                    + pairedHistoryDirectRemapEdgeReject
+                    + pairedHistoryDirectRemapGeometryReject
+                    + pairedHistoryDirectRemapPdfReject
+                    + pairedHistoryDirectRemapThroughputReject
+                    + pairedHistoryDirectRemapReady;
+            long pairedHistoryDirectRemapBranch = pairedHistoryDirectRemapSelectedReady
+                    + pairedHistoryDirectRemapRetainedReady;
+            long pairedHistoryDirectRemapSource = pairedHistoryDirectRemapIdentitySourceReady
+                    + pairedHistoryDirectRemapMappedSourceReady;
+            long pairedHistoryDirectRemapSegments = pairedHistoryDirectRemapOneSegmentReady
+                    + pairedHistoryDirectRemapTwoSegmentReady;
+            CausticaMod.LOGGER.info(
+                    "RT path paired history direct remap: replayAccepted={} eligible={} "
+                            + "reject[guide={},edge={},geometry={},pdf={},throughput={}] "
+                            + "ready={} terminal={} delta={} gateDelta={} "
+                            + "branch[selected={},retained={},delta={}] "
+                            + "source[identity={},mapped={},delta={}] "
+                            + "segments[one={},two={},delta={}]",
+                    pairedHistoryReplayAccepted,
+                    pairedHistoryDirectRemapEligible,
+                    pairedHistoryDirectRemapGuideReject,
+                    pairedHistoryDirectRemapEdgeReject,
+                    pairedHistoryDirectRemapGeometryReject,
+                    pairedHistoryDirectRemapPdfReject,
+                    pairedHistoryDirectRemapThroughputReject,
+                    pairedHistoryDirectRemapReady,
+                    pairedHistoryDirectRemapTerminal,
+                    pairedHistoryDirectRemapEligible - pairedHistoryDirectRemapTerminal,
+                    pairedHistoryReplayAccepted - pairedHistoryDirectRemapEligible,
+                    pairedHistoryDirectRemapSelectedReady,
+                    pairedHistoryDirectRemapRetainedReady,
+                    pairedHistoryDirectRemapReady - pairedHistoryDirectRemapBranch,
+                    pairedHistoryDirectRemapIdentitySourceReady,
+                    pairedHistoryDirectRemapMappedSourceReady,
+                    pairedHistoryDirectRemapReady - pairedHistoryDirectRemapSource,
+                    pairedHistoryDirectRemapOneSegmentReady,
+                    pairedHistoryDirectRemapTwoSegmentReady,
+                    pairedHistoryDirectRemapReady - pairedHistoryDirectRemapSegments);
             spatialDiagnosticViewPending = 0;
             return;
         }

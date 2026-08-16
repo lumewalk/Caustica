@@ -1646,7 +1646,7 @@ final class RtPathSpatialReuseReferenceTest {
     }
 
     @Test
-    void pairedHistoryPreviousReplayIncludesLifecycleAndStopsAtExactReplay() {
+    void pairedHistoryPreviousReplayIncludesLifecycleAndExactReplayOutcomes() {
         var identity = RtPathSpatialReuseReference.MappingKind.IDENTITY;
         var mapped = RtPathSpatialReuseReference.MappingKind.DIFFUSE_RECONNECTION;
         var expected = RtPathSpatialReuseReference.PairedHistoryPreviousReplayOutcome.class;
@@ -1684,6 +1684,37 @@ final class RtPathSpatialReuseReferenceTest {
         assertThrows(IllegalArgumentException.class,
                 () -> RtPathSpatialReuseReference.pairedHistoryPreviousReplayOutcome(
                         true, true, true, true, true, true, true, true, null));
+    }
+
+    @Test
+    void pairedHistoryDirectRemapRequiresAcceptedReplayAndOrdersRejects() {
+        var replay = RtPathSpatialReuseReference.PairedHistoryPreviousReplayOutcome.class;
+        var remap = RtPathSpatialReuseReference.PairedHistoryDirectRemapOutcome.class;
+
+        assertEquals(remap.getEnumConstants()[0],
+                RtPathSpatialReuseReference.pairedHistoryDirectRemapOutcome(
+                        replay.getEnumConstants()[7], true, true, true, true, true));
+        assertEquals(remap.getEnumConstants()[1],
+                RtPathSpatialReuseReference.pairedHistoryDirectRemapOutcome(
+                        replay.getEnumConstants()[8], false, false, false, false, false));
+        assertEquals(remap.getEnumConstants()[2],
+                RtPathSpatialReuseReference.pairedHistoryDirectRemapOutcome(
+                        replay.getEnumConstants()[8], true, false, false, false, false));
+        assertEquals(remap.getEnumConstants()[3],
+                RtPathSpatialReuseReference.pairedHistoryDirectRemapOutcome(
+                        replay.getEnumConstants()[8], true, true, false, false, false));
+        assertEquals(remap.getEnumConstants()[4],
+                RtPathSpatialReuseReference.pairedHistoryDirectRemapOutcome(
+                        replay.getEnumConstants()[8], true, true, true, false, false));
+        assertEquals(remap.getEnumConstants()[5],
+                RtPathSpatialReuseReference.pairedHistoryDirectRemapOutcome(
+                        replay.getEnumConstants()[8], true, true, true, true, false));
+        assertEquals(remap.getEnumConstants()[6],
+                RtPathSpatialReuseReference.pairedHistoryDirectRemapOutcome(
+                        replay.getEnumConstants()[8], true, true, true, true, true));
+        assertEquals(remap.getEnumConstants()[6],
+                RtPathSpatialReuseReference.pairedHistoryDirectRemapOutcome(
+                        replay.getEnumConstants()[9], true, true, true, true, true));
     }
 
     @Test
@@ -3648,8 +3679,16 @@ final class RtPathSpatialReuseReferenceTest {
                 RtPathReservoirHistory.GUIDE_PAIRED_HISTORY_REPLAY_SELECTED_ACCEPTED_INDEX);
         assertEquals(804,
                 RtPathReservoirHistory.GUIDE_PAIRED_HISTORY_REPLAY_TWO_SEGMENT_ACCEPTED_INDEX);
-        assertEquals(805, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
-        assertEquals(805 * Integer.BYTES,
+        assertEquals(805,
+                RtPathReservoirHistory.GUIDE_PAIRED_HISTORY_DIRECT_REMAP_ELIGIBLE_INDEX);
+        assertEquals(810,
+                RtPathReservoirHistory.GUIDE_PAIRED_HISTORY_DIRECT_REMAP_THROUGHPUT_REJECT_INDEX);
+        assertEquals(811,
+                RtPathReservoirHistory.GUIDE_PAIRED_HISTORY_DIRECT_REMAP_READY_INDEX);
+        assertEquals(817,
+                RtPathReservoirHistory.GUIDE_PAIRED_HISTORY_DIRECT_REMAP_TWO_SEGMENT_READY_INDEX);
+        assertEquals(818, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
+        assertEquals(818 * Integer.BYTES,
                 RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_COUNTER_BYTES);
         assertEquals(32, RtPathReservoirHistory.SHIFTED_RECEIVER_GUIDE_STRIDE);
         assertEquals(8, RtPathReservoirHistory.BRANCH_RECEIVER_OWNERSHIP_STRIDE);

@@ -1173,6 +1173,16 @@ final class RtPathSpatialReuseReference {
         RETAINED_ACCEPTED
     }
 
+    enum PairedHistoryDirectRemapOutcome {
+        PREVIOUS_REPLAY_REJECT,
+        GUIDE_REJECT,
+        EDGE_REJECT,
+        GEOMETRY_REJECT,
+        PDF_REJECT,
+        THROUGHPUT_REJECT,
+        READY
+    }
+
     enum BranchCandidateRetentionOutcome {
         EMPTY,
         FUTURE_REJECT,
@@ -2227,6 +2237,35 @@ final class RtPathSpatialReuseReference {
         return outputMappingKind == MappingKind.DIFFUSE_RECONNECTION
                 ? PairedHistoryPreviousReplayOutcome.SELECTED_ACCEPTED
                 : PairedHistoryPreviousReplayOutcome.RETAINED_ACCEPTED;
+    }
+
+    /** Ordered CPU mirror for the paired-history pre-visibility direct remap. */
+    static PairedHistoryDirectRemapOutcome pairedHistoryDirectRemapOutcome(
+            PairedHistoryPreviousReplayOutcome replayOutcome,
+            boolean receiverGuideValid, boolean sourceEdgeValid, boolean geometryValid,
+            boolean pdfValid, boolean throughputValid) {
+        boolean replayAccepted = replayOutcome
+                == PairedHistoryPreviousReplayOutcome.SELECTED_ACCEPTED
+                || replayOutcome == PairedHistoryPreviousReplayOutcome.RETAINED_ACCEPTED;
+        if (!replayAccepted) {
+            return PairedHistoryDirectRemapOutcome.PREVIOUS_REPLAY_REJECT;
+        }
+        if (!receiverGuideValid) {
+            return PairedHistoryDirectRemapOutcome.GUIDE_REJECT;
+        }
+        if (!sourceEdgeValid) {
+            return PairedHistoryDirectRemapOutcome.EDGE_REJECT;
+        }
+        if (!geometryValid) {
+            return PairedHistoryDirectRemapOutcome.GEOMETRY_REJECT;
+        }
+        if (!pdfValid) {
+            return PairedHistoryDirectRemapOutcome.PDF_REJECT;
+        }
+        if (!throughputValid) {
+            return PairedHistoryDirectRemapOutcome.THROUGHPUT_REJECT;
+        }
+        return PairedHistoryDirectRemapOutcome.READY;
     }
 
     enum BranchWinnerDirectRemapOutcome {

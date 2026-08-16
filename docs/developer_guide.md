@@ -1005,15 +1005,27 @@ approved previous paired slot. Required accounting is `attempted = lifecycle + r
 + empty + metadata + receiverSurface + sourceReprojection + sourceSurface + replay + accepted`,
 followed by the same selected/retained, identity/mapped and one/two-segment exact partitions. Normal
 stable frames have zero lifecycle and metadata rejects; motion, changed surfaces and exact replay
-failures remain explicit safe rejects and must not be hidden by wider tolerances. This pass returns
-immediately after seeded original-root replay and therefore does not authorize direct remap,
-visibility, weights, selection, history writes or estimator use.
+failures remain explicit safe rejects and must not be hidden by wider tolerances.
 
 The reference run produced seven 569x320 readbacks: 1274560 attempts, 455409 exact accepted
 (448175 selected + 7234 retained; 15979 identity-source + 439430 mapped-source), 817472 empty, 29
 receiver-surface rejects, 2 source-reprojection rejects and 1648 source-replay rejects. All lifecycle,
 receiver-reprojection, metadata, source-surface and accounting deltas were zero. Counter storage is
-805 uints / 3220 B; reflected `WorldPush` remains 704 B and replay ABI remains 10.
+now 818 uints / 3272 B; reflected `WorldPush` remains 704 B and replay ABI remains 10.
+
+The follow-on line `RT path paired history direct remap` covers only records accepted by that exact
+replay gate. It must satisfy `replayAccepted = eligible`, `eligible = rejects + ready`, and exact
+ready partitions for selected/retained, identity/mapped source and one/two segments. The shader
+recomputes current receiver geometry, receiver directional PDF, the direct PSS Jacobian and
+throughput ratio from the immutable source edge; it never reads or composes the previous mapping
+Jacobian. Unsupported edge kinds reject explicitly. A successful invocation returns before
+visibility, target reconstruction, weights, selection or any write.
+
+The direct-remap reference run produced twenty-four 569x320 readbacks: 424752 replay-approved and
+eligible records, 423420 ready and 1332 unsupported-edge rejects. Guide, geometry, PDF and throughput
+rejects were zero. The ready set split into 419461 selected + 3959 retained, 18025 identity-source
+and 405395 mapped-source, and 423420 one-segment + 0 two-segment records. Every terminal, gate and
+partition delta was zero, and no Vulkan/device/GPU/shader fault was logged.
 
 For a fresh runtime check, use debug view 20 and inspect `run/logs/latest.log`. Normal operation
 requires `RT bring-up OK`, Vulkan, the intended NVIDIA device, exact zero-delta counter partitions,

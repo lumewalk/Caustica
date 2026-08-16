@@ -1230,18 +1230,26 @@ The adjacent-frame paired owner is now consumed by a distinct read-only replay p
 the previous address on exact frame continuity and generation, reprojects the receiver through the
 current motion field, independently reprojects the immutable source root into current guides, and
 replays the saved original root seeds. Diffuse-mapped outputs compare only immutable source replay
-lanes; retained identity outputs use the complete exact replay comparator. Successful invocations
-return immediately after replay, before direct remap, visibility, weights, selection or any storage
-write. Fifteen counters bring view-20 storage to 805 uints / 3220 B; `WorldPush`, allocation sizes,
-inline push constants and replay ABI 10 are unchanged.
+lanes; retained identity outputs use the complete exact replay comparator. A follow-on register-only
+gate now recomputes the immutable-source-to-current-receiver diffuse remap directly: receiver
+geometry, directional PDF, PSS Jacobian and throughput are derived from the current receiver and the
+original source edge without reading or composing the previous mapping Jacobian. Successful paired
+invocations return immediately after this remap, before visibility, target reconstruction, weights,
+selection or any storage write. Twenty-eight counters bring view-20 storage to 818 uints / 3272 B;
+`WorldPush`, allocation sizes, inline push constants and replay ABI 10 are unchanged.
 
 Seven 569x320 Vulkan readbacks covered 1274560 adjacent-frame attempts: 455409 exact accepted
 (448175 selected plus 7234 retained; 15979 identity-source plus 439430 mapped-source), 817472 empty,
 29 receiver-surface rejects, 2 source-reprojection rejects and 1648 strict source-replay rejects.
 Lifecycle, receiver-reprojection, metadata and source-surface rejects were zero; every terminal,
-branch, source and segment delta was zero. The next gate may recompute the direct immutable-source
-to current-receiver remap in registers from this accepted paired record, but it must not read or
-compose a previous Jacobian and still may not write legacy history or estimator radiance.
+branch, source and segment delta was zero. The direct-remap reference run then produced twenty-four
+569x320 readbacks over 424752 replay-approved records: 423420 became remap-ready and 1332 were
+explicitly rejected as unsupported edge events. Guide, geometry, PDF and throughput rejects were
+zero; the ready population split exactly into 419461 selected + 3959 retained, 18025 identity-source
+and 405395 mapped-source, and 423420 one-segment + 0 two-segment records. Every terminal and partition
+delta was zero, with no Vulkan/device/GPU/shader failure. The next gate may trace production
+visibility and reconstruct the shifted target from this register-only result, but still may not
+write legacy history, weights, selection state or estimator radiance.
 
 ## Delivery Phases
 

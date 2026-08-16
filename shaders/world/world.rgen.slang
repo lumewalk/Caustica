@@ -3033,9 +3033,10 @@ static void pathBranchWinnerStorageValidate() {
 }
 
 // Reopens either the adjacent-frame diagnostic winner or the separately owned paired-history slot.
-// Both paths share the strict receiver/source reprojection and immutable-root seeded replay. The
-// paired-history audit returns immediately after replay, before direct remap, visibility, weights,
-// selection, scratch writes, committed history, or estimator radiance become reachable.
+// Both paths share strict receiver/source reprojection, immutable-root seeded replay, and a freshly
+// recomputed direct remap. The paired-history audit returns immediately after the remap, before
+// visibility, weights, selection, scratch writes, committed history, or estimator radiance become
+// reachable.
 static void pathPreviousPairReplayValidate(bool pairedHistory) {
     bool winnerReplayPass = (pc.historyFlags
             & PATH_GUIDE_BRANCH_WINNER_PREVIOUS_REPLAY_PASS_FLAG) != 0u;
@@ -3265,15 +3266,37 @@ static void pathPreviousPairReplayValidate(bool pairedHistory) {
             ? mappedSourceAcceptedCounter : identitySourceAcceptedCounter], 1u);
     InterlockedAdd(counters[replaySegments == 1u
             ? oneSegmentAcceptedCounter : twoSegmentAcceptedCounter], 1u);
-    if (pairedHistory) {
-        return;
-    }
 
     // Rebuild the direct immutable-original-source -> current-receiver shift in registers. The
     // previous winner's mapping descriptor and proposalShift Jacobian are deliberately ignored:
     // replay supplies the original source edge, while the current receiver guide supplies a fresh
     // diffuse density and throughput. This cannot turn a mapped winner into another spatial source.
-    InterlockedAdd(counters[PATH_GUIDE_BRANCH_WINNER_DIRECT_REMAP_ELIGIBLE], 1u);
+    uint directRemapEligibleCounter = pairedHistory
+            ? PATH_GUIDE_PAIRED_HISTORY_DIRECT_REMAP_ELIGIBLE
+            : PATH_GUIDE_BRANCH_WINNER_DIRECT_REMAP_ELIGIBLE;
+    uint directRemapGuideRejectCounter = pairedHistory
+            ? PATH_GUIDE_PAIRED_HISTORY_DIRECT_REMAP_GUIDE_REJECT
+            : PATH_GUIDE_BRANCH_WINNER_DIRECT_REMAP_GUIDE_REJECT;
+    uint directRemapEdgeRejectCounter = pairedHistory
+            ? PATH_GUIDE_PAIRED_HISTORY_DIRECT_REMAP_EDGE_REJECT
+            : PATH_GUIDE_BRANCH_WINNER_DIRECT_REMAP_EDGE_REJECT;
+    uint directRemapGeometryRejectCounter = pairedHistory
+            ? PATH_GUIDE_PAIRED_HISTORY_DIRECT_REMAP_GEOMETRY_REJECT
+            : PATH_GUIDE_BRANCH_WINNER_DIRECT_REMAP_GEOMETRY_REJECT;
+    uint directRemapPdfRejectCounter = pairedHistory
+            ? PATH_GUIDE_PAIRED_HISTORY_DIRECT_REMAP_PDF_REJECT
+            : PATH_GUIDE_BRANCH_WINNER_DIRECT_REMAP_PDF_REJECT;
+    uint directRemapThroughputRejectCounter = pairedHistory
+            ? PATH_GUIDE_PAIRED_HISTORY_DIRECT_REMAP_THROUGHPUT_REJECT
+            : PATH_GUIDE_BRANCH_WINNER_DIRECT_REMAP_THROUGHPUT_REJECT;
+    uint directRemapReadyCounter = pairedHistory
+            ? PATH_GUIDE_PAIRED_HISTORY_DIRECT_REMAP_READY
+            : PATH_GUIDE_BRANCH_WINNER_DIRECT_REMAP_READY;
+    InterlockedAdd(counters[directRemapEligibleCounter], 1u);
+    if (worldPush.pathShiftReceiverGuideAddr == 0u) {
+        InterlockedAdd(counters[directRemapGuideRejectCounter], 1u);
+        return;
+    }
     uint receiverPixelIndex = pixel.y * dimensions.x + pixel.x;
     ConstPtr<float4> receiverGuides =
             ConstPtr<float4>(worldPush.pathShiftReceiverGuideAddr);
@@ -3293,8 +3316,7 @@ static void pathPreviousPairReplayValidate(bool pairedHistory) {
                     || receiverMaterial == MATERIAL_PARTICLE)
             && receiverMaterialIdentity == sourceMaterialIdentity;
     if (!receiverGuideValid) {
-        InterlockedAdd(counters[
-                PATH_GUIDE_BRANCH_WINNER_DIRECT_REMAP_GUIDE_REJECT], 1u);
+        InterlockedAdd(counters[directRemapGuideRejectCounter], 1u);
         return;
     }
 
@@ -3308,8 +3330,7 @@ static void pathPreviousPairReplayValidate(bool pairedHistory) {
             && all(isfinite(replay.reconnectionThroughput))
             && sharedNormalLength >= 0.5;
     if (!edgeValid) {
-        InterlockedAdd(counters[
-                PATH_GUIDE_BRANCH_WINNER_DIRECT_REMAP_EDGE_REJECT], 1u);
+        InterlockedAdd(counters[directRemapEdgeRejectCounter], 1u);
         return;
     }
 
@@ -3332,8 +3353,7 @@ static void pathPreviousPairReplayValidate(bool pairedHistory) {
                 && isfinite(geometryJacobian) && geometryJacobian > 0.0;
     }
     if (!geometryValid) {
-        InterlockedAdd(counters[
-                PATH_GUIDE_BRANCH_WINNER_DIRECT_REMAP_GEOMETRY_REJECT], 1u);
+        InterlockedAdd(counters[directRemapGeometryRejectCounter], 1u);
         return;
     }
 
@@ -3347,8 +3367,7 @@ static void pathPreviousPairReplayValidate(bool pairedHistory) {
             && isfinite(sourcePdf) && sourcePdf > 0.0
             && isfinite(directPssJacobian) && directPssJacobian > 0.0;
     if (!pdfValid) {
-        InterlockedAdd(counters[
-                PATH_GUIDE_BRANCH_WINNER_DIRECT_REMAP_PDF_REJECT], 1u);
+        InterlockedAdd(counters[directRemapPdfRejectCounter], 1u);
         return;
     }
 
@@ -3369,11 +3388,22 @@ static void pathPreviousPairReplayValidate(bool pairedHistory) {
             && all(isfinite(throughputRatio)) && all(throughputRatio >= float3(0.0))
             && all(isfinite(shiftedRadiance)) && all(shiftedRadiance >= float3(0.0));
     if (!throughputValid) {
-        InterlockedAdd(counters[
-                PATH_GUIDE_BRANCH_WINNER_DIRECT_REMAP_THROUGHPUT_REJECT], 1u);
+        InterlockedAdd(counters[directRemapThroughputRejectCounter], 1u);
         return;
     }
-    InterlockedAdd(counters[PATH_GUIDE_BRANCH_WINNER_DIRECT_REMAP_READY], 1u);
+    InterlockedAdd(counters[directRemapReadyCounter], 1u);
+    if (pairedHistory) {
+        InterlockedAdd(counters[outputMappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION
+                ? PATH_GUIDE_PAIRED_HISTORY_DIRECT_REMAP_SELECTED_READY
+                : PATH_GUIDE_PAIRED_HISTORY_DIRECT_REMAP_RETAINED_READY], 1u);
+        InterlockedAdd(counters[sourceMappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION
+                ? PATH_GUIDE_PAIRED_HISTORY_DIRECT_REMAP_MAPPED_SOURCE_READY
+                : PATH_GUIDE_PAIRED_HISTORY_DIRECT_REMAP_IDENTITY_SOURCE_READY], 1u);
+        InterlockedAdd(counters[replaySegments == 1u
+                ? PATH_GUIDE_PAIRED_HISTORY_DIRECT_REMAP_ONE_SEGMENT_READY
+                : PATH_GUIDE_PAIRED_HISTORY_DIRECT_REMAP_TWO_SEGMENT_READY], 1u);
+        return;
+    }
 
     // Use the production shadow query from the exact current biased receiver origin. Occlusion is
     // a valid zero-target result. Arithmetic failure terminates before target/weight admission.
