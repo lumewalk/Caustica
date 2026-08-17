@@ -1216,6 +1216,21 @@ final class RtPathSpatialReuseReference {
             double mergeWeight) {
     }
 
+    enum PairedHistorySelectionOutcome {
+        WEIGHT_REJECT,
+        CURRENT_REJECT,
+        ZERO,
+        OPEN,
+        ONE,
+        INVALID
+    }
+
+    record PairedHistorySelectionAudit(
+            PairedHistorySelectionOutcome selection,
+            BranchDirectCurrentWeightOutcome currentWeight,
+            double probability) {
+    }
+
     enum BranchCandidateRetentionOutcome {
         EMPTY,
         FUTURE_REJECT,
@@ -2370,6 +2385,57 @@ final class RtPathSpatialReuseReference {
                         ? BranchDirectSourceCountOutcome.CAPPED
                         : BranchDirectSourceCountOutcome.UNCAPPED,
                 mergeWeight);
+    }
+
+    /**
+     * CPU authority for paired-history selection probability. The ratio is formed from the
+     * uncapped relative weights only and this audit deliberately has no Bernoulli input.
+     */
+    static PairedHistorySelectionAudit pairedHistorySelectionAudit(
+            PairedHistoryDirectWeightOutcome weightOutcome,
+            double currentWeightSum, double mergeWeight) {
+        boolean weightReady = weightOutcome == PairedHistoryDirectWeightOutcome.POSITIVE
+                || weightOutcome == PairedHistoryDirectWeightOutcome.ZERO;
+        if (!weightReady) {
+            return new PairedHistorySelectionAudit(
+                    PairedHistorySelectionOutcome.WEIGHT_REJECT,
+                    BranchDirectCurrentWeightOutcome.NOT_ELIGIBLE, 0.0);
+        }
+        if (!nonNegativeFinite(currentWeightSum)) {
+            return new PairedHistorySelectionAudit(
+                    PairedHistorySelectionOutcome.CURRENT_REJECT,
+                    BranchDirectCurrentWeightOutcome.NOT_ELIGIBLE, 0.0);
+        }
+        if (!nonNegativeFinite(mergeWeight)) {
+            return new PairedHistorySelectionAudit(
+                    PairedHistorySelectionOutcome.INVALID,
+                    BranchDirectCurrentWeightOutcome.NOT_ELIGIBLE, 0.0);
+        }
+
+        double probability;
+        if (mergeWeight == 0.0) {
+            probability = 0.0;
+        } else if (currentWeightSum <= mergeWeight) {
+            probability = 1.0 / (1.0 + currentWeightSum / mergeWeight);
+        } else {
+            double ratio = mergeWeight / currentWeightSum;
+            probability = ratio / (1.0 + ratio);
+        }
+        if (!Double.isFinite(probability) || probability < 0.0 || probability > 1.0) {
+            return new PairedHistorySelectionAudit(
+                    PairedHistorySelectionOutcome.INVALID,
+                    BranchDirectCurrentWeightOutcome.NOT_ELIGIBLE, 0.0);
+        }
+        return new PairedHistorySelectionAudit(
+                probability == 0.0
+                        ? PairedHistorySelectionOutcome.ZERO
+                        : probability == 1.0
+                                ? PairedHistorySelectionOutcome.ONE
+                                : PairedHistorySelectionOutcome.OPEN,
+                currentWeightSum == 0.0
+                        ? BranchDirectCurrentWeightOutcome.ZERO
+                        : BranchDirectCurrentWeightOutcome.POSITIVE,
+                probability);
     }
 
     enum BranchWinnerDirectRemapOutcome {

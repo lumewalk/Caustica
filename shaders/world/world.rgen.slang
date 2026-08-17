@@ -3533,6 +3533,44 @@ static void pathPreviousPairReplayValidate(bool pairedHistory) {
         InterlockedAdd(counters[replaySegments == 1u
                 ? PATH_GUIDE_PAIRED_HISTORY_DIRECT_WEIGHT_ONE_SEGMENT_READY
                 : PATH_GUIDE_PAIRED_HISTORY_DIRECT_WEIGHT_TWO_SEGMENT_READY], 1u);
+
+        // Classify the hypothetical merge against the current same-pixel candidate using only
+        // the overflow-stable uncapped relative ratio. This gate intentionally stops before a
+        // Bernoulli draw, post-selection arithmetic, payload construction, or any storage write.
+        InterlockedAdd(counters[PATH_GUIDE_PAIRED_HISTORY_SELECTION_ELIGIBLE], 1u);
+        PathReservoir current =
+                ConstPtr<PathReservoir>(pc.pathReservoirAddr)[receiverPixelIndex];
+        float currentWeightSum = current.weights.x;
+        if (!isfinite(currentWeightSum) || currentWeightSum < 0.0) {
+            InterlockedAdd(counters[
+                    PATH_GUIDE_PAIRED_HISTORY_SELECTION_CURRENT_REJECT], 1u);
+            return;
+        }
+        float selectionProbability = pathStableSelectionProbability(
+                currentWeightSum, mergeWeight);
+        bool selectionValid = isfinite(selectionProbability)
+                && selectionProbability >= 0.0 && selectionProbability <= 1.0;
+        InterlockedAdd(counters[!selectionValid
+                ? PATH_GUIDE_PAIRED_HISTORY_SELECTION_PROBABILITY_INVALID
+                : selectionProbability == 0.0
+                        ? PATH_GUIDE_PAIRED_HISTORY_SELECTION_PROBABILITY_ZERO
+                        : selectionProbability == 1.0
+                                ? PATH_GUIDE_PAIRED_HISTORY_SELECTION_PROBABILITY_ONE
+                                : PATH_GUIDE_PAIRED_HISTORY_SELECTION_PROBABILITY_OPEN], 1u);
+        if (!selectionValid) return;
+
+        InterlockedAdd(counters[currentWeightSum == 0.0
+                ? PATH_GUIDE_PAIRED_HISTORY_SELECTION_CURRENT_ZERO
+                : PATH_GUIDE_PAIRED_HISTORY_SELECTION_CURRENT_POSITIVE], 1u);
+        InterlockedAdd(counters[outputMappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION
+                ? PATH_GUIDE_PAIRED_HISTORY_SELECTION_SELECTED_READY
+                : PATH_GUIDE_PAIRED_HISTORY_SELECTION_RETAINED_READY], 1u);
+        InterlockedAdd(counters[sourceMappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION
+                ? PATH_GUIDE_PAIRED_HISTORY_SELECTION_MAPPED_SOURCE_READY
+                : PATH_GUIDE_PAIRED_HISTORY_SELECTION_IDENTITY_SOURCE_READY], 1u);
+        InterlockedAdd(counters[replaySegments == 1u
+                ? PATH_GUIDE_PAIRED_HISTORY_SELECTION_ONE_SEGMENT_READY
+                : PATH_GUIDE_PAIRED_HISTORY_SELECTION_TWO_SEGMENT_READY], 1u);
         return;
     }
     InterlockedAdd(counters[outputMappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION

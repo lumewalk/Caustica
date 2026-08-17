@@ -1262,8 +1262,19 @@ Eight GRIS-weight readbacks then processed 382182 target-ready records. All 3821
 positive weights; zero and invalid outcomes were absent. Source M was uncapped for 324356 records and
 capped to 8 for 57826 records, so both runtime branches were exercised. Selected/retained,
 identity/mapped-source, one/two-segment, terminal, count and gate partitions all balanced exactly,
-with no Vulkan/device/GPU/shader failure. The next gate may classify the overflow-stable relative
-selection probability against the current candidate, but must return before Bernoulli selection,
+with no Vulkan/device/GPU/shader failure.
+
+The paired-history selection-probability gate now reads the current same-pixel candidate weight and
+uses the same overflow-stable uncapped relative ratio as the earlier aged/winner proofs. It never
+forms a capped stored sum, draws a random number, performs post-selection arithmetic, constructs a
+payload, or writes storage. Fourteen new counters bring view-20 storage to 859 uints / 3436 B;
+allocations, `WorldPush`, inline push constants and replay ABI 10 are unchanged. Eight 569x320 Vulkan
+readbacks classified all 468713 weight-ready records: 11 exact-zero, 63968 open and 404734 exact-one
+probabilities, with zero current rejects or invalid results. Current weights split into 362069 zero +
+106644 positive; output split into 461416 selected + 7297 retained; source provenance split into
+22925 identity + 445788 mapped. All 468713 paths had one segment, every terminal/gate/ownership delta
+was zero, and no Vulkan/device/GPU/shader failure occurred. The next gate may apply a deterministic
+local Bernoulli draw to this probability, but must still return before post-selection arithmetic,
 storage or estimator use.
 
 ## Delivery Phases

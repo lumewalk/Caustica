@@ -890,7 +890,21 @@ final class RtPathReservoirHistory {
     static final int GUIDE_PAIRED_HISTORY_DIRECT_WEIGHT_MAPPED_SOURCE_READY_INDEX = 842;
     static final int GUIDE_PAIRED_HISTORY_DIRECT_WEIGHT_ONE_SEGMENT_READY_INDEX = 843;
     static final int GUIDE_PAIRED_HISTORY_DIRECT_WEIGHT_TWO_SEGMENT_READY_INDEX = 844;
-    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 845;
+    static final int GUIDE_PAIRED_HISTORY_SELECTION_ELIGIBLE_INDEX = 845;
+    static final int GUIDE_PAIRED_HISTORY_SELECTION_CURRENT_REJECT_INDEX = 846;
+    static final int GUIDE_PAIRED_HISTORY_SELECTION_PROBABILITY_ZERO_INDEX = 847;
+    static final int GUIDE_PAIRED_HISTORY_SELECTION_PROBABILITY_OPEN_INDEX = 848;
+    static final int GUIDE_PAIRED_HISTORY_SELECTION_PROBABILITY_ONE_INDEX = 849;
+    static final int GUIDE_PAIRED_HISTORY_SELECTION_PROBABILITY_INVALID_INDEX = 850;
+    static final int GUIDE_PAIRED_HISTORY_SELECTION_CURRENT_ZERO_INDEX = 851;
+    static final int GUIDE_PAIRED_HISTORY_SELECTION_CURRENT_POSITIVE_INDEX = 852;
+    static final int GUIDE_PAIRED_HISTORY_SELECTION_SELECTED_READY_INDEX = 853;
+    static final int GUIDE_PAIRED_HISTORY_SELECTION_RETAINED_READY_INDEX = 854;
+    static final int GUIDE_PAIRED_HISTORY_SELECTION_IDENTITY_SOURCE_READY_INDEX = 855;
+    static final int GUIDE_PAIRED_HISTORY_SELECTION_MAPPED_SOURCE_READY_INDEX = 856;
+    static final int GUIDE_PAIRED_HISTORY_SELECTION_ONE_SEGMENT_READY_INDEX = 857;
+    static final int GUIDE_PAIRED_HISTORY_SELECTION_TWO_SEGMENT_READY_INDEX = 858;
+    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 859;
     static final int SHIFTED_RECEIVER_GUIDE_STRIDE = 8 * Float.BYTES;
     static final int BRANCH_RECEIVER_OWNERSHIP_STRIDE = 2 * Integer.BYTES;
     static final int BRANCH_CANDIDATE_TAG_STRIDE = 2 * Integer.BYTES;
@@ -3095,6 +3109,34 @@ final class RtPathReservoirHistory {
                     counters.get(GUIDE_PAIRED_HISTORY_DIRECT_WEIGHT_ONE_SEGMENT_READY_INDEX));
             long pairedHistoryDirectWeightTwoSegmentReady = Integer.toUnsignedLong(
                     counters.get(GUIDE_PAIRED_HISTORY_DIRECT_WEIGHT_TWO_SEGMENT_READY_INDEX));
+            long pairedHistorySelectionEligible = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_SELECTION_ELIGIBLE_INDEX));
+            long pairedHistorySelectionCurrentReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_SELECTION_CURRENT_REJECT_INDEX));
+            long pairedHistorySelectionProbabilityZero = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_SELECTION_PROBABILITY_ZERO_INDEX));
+            long pairedHistorySelectionProbabilityOpen = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_SELECTION_PROBABILITY_OPEN_INDEX));
+            long pairedHistorySelectionProbabilityOne = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_SELECTION_PROBABILITY_ONE_INDEX));
+            long pairedHistorySelectionProbabilityInvalid = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_SELECTION_PROBABILITY_INVALID_INDEX));
+            long pairedHistorySelectionCurrentZero = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_SELECTION_CURRENT_ZERO_INDEX));
+            long pairedHistorySelectionCurrentPositive = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_SELECTION_CURRENT_POSITIVE_INDEX));
+            long pairedHistorySelectionSelectedReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_SELECTION_SELECTED_READY_INDEX));
+            long pairedHistorySelectionRetainedReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_SELECTION_RETAINED_READY_INDEX));
+            long pairedHistorySelectionIdentitySourceReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_SELECTION_IDENTITY_SOURCE_READY_INDEX));
+            long pairedHistorySelectionMappedSourceReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_SELECTION_MAPPED_SOURCE_READY_INDEX));
+            long pairedHistorySelectionOneSegmentReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_SELECTION_ONE_SEGMENT_READY_INDEX));
+            long pairedHistorySelectionTwoSegmentReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_SELECTION_TWO_SEGMENT_READY_INDEX));
             long crossFrameReceiverReject = crossFrameReceiverSurfaceReject
                     + crossFrameReceiverSampleReject + crossFrameReceiverEdgeReject
                     + crossFrameReceiverTopologyReject + crossFrameReceiverDepthReject
@@ -5707,6 +5749,55 @@ final class RtPathReservoirHistory {
                     pairedHistoryDirectWeightOneSegmentReady,
                     pairedHistoryDirectWeightTwoSegmentReady,
                     pairedHistoryDirectWeightReady - pairedHistoryDirectWeightSegments);
+            long pairedHistorySelectionProbabilityReady =
+                    pairedHistorySelectionProbabilityZero
+                            + pairedHistorySelectionProbabilityOpen
+                            + pairedHistorySelectionProbabilityOne;
+            long pairedHistorySelectionProbabilityTerminal =
+                    pairedHistorySelectionProbabilityReady
+                            + pairedHistorySelectionProbabilityInvalid;
+            long pairedHistorySelectionTerminal = pairedHistorySelectionCurrentReject
+                    + pairedHistorySelectionProbabilityTerminal;
+            long pairedHistorySelectionCurrent = pairedHistorySelectionCurrentZero
+                    + pairedHistorySelectionCurrentPositive;
+            long pairedHistorySelectionBranch = pairedHistorySelectionSelectedReady
+                    + pairedHistorySelectionRetainedReady;
+            long pairedHistorySelectionSource = pairedHistorySelectionIdentitySourceReady
+                    + pairedHistorySelectionMappedSourceReady;
+            long pairedHistorySelectionSegments = pairedHistorySelectionOneSegmentReady
+                    + pairedHistorySelectionTwoSegmentReady;
+            CausticaMod.LOGGER.info(
+                    "RT path paired history selection probability: weightReady={} eligible={} "
+                            + "currentReject={} probability[zero={},open={},one={},invalid={},"
+                            + "ready={},terminal={}] terminal={} delta={} gateDelta={} "
+                            + "current[zero={},positive={},delta={}] "
+                            + "branch[selected={},retained={},delta={}] "
+                            + "source[identity={},mapped={},delta={}] "
+                            + "segments[one={},two={},delta={}]",
+                    pairedHistoryDirectWeightReady,
+                    pairedHistorySelectionEligible,
+                    pairedHistorySelectionCurrentReject,
+                    pairedHistorySelectionProbabilityZero,
+                    pairedHistorySelectionProbabilityOpen,
+                    pairedHistorySelectionProbabilityOne,
+                    pairedHistorySelectionProbabilityInvalid,
+                    pairedHistorySelectionProbabilityReady,
+                    pairedHistorySelectionProbabilityTerminal,
+                    pairedHistorySelectionTerminal,
+                    pairedHistorySelectionEligible - pairedHistorySelectionTerminal,
+                    pairedHistoryDirectWeightReady - pairedHistorySelectionEligible,
+                    pairedHistorySelectionCurrentZero,
+                    pairedHistorySelectionCurrentPositive,
+                    pairedHistorySelectionProbabilityReady - pairedHistorySelectionCurrent,
+                    pairedHistorySelectionSelectedReady,
+                    pairedHistorySelectionRetainedReady,
+                    pairedHistorySelectionProbabilityReady - pairedHistorySelectionBranch,
+                    pairedHistorySelectionIdentitySourceReady,
+                    pairedHistorySelectionMappedSourceReady,
+                    pairedHistorySelectionProbabilityReady - pairedHistorySelectionSource,
+                    pairedHistorySelectionOneSegmentReady,
+                    pairedHistorySelectionTwoSegmentReady,
+                    pairedHistorySelectionProbabilityReady - pairedHistorySelectionSegments);
             spatialDiagnosticViewPending = 0;
             return;
         }

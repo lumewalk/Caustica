@@ -1054,6 +1054,20 @@ records. The ready population split into 374822 selected + 7360 retained, 21462 
 360720 mapped-source, and 382182 one-segment + 0 two-segment records. Every gate and partition delta
 was zero, and no Vulkan/device/GPU/shader fault was logged.
 
+`RT path paired history selection probability` consumes exactly the weight-ready population and
+reads only the current same-pixel candidate weight. It evaluates the overflow-stable uncapped ratio;
+the capped stored sum is not a denominator. Required accounting is `weightReady = eligible` and
+`eligible = currentReject + zero + open + one + invalid`. The valid probability population must equal
+the current-zero/current-positive, selected/retained, identity/mapped-source and one/two-segment
+partitions. This pass performs no Bernoulli draw or write. Counter storage is 859 uints / 3436 B;
+`WorldPush`, allocation sizes and replay ABI 10 are unchanged.
+
+Eight 569x320 reference readbacks classified 468713/468713 eligible records: 11 zero + 63968 open +
+404734 exact-one, zero current rejects and zero invalid. Current weights were 362069 zero + 106644
+positive; output ownership was 461416 selected + 7297 retained; source ownership was 22925 identity +
+445788 mapped; all 468713 records were one-segment. Every terminal, gate and partition delta was zero,
+and no Vulkan/device/GPU/shader fault was logged.
+
 For a fresh runtime check, use debug view 20 and inspect `run/logs/latest.log`. Normal operation
 requires `RT bring-up OK`, Vulkan, the intended NVIDIA device, exact zero-delta counter partitions,
 and no `DEVICE_LOST`, `VK_ERROR`, GPU fault or shader compilation error. Debug colors and sparse

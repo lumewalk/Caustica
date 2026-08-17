@@ -1779,6 +1779,39 @@ final class RtPathSpatialReuseReferenceTest {
     }
 
     @Test
+    void pairedHistorySelectionUsesTheUncappedOverflowStableRatioWithoutBernoulli() {
+        var weight = RtPathSpatialReuseReference.PairedHistoryDirectWeightOutcome.class;
+        var selection = RtPathSpatialReuseReference.PairedHistorySelectionOutcome.class;
+
+        var balanced = RtPathSpatialReuseReference.pairedHistorySelectionAudit(
+                weight.getEnumConstants()[1], Double.MAX_VALUE, Double.MAX_VALUE);
+        assertEquals(selection.getEnumConstants()[3], balanced.selection());
+        assertEquals(RtPathSpatialReuseReference.BranchDirectCurrentWeightOutcome.POSITIVE,
+                balanced.currentWeight());
+        assertEquals(0.5, balanced.probability(), 0.0);
+
+        var certain = RtPathSpatialReuseReference.pairedHistorySelectionAudit(
+                weight.getEnumConstants()[1], 0.0, Double.MAX_VALUE);
+        assertEquals(selection.getEnumConstants()[4], certain.selection());
+        assertEquals(RtPathSpatialReuseReference.BranchDirectCurrentWeightOutcome.ZERO,
+                certain.currentWeight());
+        assertEquals(1.0, certain.probability(), 0.0);
+
+        assertEquals(selection.getEnumConstants()[2],
+                RtPathSpatialReuseReference.pairedHistorySelectionAudit(
+                        weight.getEnumConstants()[2], 8.0, 0.0).selection());
+        assertEquals(selection.getEnumConstants()[1],
+                RtPathSpatialReuseReference.pairedHistorySelectionAudit(
+                        weight.getEnumConstants()[1], Double.NaN, 1.0).selection());
+        assertEquals(selection.getEnumConstants()[5],
+                RtPathSpatialReuseReference.pairedHistorySelectionAudit(
+                        weight.getEnumConstants()[1], 1.0, Double.NaN).selection());
+        assertEquals(selection.getEnumConstants()[0],
+                RtPathSpatialReuseReference.pairedHistorySelectionAudit(
+                        weight.getEnumConstants()[3], 1.0, 1.0).selection());
+    }
+
+    @Test
     void branchWinnerDirectRemapRequiresAcceptedReplayAndOrdersRejects() {
         var replay = RtPathSpatialReuseReference.BranchWinnerPreviousReplayOutcome.class;
         var remap = RtPathSpatialReuseReference.BranchWinnerDirectRemapOutcome.class;
@@ -3764,8 +3797,16 @@ final class RtPathSpatialReuseReferenceTest {
                 RtPathReservoirHistory.GUIDE_PAIRED_HISTORY_DIRECT_WEIGHT_SELECTED_READY_INDEX);
         assertEquals(844,
                 RtPathReservoirHistory.GUIDE_PAIRED_HISTORY_DIRECT_WEIGHT_TWO_SEGMENT_READY_INDEX);
-        assertEquals(845, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
-        assertEquals(845 * Integer.BYTES,
+        assertEquals(845,
+                RtPathReservoirHistory.GUIDE_PAIRED_HISTORY_SELECTION_ELIGIBLE_INDEX);
+        assertEquals(850,
+                RtPathReservoirHistory.GUIDE_PAIRED_HISTORY_SELECTION_PROBABILITY_INVALID_INDEX);
+        assertEquals(851,
+                RtPathReservoirHistory.GUIDE_PAIRED_HISTORY_SELECTION_CURRENT_ZERO_INDEX);
+        assertEquals(858,
+                RtPathReservoirHistory.GUIDE_PAIRED_HISTORY_SELECTION_TWO_SEGMENT_READY_INDEX);
+        assertEquals(859, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
+        assertEquals(859 * Integer.BYTES,
                 RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_COUNTER_BYTES);
         assertEquals(32, RtPathReservoirHistory.SHIFTED_RECEIVER_GUIDE_STRIDE);
         assertEquals(8, RtPathReservoirHistory.BRANCH_RECEIVER_OWNERSHIP_STRIDE);
