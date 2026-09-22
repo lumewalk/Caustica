@@ -1657,6 +1657,14 @@ final class RtPathSpatialReuseReference {
         ONE
     }
 
+    record PairedHistoryBernoulliAudit(
+            BranchDirectBernoulliOutcome outcome,
+            BranchDirectBernoulliBoundary boundary,
+            double random,
+            boolean zeroBoundaryViolation,
+            boolean oneBoundaryViolation) {
+    }
+
     record BranchDirectBernoulliAudit(
             BranchDirectBernoulliOutcome outcome,
             BranchDirectBernoulliBoundary boundary,
@@ -2436,6 +2444,55 @@ final class RtPathSpatialReuseReference {
                         ? BranchDirectCurrentWeightOutcome.ZERO
                         : BranchDirectCurrentWeightOutcome.POSITIVE,
                 probability);
+    }
+
+    /** CPU mirror for the paired-history deterministic draw without reservoir mutation. */
+    static PairedHistoryBernoulliAudit pairedHistoryBernoulliAudit(
+            PairedHistorySelectionAudit selectionAudit,
+            int receiverPixelIndex, int previousPixelIndex,
+            int pairedTagFrame, int pairedTagControl, int frameIndex) {
+        boolean selectionReady = selectionAudit.selection()
+                == PairedHistorySelectionOutcome.ZERO
+                || selectionAudit.selection() == PairedHistorySelectionOutcome.OPEN
+                || selectionAudit.selection() == PairedHistorySelectionOutcome.ONE;
+        if (!selectionReady) {
+            return new PairedHistoryBernoulliAudit(
+                    BranchDirectBernoulliOutcome.SELECTION_REJECT,
+                    BranchDirectBernoulliBoundary.NOT_ELIGIBLE, 0.0, false, false);
+        }
+        double probability = selectionAudit.probability();
+        if (!Double.isFinite(probability) || probability < 0.0 || probability > 1.0) {
+            return new PairedHistoryBernoulliAudit(
+                    BranchDirectBernoulliOutcome.INVALID,
+                    BranchDirectBernoulliBoundary.NOT_ELIGIBLE, 0.0, false, false);
+        }
+
+        int mixedSeed = receiverPixelIndex
+                ^ previousPixelIndex * BRANCH_BERNOULLI_ENTRY_MULTIPLIER
+                ^ pairedTagFrame * BRANCH_WINNER_BERNOULLI_TAG_FRAME_MULTIPLIER
+                ^ pairedTagControl * BRANCH_WINNER_BERNOULLI_CONTROL_MULTIPLIER
+                ^ frameIndex * BRANCH_BERNOULLI_FRAME_MULTIPLIER
+                ^ BRANCH_WINNER_BERNOULLI_SALT;
+        int hashedSeed = RtPathReplayReference.pathHash(mixedSeed);
+        double random = (hashedSeed >>> 8) * (1.0 / 16_777_216.0);
+        if (!Double.isFinite(random) || random < 0.0 || random >= 1.0) {
+            return new PairedHistoryBernoulliAudit(
+                    BranchDirectBernoulliOutcome.INVALID,
+                    BranchDirectBernoulliBoundary.NOT_ELIGIBLE, 0.0, false, false);
+        }
+
+        boolean selected = random < probability;
+        BranchDirectBernoulliBoundary boundary = probability == 0.0
+                ? BranchDirectBernoulliBoundary.ZERO
+                : probability == 1.0
+                        ? BranchDirectBernoulliBoundary.ONE
+                        : BranchDirectBernoulliBoundary.OPEN;
+        return new PairedHistoryBernoulliAudit(
+                selected ? BranchDirectBernoulliOutcome.SELECTED
+                        : BranchDirectBernoulliOutcome.RETAINED,
+                boundary, random,
+                probability == 0.0 && selected,
+                probability == 1.0 && !selected);
     }
 
     enum BranchWinnerDirectRemapOutcome {

@@ -1068,6 +1068,21 @@ positive; output ownership was 461416 selected + 7297 retained; source ownership
 445788 mapped; all 468713 records were one-segment. Every terminal, gate and partition delta was zero,
 and no Vulkan/device/GPU/shader fault was logged.
 
+`RT path paired history Bernoulli` consumes exactly the probability-ready population and draws a
+deterministic local hash bound to the current receiver, paired source pixel, promoted tag frame and
+control, and the current frame. The hash is independent of both stored replay RNG streams. Required
+accounting is `probabilityReady = eligible`, `eligible = selected + retained + invalid`, and
+`ready = probabilityZero + probabilityOpen + probabilityOne` with zero boundary violations.
+Selected/retained, identity/mapped-source and one/two-segment partitions must balance exactly. The
+draw selects only a counter category: the pass returns before post-selection arithmetic, payload
+construction, or any reservoir/scratch/history/estimator write. Counter storage is 874 uints /
+3496 B; `WorldPush`, allocation sizes and replay ABI 10 are unchanged.
+
+Four 569x320 full-audit readbacks classified the cumulative 51226-record population into 50449
+selected and 777 retained, with zero invalid. Probability partitions matched the selection-
+probability gate exactly (5274 open + 45952 exact-one, zero exact-zero), boundary violations and
+all partition deltas were zero, and no Vulkan/GPU/shader fault was logged.
+
 For a fresh runtime check, use debug view 20 and inspect `run/logs/latest.log`. Normal operation
 requires `RT bring-up OK`, Vulkan, the intended NVIDIA device, exact zero-delta counter partitions,
 and no `DEVICE_LOST`, `VK_ERROR`, GPU fault or shader compilation error. Debug colors and sparse

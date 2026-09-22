@@ -1277,6 +1277,23 @@ was zero, and no Vulkan/device/GPU/shader failure occurred. The next gate may ap
 local Bernoulli draw to this probability, but must still return before post-selection arithmetic,
 storage or estimator use.
 
+The paired-history Bernoulli gate applies exactly that deterministic local draw. The hash binds the
+current receiver, the paired source pixel, the promoted tag frame and control, and the current frame
+while staying independent of both stored replay RNG streams. Probability zero always retains and
+probability one always selects; both boundary violations are counted and must remain zero. The draw
+selects only a counter category, so the pass returns before post-selection arithmetic, payload
+construction, or any reservoir/scratch/history/estimator write. Fifteen new counters bring view-20
+storage to 874 uints / 3496 B; allocations, `WorldPush`, inline push constants and replay ABI 10 are
+unchanged. The next gate may perform the post-selection arithmetic in registers only, still without
+any storage write or estimator use.
+
+Runtime passed this boundary across four 569x320 full-audit readbacks. The cumulative population
+was 51226 probability-ready records: 50449 selected and 777 retained, with zero invalid. The
+probability partition contained 5274 open and 45952 exact-one results and matched the concurrent
+selection-probability gate exactly on every frame. Boundary violations, branch/source/segment
+partition deltas and every accounting delta were zero, and no Vulkan/device/GPU/shader failure
+occurred. The client was closed after validation.
+
 ## Delivery Phases
 
 ### Phase 0 — Wavefront Integration Baseline

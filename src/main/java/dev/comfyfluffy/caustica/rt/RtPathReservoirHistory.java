@@ -904,7 +904,22 @@ final class RtPathReservoirHistory {
     static final int GUIDE_PAIRED_HISTORY_SELECTION_MAPPED_SOURCE_READY_INDEX = 856;
     static final int GUIDE_PAIRED_HISTORY_SELECTION_ONE_SEGMENT_READY_INDEX = 857;
     static final int GUIDE_PAIRED_HISTORY_SELECTION_TWO_SEGMENT_READY_INDEX = 858;
-    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 859;
+    static final int GUIDE_PAIRED_HISTORY_BERNOULLI_ELIGIBLE_INDEX = 859;
+    static final int GUIDE_PAIRED_HISTORY_BERNOULLI_SELECTED_INDEX = 860;
+    static final int GUIDE_PAIRED_HISTORY_BERNOULLI_RETAINED_INDEX = 861;
+    static final int GUIDE_PAIRED_HISTORY_BERNOULLI_INVALID_INDEX = 862;
+    static final int GUIDE_PAIRED_HISTORY_BERNOULLI_PROBABILITY_ZERO_INDEX = 863;
+    static final int GUIDE_PAIRED_HISTORY_BERNOULLI_PROBABILITY_OPEN_INDEX = 864;
+    static final int GUIDE_PAIRED_HISTORY_BERNOULLI_PROBABILITY_ONE_INDEX = 865;
+    static final int GUIDE_PAIRED_HISTORY_BERNOULLI_ZERO_VIOLATION_INDEX = 866;
+    static final int GUIDE_PAIRED_HISTORY_BERNOULLI_ONE_VIOLATION_INDEX = 867;
+    static final int GUIDE_PAIRED_HISTORY_BERNOULLI_SELECTED_READY_INDEX = 868;
+    static final int GUIDE_PAIRED_HISTORY_BERNOULLI_RETAINED_READY_INDEX = 869;
+    static final int GUIDE_PAIRED_HISTORY_BERNOULLI_IDENTITY_SOURCE_READY_INDEX = 870;
+    static final int GUIDE_PAIRED_HISTORY_BERNOULLI_MAPPED_SOURCE_READY_INDEX = 871;
+    static final int GUIDE_PAIRED_HISTORY_BERNOULLI_ONE_SEGMENT_READY_INDEX = 872;
+    static final int GUIDE_PAIRED_HISTORY_BERNOULLI_TWO_SEGMENT_READY_INDEX = 873;
+    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 874;
     static final int SHIFTED_RECEIVER_GUIDE_STRIDE = 8 * Float.BYTES;
     static final int BRANCH_RECEIVER_OWNERSHIP_STRIDE = 2 * Integer.BYTES;
     static final int BRANCH_CANDIDATE_TAG_STRIDE = 2 * Integer.BYTES;
@@ -3137,6 +3152,36 @@ final class RtPathReservoirHistory {
                     counters.get(GUIDE_PAIRED_HISTORY_SELECTION_ONE_SEGMENT_READY_INDEX));
             long pairedHistorySelectionTwoSegmentReady = Integer.toUnsignedLong(
                     counters.get(GUIDE_PAIRED_HISTORY_SELECTION_TWO_SEGMENT_READY_INDEX));
+            long pairedHistoryBernoulliEligible = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_BERNOULLI_ELIGIBLE_INDEX));
+            long pairedHistoryBernoulliSelected = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_BERNOULLI_SELECTED_INDEX));
+            long pairedHistoryBernoulliRetained = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_BERNOULLI_RETAINED_INDEX));
+            long pairedHistoryBernoulliInvalid = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_BERNOULLI_INVALID_INDEX));
+            long pairedHistoryBernoulliProbabilityZero = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_BERNOULLI_PROBABILITY_ZERO_INDEX));
+            long pairedHistoryBernoulliProbabilityOpen = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_BERNOULLI_PROBABILITY_OPEN_INDEX));
+            long pairedHistoryBernoulliProbabilityOne = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_BERNOULLI_PROBABILITY_ONE_INDEX));
+            long pairedHistoryBernoulliZeroViolation = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_BERNOULLI_ZERO_VIOLATION_INDEX));
+            long pairedHistoryBernoulliOneViolation = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_BERNOULLI_ONE_VIOLATION_INDEX));
+            long pairedHistoryBernoulliSelectedReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_BERNOULLI_SELECTED_READY_INDEX));
+            long pairedHistoryBernoulliRetainedReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_BERNOULLI_RETAINED_READY_INDEX));
+            long pairedHistoryBernoulliIdentitySourceReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_BERNOULLI_IDENTITY_SOURCE_READY_INDEX));
+            long pairedHistoryBernoulliMappedSourceReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_BERNOULLI_MAPPED_SOURCE_READY_INDEX));
+            long pairedHistoryBernoulliOneSegmentReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_BERNOULLI_ONE_SEGMENT_READY_INDEX));
+            long pairedHistoryBernoulliTwoSegmentReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_BERNOULLI_TWO_SEGMENT_READY_INDEX));
             long crossFrameReceiverReject = crossFrameReceiverSurfaceReject
                     + crossFrameReceiverSampleReject + crossFrameReceiverEdgeReject
                     + crossFrameReceiverTopologyReject + crossFrameReceiverDepthReject
@@ -5798,6 +5843,56 @@ final class RtPathReservoirHistory {
                     pairedHistorySelectionOneSegmentReady,
                     pairedHistorySelectionTwoSegmentReady,
                     pairedHistorySelectionProbabilityReady - pairedHistorySelectionSegments);
+            long pairedHistoryBernoulliReady = pairedHistoryBernoulliSelected
+                    + pairedHistoryBernoulliRetained;
+            long pairedHistoryBernoulliTerminal = pairedHistoryBernoulliReady
+                    + pairedHistoryBernoulliInvalid;
+            long pairedHistoryBernoulliProbability = pairedHistoryBernoulliProbabilityZero
+                    + pairedHistoryBernoulliProbabilityOpen
+                    + pairedHistoryBernoulliProbabilityOne;
+            long pairedHistoryBernoulliBoundaryViolations =
+                    pairedHistoryBernoulliZeroViolation
+                            + pairedHistoryBernoulliOneViolation;
+            long pairedHistoryBernoulliBranch = pairedHistoryBernoulliSelectedReady
+                    + pairedHistoryBernoulliRetainedReady;
+            long pairedHistoryBernoulliSource = pairedHistoryBernoulliIdentitySourceReady
+                    + pairedHistoryBernoulliMappedSourceReady;
+            long pairedHistoryBernoulliSegments = pairedHistoryBernoulliOneSegmentReady
+                    + pairedHistoryBernoulliTwoSegmentReady;
+            CausticaMod.LOGGER.info(
+                    "RT path paired history Bernoulli: probabilityReady={} eligible={} "
+                            + "selected={} retained={} invalid={} ready={} terminal={} "
+                            + "delta={} gateDelta={} "
+                            + "probability[zero={},open={},one={},delta={}] "
+                            + "boundaryViolations[zero={},one={},delta={}] "
+                            + "branch[selected={},retained={},delta={}] "
+                            + "source[identity={},mapped={},delta={}] "
+                            + "segments[one={},two={},delta={}]",
+                    pairedHistorySelectionProbabilityReady,
+                    pairedHistoryBernoulliEligible,
+                    pairedHistoryBernoulliSelected,
+                    pairedHistoryBernoulliRetained,
+                    pairedHistoryBernoulliInvalid,
+                    pairedHistoryBernoulliReady,
+                    pairedHistoryBernoulliTerminal,
+                    pairedHistoryBernoulliEligible - pairedHistoryBernoulliTerminal,
+                    pairedHistorySelectionProbabilityReady - pairedHistoryBernoulliEligible,
+                    pairedHistoryBernoulliProbabilityZero,
+                    pairedHistoryBernoulliProbabilityOpen,
+                    pairedHistoryBernoulliProbabilityOne,
+                    pairedHistoryBernoulliReady - pairedHistoryBernoulliProbability,
+                    pairedHistoryBernoulliZeroViolation,
+                    pairedHistoryBernoulliOneViolation,
+                    pairedHistoryBernoulliReady - pairedHistoryBernoulliBoundaryViolations,
+                    pairedHistoryBernoulliSelectedReady,
+                    pairedHistoryBernoulliRetainedReady,
+                    pairedHistoryBernoulliReady - pairedHistoryBernoulliBranch,
+                    pairedHistoryBernoulliIdentitySourceReady,
+                    pairedHistoryBernoulliMappedSourceReady,
+                    pairedHistoryBernoulliReady - pairedHistoryBernoulliSource,
+                    pairedHistoryBernoulliOneSegmentReady,
+                    pairedHistoryBernoulliTwoSegmentReady,
+                    pairedHistoryBernoulliReady - pairedHistoryBernoulliSegments);
             spatialDiagnosticViewPending = 0;
             return;
         }

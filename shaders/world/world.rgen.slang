@@ -3571,6 +3571,54 @@ static void pathPreviousPairReplayValidate(bool pairedHistory) {
         InterlockedAdd(counters[replaySegments == 1u
                 ? PATH_GUIDE_PAIRED_HISTORY_SELECTION_ONE_SEGMENT_READY
                 : PATH_GUIDE_PAIRED_HISTORY_SELECTION_TWO_SEGMENT_READY], 1u);
+
+        // Diagnostic Bernoulli partition only. The draw hash is bound to the current receiver,
+        // the paired-history source pixel, its promoted tag frame/control and the current frame,
+        // while remaining independent of both stored replay RNG streams. It selects only a
+        // counter category: the pass returns before post-selection arithmetic, payload
+        // construction, or any reservoir/scratch/history/estimator write.
+        InterlockedAdd(counters[PATH_GUIDE_PAIRED_HISTORY_BERNOULLI_ELIGIBLE], 1u);
+        uint pairedBernoulliSeed = pathHash(receiverPixelIndex
+                ^ previousPixelIndex * 747796405u
+                ^ storedTag.x * 277803737u
+                ^ storedTag.w * 1597334677u
+                ^ worldPush.frameIndex * 2891336453u
+                ^ 0xD1B54A35u);
+        float pairedBernoulliRandom =
+                float(pairedBernoulliSeed >> 8u) * (1.0 / 16777216.0);
+        bool pairedBernoulliValid = isfinite(pairedBernoulliRandom)
+                && pairedBernoulliRandom >= 0.0 && pairedBernoulliRandom < 1.0;
+        bool pairedSourceSelected = pairedBernoulliValid
+                && pairedBernoulliRandom < selectionProbability;
+        InterlockedAdd(counters[!pairedBernoulliValid
+                ? PATH_GUIDE_PAIRED_HISTORY_BERNOULLI_INVALID
+                : pairedSourceSelected
+                        ? PATH_GUIDE_PAIRED_HISTORY_BERNOULLI_SELECTED
+                        : PATH_GUIDE_PAIRED_HISTORY_BERNOULLI_RETAINED], 1u);
+        if (!pairedBernoulliValid) return;
+
+        InterlockedAdd(counters[selectionProbability == 0.0
+                ? PATH_GUIDE_PAIRED_HISTORY_BERNOULLI_PROBABILITY_ZERO
+                : selectionProbability == 1.0
+                        ? PATH_GUIDE_PAIRED_HISTORY_BERNOULLI_PROBABILITY_ONE
+                        : PATH_GUIDE_PAIRED_HISTORY_BERNOULLI_PROBABILITY_OPEN], 1u);
+        if (selectionProbability == 0.0 && pairedSourceSelected) {
+            InterlockedAdd(counters[
+                    PATH_GUIDE_PAIRED_HISTORY_BERNOULLI_ZERO_VIOLATION], 1u);
+        }
+        if (selectionProbability == 1.0 && !pairedSourceSelected) {
+            InterlockedAdd(counters[
+                    PATH_GUIDE_PAIRED_HISTORY_BERNOULLI_ONE_VIOLATION], 1u);
+        }
+        InterlockedAdd(counters[outputMappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION
+                ? PATH_GUIDE_PAIRED_HISTORY_BERNOULLI_SELECTED_READY
+                : PATH_GUIDE_PAIRED_HISTORY_BERNOULLI_RETAINED_READY], 1u);
+        InterlockedAdd(counters[sourceMappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION
+                ? PATH_GUIDE_PAIRED_HISTORY_BERNOULLI_MAPPED_SOURCE_READY
+                : PATH_GUIDE_PAIRED_HISTORY_BERNOULLI_IDENTITY_SOURCE_READY], 1u);
+        InterlockedAdd(counters[replaySegments == 1u
+                ? PATH_GUIDE_PAIRED_HISTORY_BERNOULLI_ONE_SEGMENT_READY
+                : PATH_GUIDE_PAIRED_HISTORY_BERNOULLI_TWO_SEGMENT_READY], 1u);
         return;
     }
     InterlockedAdd(counters[outputMappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION
