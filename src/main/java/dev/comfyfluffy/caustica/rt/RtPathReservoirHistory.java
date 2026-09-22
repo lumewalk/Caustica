@@ -939,7 +939,31 @@ final class RtPathReservoirHistory {
     static final int GUIDE_PAIRED_HISTORY_POST_SELECTION_MAPPED_SOURCE_INDEX = 891;
     static final int GUIDE_PAIRED_HISTORY_POST_SELECTION_ONE_SEGMENT_INDEX = 892;
     static final int GUIDE_PAIRED_HISTORY_POST_SELECTION_TWO_SEGMENT_INDEX = 893;
-    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 894;
+    static final int GUIDE_PAIRED_HISTORY_RECORD_ELIGIBLE_INDEX = 894;
+    static final int GUIDE_PAIRED_HISTORY_RECORD_SELECTED_READY_INDEX = 895;
+    static final int GUIDE_PAIRED_HISTORY_RECORD_SELECTED_REJECT_INDEX = 896;
+    static final int GUIDE_PAIRED_HISTORY_RECORD_RETAINED_READY_INDEX = 897;
+    static final int GUIDE_PAIRED_HISTORY_RECORD_RETAINED_REJECT_INDEX = 898;
+    static final int GUIDE_PAIRED_HISTORY_RECORD_EMPTY_READY_INDEX = 899;
+    static final int GUIDE_PAIRED_HISTORY_RECORD_SELECTED_REWRITE_READY_INDEX = 900;
+    static final int GUIDE_PAIRED_HISTORY_RECORD_SELECTED_REWRITE_REJECT_INDEX = 901;
+    static final int GUIDE_PAIRED_HISTORY_RECORD_SELECTED_PRESERVE_READY_INDEX = 902;
+    static final int GUIDE_PAIRED_HISTORY_RECORD_SELECTED_PRESERVE_REJECT_INDEX = 903;
+    static final int GUIDE_PAIRED_HISTORY_RECORD_RETAINED_PRESERVE_READY_INDEX = 904;
+    static final int GUIDE_PAIRED_HISTORY_RECORD_RETAINED_PRESERVE_REJECT_INDEX = 905;
+    static final int GUIDE_PAIRED_HISTORY_RECORD_WEIGHTS_READY_INDEX = 906;
+    static final int GUIDE_PAIRED_HISTORY_RECORD_WEIGHTS_REJECT_INDEX = 907;
+    static final int GUIDE_PAIRED_HISTORY_RECORD_METADATA_READY_INDEX = 908;
+    static final int GUIDE_PAIRED_HISTORY_RECORD_METADATA_REJECT_INDEX = 909;
+    static final int GUIDE_PAIRED_HISTORY_RECORD_SOURCE_KEY_READY_INDEX = 910;
+    static final int GUIDE_PAIRED_HISTORY_RECORD_SOURCE_KEY_REJECT_INDEX = 911;
+    static final int GUIDE_PAIRED_HISTORY_RECORD_PREVIOUS_SELECTED_INDEX = 912;
+    static final int GUIDE_PAIRED_HISTORY_RECORD_PREVIOUS_RETAINED_INDEX = 913;
+    static final int GUIDE_PAIRED_HISTORY_RECORD_IDENTITY_SOURCE_INDEX = 914;
+    static final int GUIDE_PAIRED_HISTORY_RECORD_MAPPED_SOURCE_INDEX = 915;
+    static final int GUIDE_PAIRED_HISTORY_RECORD_ONE_SEGMENT_INDEX = 916;
+    static final int GUIDE_PAIRED_HISTORY_RECORD_TWO_SEGMENT_INDEX = 917;
+    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 918;
     static final int SHIFTED_RECEIVER_GUIDE_STRIDE = 8 * Float.BYTES;
     static final int BRANCH_RECEIVER_OWNERSHIP_STRIDE = 2 * Integer.BYTES;
     static final int BRANCH_CANDIDATE_TAG_STRIDE = 2 * Integer.BYTES;
@@ -3242,6 +3266,54 @@ final class RtPathReservoirHistory {
                     counters.get(GUIDE_PAIRED_HISTORY_POST_SELECTION_ONE_SEGMENT_INDEX));
             long pairedHistoryPostSelectionTwoSegment = Integer.toUnsignedLong(
                     counters.get(GUIDE_PAIRED_HISTORY_POST_SELECTION_TWO_SEGMENT_INDEX));
+            long pairedHistoryRecordEligible = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_RECORD_ELIGIBLE_INDEX));
+            long pairedHistoryRecordSelectedReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_RECORD_SELECTED_READY_INDEX));
+            long pairedHistoryRecordSelectedReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_RECORD_SELECTED_REJECT_INDEX));
+            long pairedHistoryRecordRetainedReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_RECORD_RETAINED_READY_INDEX));
+            long pairedHistoryRecordRetainedReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_RECORD_RETAINED_REJECT_INDEX));
+            long pairedHistoryRecordEmptyReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_RECORD_EMPTY_READY_INDEX));
+            long pairedHistoryRecordSelectedRewriteReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_RECORD_SELECTED_REWRITE_READY_INDEX));
+            long pairedHistoryRecordSelectedRewriteReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_RECORD_SELECTED_REWRITE_REJECT_INDEX));
+            long pairedHistoryRecordSelectedPreserveReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_RECORD_SELECTED_PRESERVE_READY_INDEX));
+            long pairedHistoryRecordSelectedPreserveReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_RECORD_SELECTED_PRESERVE_REJECT_INDEX));
+            long pairedHistoryRecordRetainedPreserveReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_RECORD_RETAINED_PRESERVE_READY_INDEX));
+            long pairedHistoryRecordRetainedPreserveReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_RECORD_RETAINED_PRESERVE_REJECT_INDEX));
+            long pairedHistoryRecordWeightsReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_RECORD_WEIGHTS_READY_INDEX));
+            long pairedHistoryRecordWeightsReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_RECORD_WEIGHTS_REJECT_INDEX));
+            long pairedHistoryRecordMetadataReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_RECORD_METADATA_READY_INDEX));
+            long pairedHistoryRecordMetadataReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_RECORD_METADATA_REJECT_INDEX));
+            long pairedHistoryRecordSourceKeyReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_RECORD_SOURCE_KEY_READY_INDEX));
+            long pairedHistoryRecordSourceKeyReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_RECORD_SOURCE_KEY_REJECT_INDEX));
+            long pairedHistoryRecordPreviousSelected = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_RECORD_PREVIOUS_SELECTED_INDEX));
+            long pairedHistoryRecordPreviousRetained = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_RECORD_PREVIOUS_RETAINED_INDEX));
+            long pairedHistoryRecordIdentitySource = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_RECORD_IDENTITY_SOURCE_INDEX));
+            long pairedHistoryRecordMappedSource = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_RECORD_MAPPED_SOURCE_INDEX));
+            long pairedHistoryRecordOneSegment = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_RECORD_ONE_SEGMENT_INDEX));
+            long pairedHistoryRecordTwoSegment = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_RECORD_TWO_SEGMENT_INDEX));
             long crossFrameReceiverReject = crossFrameReceiverSurfaceReject
                     + crossFrameReceiverSampleReject + crossFrameReceiverEdgeReject
                     + crossFrameReceiverTopologyReject + crossFrameReceiverDepthReject
@@ -6041,6 +6113,71 @@ final class RtPathReservoirHistory {
                     pairedHistoryPostSelectionTwoSegment,
                     pairedHistoryPostSelectionReady
                             - pairedHistoryPostSelectionSegments);
+            long pairedHistoryRecordSelectedTerminal =
+                    pairedHistoryRecordSelectedReady
+                            + pairedHistoryRecordSelectedReject;
+            long pairedHistoryRecordRetainedTerminal =
+                    pairedHistoryRecordRetainedReady
+                            + pairedHistoryRecordRetainedReject;
+            long pairedHistoryRecordTerminal = pairedHistoryRecordSelectedTerminal
+                    + pairedHistoryRecordRetainedTerminal;
+            long pairedHistoryRecordReady = pairedHistoryRecordSelectedReady
+                    + pairedHistoryRecordRetainedReady;
+            long pairedHistoryRecordPrevious = pairedHistoryRecordPreviousSelected
+                    + pairedHistoryRecordPreviousRetained;
+            long pairedHistoryRecordSource = pairedHistoryRecordIdentitySource
+                    + pairedHistoryRecordMappedSource;
+            long pairedHistoryRecordSegments = pairedHistoryRecordOneSegment
+                    + pairedHistoryRecordTwoSegment;
+            CausticaMod.LOGGER.info(
+                    "RT path paired history record: PostSelectionReady={} "
+                            + "eligible={} selected[ready={},reject={},terminal={},"
+                            + "gateDelta={},rewrite={}/{},preserve={}/{},sourceKey={}/{}] "
+                            + "retained[ready={},reject={},terminal={},gateDelta={},"
+                            + "preserve={}/{}] empty={} weights={}/{} metadata={}/{} "
+                            + "terminal={} delta={} gateDelta={} "
+                            + "previous[selected={},retained={},delta={}] "
+                            + "source[identity={},mapped={},delta={}] "
+                            + "segments[one={},two={},delta={}]",
+                    pairedHistoryPostSelectionReady,
+                    pairedHistoryRecordEligible,
+                    pairedHistoryRecordSelectedReady,
+                    pairedHistoryRecordSelectedReject,
+                    pairedHistoryRecordSelectedTerminal,
+                    pairedHistoryPostSelectionSelectedReady
+                            - pairedHistoryRecordSelectedTerminal,
+                    pairedHistoryRecordSelectedRewriteReady,
+                    pairedHistoryRecordSelectedRewriteReject,
+                    pairedHistoryRecordSelectedPreserveReady,
+                    pairedHistoryRecordSelectedPreserveReject,
+                    pairedHistoryRecordSourceKeyReady,
+                    pairedHistoryRecordSourceKeyReject,
+                    pairedHistoryRecordRetainedReady,
+                    pairedHistoryRecordRetainedReject,
+                    pairedHistoryRecordRetainedTerminal,
+                    pairedHistoryPostSelectionRetainedReady
+                            - pairedHistoryRecordRetainedTerminal,
+                    pairedHistoryRecordRetainedPreserveReady,
+                    pairedHistoryRecordRetainedPreserveReject,
+                    pairedHistoryRecordEmptyReady,
+                    pairedHistoryRecordWeightsReady,
+                    pairedHistoryRecordWeightsReject,
+                    pairedHistoryRecordMetadataReady,
+                    pairedHistoryRecordMetadataReject,
+                    pairedHistoryRecordTerminal,
+                    pairedHistoryRecordEligible
+                            - pairedHistoryRecordTerminal,
+                    pairedHistoryPostSelectionReady
+                            - pairedHistoryRecordEligible,
+                    pairedHistoryRecordPreviousSelected,
+                    pairedHistoryRecordPreviousRetained,
+                    pairedHistoryRecordReady - pairedHistoryRecordPrevious,
+                    pairedHistoryRecordIdentitySource,
+                    pairedHistoryRecordMappedSource,
+                    pairedHistoryRecordReady - pairedHistoryRecordSource,
+                    pairedHistoryRecordOneSegment,
+                    pairedHistoryRecordTwoSegment,
+                    pairedHistoryRecordReady - pairedHistoryRecordSegments);
             spatialDiagnosticViewPending = 0;
             return;
         }

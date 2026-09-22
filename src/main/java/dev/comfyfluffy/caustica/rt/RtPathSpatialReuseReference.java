@@ -1677,6 +1677,17 @@ final class RtPathSpatialReuseReference {
             boolean empty) {
     }
 
+    record PairedHistoryRecordAudit(
+            BranchDirectRecordOutcome outcome,
+            BranchDirectLaneOutcome selectedRewrite,
+            BranchDirectLaneOutcome selectedPreserve,
+            BranchDirectLaneOutcome retainedPreserve,
+            BranchDirectLaneOutcome weights,
+            BranchDirectLaneOutcome metadata,
+            BranchDirectLaneOutcome sourceKey,
+            boolean sourceSelected) {
+    }
+
     record BranchDirectBernoulliAudit(
             BranchDirectBernoulliOutcome outcome,
             BranchDirectBernoulliBoundary boundary,
@@ -2597,6 +2608,92 @@ final class RtPathSpatialReuseReference {
                 BranchDirectStoredCapOutcome.NOT_ELIGIBLE,
                 BranchDirectStoredCapOutcome.NOT_ELIGIBLE,
                 0.0, 0.0, 0.0, 0.0, sourceSelected, false);
+    }
+
+    /** CPU mirror for full paired-history register-record assembly without storage. */
+    static PairedHistoryRecordAudit pairedHistoryRecordAudit(
+            BranchDirectPostSelectionOutcome postSelectionOutcome,
+            boolean empty,
+            boolean selectedRewriteReady,
+            boolean selectedPreserveReady,
+            boolean retainedPreserveReady,
+            boolean weightsReady,
+            boolean metadataReady,
+            boolean sourceKeyReady) {
+        boolean postSelectionReady = postSelectionOutcome
+                == BranchDirectPostSelectionOutcome.SELECTED_READY
+                || postSelectionOutcome == BranchDirectPostSelectionOutcome.RETAINED_READY;
+        boolean sourceSelected = postSelectionOutcome
+                == BranchDirectPostSelectionOutcome.SELECTED_READY;
+        if (!postSelectionReady) {
+            return pairedHistoryRecordAuditResult(
+                    BranchDirectRecordOutcome.POST_SELECTION_REJECT, sourceSelected,
+                    BranchDirectLaneOutcome.NOT_ELIGIBLE,
+                    BranchDirectLaneOutcome.NOT_ELIGIBLE,
+                    BranchDirectLaneOutcome.NOT_ELIGIBLE,
+                    BranchDirectLaneOutcome.NOT_ELIGIBLE,
+                    BranchDirectLaneOutcome.NOT_ELIGIBLE,
+                    BranchDirectLaneOutcome.NOT_ELIGIBLE);
+        }
+        if (empty) {
+            return pairedHistoryRecordAuditResult(
+                    sourceSelected
+                            ? BranchDirectRecordOutcome.SELECTED_REJECT
+                            : BranchDirectRecordOutcome.EMPTY_READY,
+                    sourceSelected,
+                    BranchDirectLaneOutcome.NOT_ELIGIBLE,
+                    BranchDirectLaneOutcome.NOT_ELIGIBLE,
+                    BranchDirectLaneOutcome.NOT_ELIGIBLE,
+                    BranchDirectLaneOutcome.NOT_ELIGIBLE,
+                    BranchDirectLaneOutcome.NOT_ELIGIBLE,
+                    BranchDirectLaneOutcome.NOT_ELIGIBLE);
+        }
+
+        BranchDirectLaneOutcome weightLane = weightsReady
+                ? BranchDirectLaneOutcome.READY : BranchDirectLaneOutcome.REJECT;
+        BranchDirectLaneOutcome metadataLane = metadataReady
+                ? BranchDirectLaneOutcome.READY : BranchDirectLaneOutcome.REJECT;
+        if (sourceSelected) {
+            BranchDirectLaneOutcome rewriteLane = selectedRewriteReady
+                    ? BranchDirectLaneOutcome.READY : BranchDirectLaneOutcome.REJECT;
+            BranchDirectLaneOutcome preserveLane = selectedPreserveReady
+                    ? BranchDirectLaneOutcome.READY : BranchDirectLaneOutcome.REJECT;
+            BranchDirectLaneOutcome sourceKeyLane = sourceKeyReady
+                    ? BranchDirectLaneOutcome.READY : BranchDirectLaneOutcome.REJECT;
+            boolean ready = selectedRewriteReady && selectedPreserveReady
+                    && weightsReady && metadataReady && sourceKeyReady;
+            return pairedHistoryRecordAuditResult(
+                    ready ? BranchDirectRecordOutcome.SELECTED_READY
+                            : BranchDirectRecordOutcome.SELECTED_REJECT,
+                    true, rewriteLane, preserveLane,
+                    BranchDirectLaneOutcome.NOT_ELIGIBLE,
+                    weightLane, metadataLane, sourceKeyLane);
+        }
+
+        BranchDirectLaneOutcome retainedLane = retainedPreserveReady
+                ? BranchDirectLaneOutcome.READY : BranchDirectLaneOutcome.REJECT;
+        boolean ready = retainedPreserveReady && weightsReady && metadataReady;
+        return pairedHistoryRecordAuditResult(
+                ready ? BranchDirectRecordOutcome.RETAINED_READY
+                        : BranchDirectRecordOutcome.RETAINED_REJECT,
+                false,
+                BranchDirectLaneOutcome.NOT_ELIGIBLE,
+                BranchDirectLaneOutcome.NOT_ELIGIBLE,
+                retainedLane, weightLane, metadataLane,
+                BranchDirectLaneOutcome.NOT_ELIGIBLE);
+    }
+
+    private static PairedHistoryRecordAudit pairedHistoryRecordAuditResult(
+            BranchDirectRecordOutcome outcome,
+            boolean sourceSelected,
+            BranchDirectLaneOutcome selectedRewrite,
+            BranchDirectLaneOutcome selectedPreserve,
+            BranchDirectLaneOutcome retainedPreserve,
+            BranchDirectLaneOutcome weights,
+            BranchDirectLaneOutcome metadata,
+            BranchDirectLaneOutcome sourceKey) {
+        return new PairedHistoryRecordAudit(outcome, selectedRewrite, selectedPreserve,
+                retainedPreserve, weights, metadata, sourceKey, sourceSelected);
     }
 
     enum BranchWinnerDirectRemapOutcome {

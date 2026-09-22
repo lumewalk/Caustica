@@ -1305,6 +1305,16 @@ Twenty new counters bring view-20 storage to 894 uints / 3576 B; allocations, `W
 push constants and replay ABI 10 are unchanged. The next gate may assemble the complete register
 record and run the common metadata validator, still without any storage write or estimator use.
 
+The paired-history record gate now performs that assembly in registers only, following the
+winner-path `BranchWinnerDirectRecordAudit` precedent. Selected records preserve the immutable
+source replay/proposal lanes while replacing every receiver-dependent lane and advancing the
+independently reprojected source key; retained outcomes preserve the current sample metadata
+bit-for-bit. The common metadata validator plus lane-level checks run entirely on the register
+record before the pass returns. Twenty-four new counters bring view-20 storage to 918 uints / 3672 B;
+allocations, `WorldPush`, inline push constants and replay ABI 10 are unchanged. The next gate may
+pair the register record with a current-frame root in registers only, still without any storage
+write or estimator use.
+
 ## Delivery Phases
 
 ### Phase 0 — Wavefront Integration Baseline

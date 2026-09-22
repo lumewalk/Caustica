@@ -1096,6 +1096,21 @@ population, and previous/source/segment partitions sum to ready. The pass still 
 record construction and any reservoir/scratch/history/estimator write. Counter storage is 894
 uints / 3576 B; `WorldPush`, allocation sizes and replay ABI 10 are unchanged.
 
+`RT path paired history record` consumes exactly the post-selection-ready population and
+assembles the complete paired-history reservoir record in registers only, following the
+winner-path `BranchWinnerDirectRecordAudit` precedent. Selected records preserve the immutable
+source replay/proposal lanes while replacing every receiver-dependent lane (radiance/target,
+proposalShift Jacobian, reconnection vertex/normal/PDF/throughput, identity/source key, metadata)
+and advancing the independently reprojected source key. Retained outcomes preserve the current
+sample metadata bit-for-bit. The common metadata validator (`pathReservoirSampleMetadataReady`)
+plus lane-level checks run entirely on the register record. Required accounting is
+`PostSelectionReady == eligible`, `eligible = selectedTerminal + retainedTerminal`,
+selected/retained terminal counts equal their post-selection counterparts, lane ready/reject
+partitions sum to their populations, and previous/source/segment partitions sum to ready. The pass
+still returns before any scratch, history, promotion-tag or estimator write. Twenty-four new
+counters bring view-20 storage to 918 uints / 3672 B; `WorldPush`, allocation sizes and
+replay ABI 10 are unchanged.
+
 For a fresh runtime check, use debug view 20 and inspect `run/logs/latest.log`. Normal operation
 requires `RT bring-up OK`, Vulkan, the intended NVIDIA device, exact zero-delta counter partitions,
 and no `DEVICE_LOST`, `VK_ERROR`, GPU fault or shader compilation error. Debug colors and sparse
