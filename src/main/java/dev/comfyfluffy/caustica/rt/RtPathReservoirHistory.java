@@ -983,7 +983,19 @@ final class RtPathReservoirHistory {
     static final int GUIDE_PAIRED_HISTORY_PAIR_MAPPED_SOURCE_INDEX = 935;
     static final int GUIDE_PAIRED_HISTORY_PAIR_ONE_SEGMENT_INDEX = 936;
     static final int GUIDE_PAIRED_HISTORY_PAIR_TWO_SEGMENT_INDEX = 937;
-    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 938;
+    static final int GUIDE_PAIRED_HISTORY_PAIR_REPLAY_ELIGIBLE_INDEX = 938;
+    static final int GUIDE_PAIRED_HISTORY_PAIR_REPLAY_SELECTED_ACCEPTED_INDEX = 939;
+    static final int GUIDE_PAIRED_HISTORY_PAIR_REPLAY_SELECTED_REJECT_INDEX = 940;
+    static final int GUIDE_PAIRED_HISTORY_PAIR_REPLAY_RETAINED_ACCEPTED_INDEX = 941;
+    static final int GUIDE_PAIRED_HISTORY_PAIR_REPLAY_RETAINED_REJECT_INDEX = 942;
+    static final int GUIDE_PAIRED_HISTORY_PAIR_REPLAY_PREVIOUS_SELECTED_INDEX = 943;
+    static final int GUIDE_PAIRED_HISTORY_PAIR_REPLAY_PREVIOUS_RETAINED_INDEX = 944;
+    static final int GUIDE_PAIRED_HISTORY_PAIR_REPLAY_IDENTITY_SOURCE_INDEX = 945;
+    static final int GUIDE_PAIRED_HISTORY_PAIR_REPLAY_MAPPED_SOURCE_INDEX = 946;
+    static final int GUIDE_PAIRED_HISTORY_PAIR_REPLAY_ONE_SEGMENT_INDEX = 947;
+    static final int GUIDE_PAIRED_HISTORY_PAIR_REPLAY_TWO_SEGMENT_INDEX = 948;
+    static final int GUIDE_PAIRED_HISTORY_PAIR_REPLAY_DELTA_INDEX = 949;
+    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 950;
     static final int SHIFTED_RECEIVER_GUIDE_STRIDE = 8 * Float.BYTES;
     static final int BRANCH_RECEIVER_OWNERSHIP_STRIDE = 2 * Integer.BYTES;
     static final int BRANCH_CANDIDATE_TAG_STRIDE = 2 * Integer.BYTES;
@@ -3374,6 +3386,28 @@ final class RtPathReservoirHistory {
                     counters.get(GUIDE_PAIRED_HISTORY_PAIR_ONE_SEGMENT_INDEX));
             long pairedHistoryPairTwoSegment = Integer.toUnsignedLong(
                     counters.get(GUIDE_PAIRED_HISTORY_PAIR_TWO_SEGMENT_INDEX));
+            long pairedHistoryPairReplayEligible = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_PAIR_REPLAY_ELIGIBLE_INDEX));
+            long pairedHistoryPairReplaySelectedAccepted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_PAIR_REPLAY_SELECTED_ACCEPTED_INDEX));
+            long pairedHistoryPairReplaySelectedReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_PAIR_REPLAY_SELECTED_REJECT_INDEX));
+            long pairedHistoryPairReplayRetainedAccepted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_PAIR_REPLAY_RETAINED_ACCEPTED_INDEX));
+            long pairedHistoryPairReplayRetainedReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_PAIR_REPLAY_RETAINED_REJECT_INDEX));
+            long pairedHistoryPairReplayPreviousSelected = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_PAIR_REPLAY_PREVIOUS_SELECTED_INDEX));
+            long pairedHistoryPairReplayPreviousRetained = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_PAIR_REPLAY_PREVIOUS_RETAINED_INDEX));
+            long pairedHistoryPairReplayIdentitySource = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_PAIR_REPLAY_IDENTITY_SOURCE_INDEX));
+            long pairedHistoryPairReplayMappedSource = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_PAIR_REPLAY_MAPPED_SOURCE_INDEX));
+            long pairedHistoryPairReplayOneSegment = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_PAIR_REPLAY_ONE_SEGMENT_INDEX));
+            long pairedHistoryPairReplayTwoSegment = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_PAIR_REPLAY_TWO_SEGMENT_INDEX));
             long crossFrameReceiverReject = crossFrameReceiverSurfaceReject
                     + crossFrameReceiverSampleReject + crossFrameReceiverEdgeReject
                     + crossFrameReceiverTopologyReject + crossFrameReceiverDepthReject
@@ -6300,6 +6334,57 @@ final class RtPathReservoirHistory {
                     pairedHistoryPairOneSegment,
                     pairedHistoryPairTwoSegment,
                     pairedHistoryPairReady - pairedHistoryPairSegments);
+            long pairedHistoryPairReplaySelected = pairedHistoryPairReplaySelectedAccepted
+                    + pairedHistoryPairReplaySelectedReject;
+            long pairedHistoryPairReplayRetained = pairedHistoryPairReplayRetainedAccepted
+                    + pairedHistoryPairReplayRetainedReject;
+            long pairedHistoryPairReplayTerminal = pairedHistoryPairReplaySelected
+                    + pairedHistoryPairReplayRetained;
+            long pairedHistoryPairReplayAccepted = pairedHistoryPairReplaySelectedAccepted
+                    + pairedHistoryPairReplayRetainedAccepted;
+            long pairedHistoryPairReplayPrevious = pairedHistoryPairReplayPreviousSelected
+                    + pairedHistoryPairReplayPreviousRetained;
+            long pairedHistoryPairReplaySource = pairedHistoryPairReplayIdentitySource
+                    + pairedHistoryPairReplayMappedSource;
+            long pairedHistoryPairReplaySegments = pairedHistoryPairReplayOneSegment
+                    + pairedHistoryPairReplayTwoSegment;
+            CausticaMod.LOGGER.info(
+                    "RT path paired history pair replay: pairReady={} eligible={} "
+                            + "selected[accepted={},reject={},terminal={},gateDelta={}] "
+                            + "retained[accepted={},reject={},terminal={},gateDelta={}] "
+                            + "terminal={} delta={} gateDelta={} accepted={} "
+                            + "previous[selected={},retained={},delta={}] "
+                            + "source[identity={},mapped={},delta={}] "
+                            + "segments[one={},two={},delta={}]",
+                    pairedHistoryPairReady,
+                    pairedHistoryPairReplayEligible,
+                    pairedHistoryPairReplaySelectedAccepted,
+                    pairedHistoryPairReplaySelectedReject,
+                    pairedHistoryPairReplaySelected,
+                    pairedHistoryPairSelectedReady
+                            - pairedHistoryPairReplaySelected,
+                    pairedHistoryPairReplayRetainedAccepted,
+                    pairedHistoryPairReplayRetainedReject,
+                    pairedHistoryPairReplayRetained,
+                    pairedHistoryPairRetainedReady
+                            - pairedHistoryPairReplayRetained,
+                    pairedHistoryPairReplayTerminal,
+                    pairedHistoryPairReplayEligible
+                            - pairedHistoryPairReplayTerminal,
+                    pairedHistoryPairReady - pairedHistoryPairReplayEligible,
+                    pairedHistoryPairReplayAccepted,
+                    pairedHistoryPairReplayPreviousSelected,
+                    pairedHistoryPairReplayPreviousRetained,
+                    pairedHistoryPairReplayAccepted
+                            - pairedHistoryPairReplayPrevious,
+                    pairedHistoryPairReplayIdentitySource,
+                    pairedHistoryPairReplayMappedSource,
+                    pairedHistoryPairReplayAccepted
+                            - pairedHistoryPairReplaySource,
+                    pairedHistoryPairReplayOneSegment,
+                    pairedHistoryPairReplayTwoSegment,
+                    pairedHistoryPairReplayAccepted
+                            - pairedHistoryPairReplaySegments);
             spatialDiagnosticViewPending = 0;
             return;
         }

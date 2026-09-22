@@ -1122,6 +1122,18 @@ partitions sum to their populations, and previous/source/segment partitions sum 
 Twenty new counters bring view-20 storage to 938 uints / 3752 B; `WorldPush`, allocation sizes
 and replay ABI 10 are unchanged.
 
+`RT path paired history pair replay` seeds the exact replay of every accepted paired record
+directly from the paired root, still in registers only and immediately after the pair audit.
+The camera-relative segment origins are rebased to absolute positions before the replay trace,
+and the replay compares only the immutable original-source replay lanes for selected output
+while retained identity output must match the full generic comparator. Required accounting is
+`PairReady == eligible`, `eligible = selectedTerminal + retainedTerminal`, and
+previous/source/segment partitions of accepted replays sum to accepted. Twelve new counters
+bring view-20 storage to 950 uints / 3800 B; `WorldPush`, allocation sizes and replay ABI 10
+are unchanged, and the pass still returns before any scratch, history, promotion-tag or
+estimator write.
+
+
 For a fresh runtime check, use debug view 20 and inspect `run/logs/latest.log`. Normal operation
 requires `RT bring-up OK`, Vulkan, the intended NVIDIA device, exact zero-delta counter partitions,
 and no `DEVICE_LOST`, `VK_ERROR`, GPU fault or shader compilation error. Debug colors and sparse

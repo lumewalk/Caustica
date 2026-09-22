@@ -3997,6 +3997,55 @@ static void pathPreviousPairReplayValidate(bool pairedHistory) {
                 InterlockedAdd(counters[pairedSegments == 1u
                         ? PATH_GUIDE_PAIRED_HISTORY_PAIR_ONE_SEGMENT
                         : PATH_GUIDE_PAIRED_HISTORY_PAIR_TWO_SEGMENT], 1u);
+
+                // Replay the just-assembled paired-history pair directly from its current
+                // camera-relative root. Selected output compares only the immutable original
+                // source replay lanes; retained identity output requires the full generic
+                // comparator. This remains register/counter-only and cannot authorize scratch,
+                // history or estimator writes.
+                InterlockedAdd(counters[
+                        PATH_GUIDE_PAIRED_HISTORY_PAIR_REPLAY_ELIGIBLE], 1u);
+                PathReplayAggregate pairedReplay = pathReplayAggregateEmpty();
+                for (uint leaf = 0u; leaf < MAX_PATH_SEGMENTS; ++leaf) {
+                    if (leaf >= pairedSegments) break;
+                    PackedPathSegment packed = leaf == 0u
+                            ? pairedRoot.segment0 : pairedRoot.segment1;
+                    packed.ro += worldPush.camOffset;
+                    PathSegment pairedSegment = unpackPathSegment(packed);
+                    uint pairedReplaySeed = leaf == 0u
+                            ? pairedRecord.replay.x : pairedRecord.replay.z;
+                    uint pairedProposalReplaySeed = leaf == 0u
+                            ? pairedRecord.replay.y : pairedRecord.replay.w;
+                    PathTraceResult pairedTraced = tracePathSeeded(
+                            pairedSegment, pairedSourcePixel, true,
+                            pairedReplaySeed, pairedProposalReplaySeed);
+                    pathReplayAccumulate(pairedReplay, pairedTraced, leaf);
+                }
+                bool pairedReplayMatches = selectedPairReady
+                        ? pathMappingSourceReplayMatches(pairedRecord, pairedReplay)
+                        : pathReplayCompare(pairedRecord, pairedReplay) == 0u;
+                InterlockedAdd(counters[selectedPairReady
+                        ? pairedReplayMatches
+                                ? PATH_GUIDE_PAIRED_HISTORY_PAIR_REPLAY_SELECTED_ACCEPTED
+                                : PATH_GUIDE_PAIRED_HISTORY_PAIR_REPLAY_SELECTED_REJECT
+                        : pairedReplayMatches
+                                ? PATH_GUIDE_PAIRED_HISTORY_PAIR_REPLAY_RETAINED_ACCEPTED
+                                : PATH_GUIDE_PAIRED_HISTORY_PAIR_REPLAY_RETAINED_REJECT], 1u);
+                if (pairedReplayMatches) {
+                    InterlockedAdd(counters[outputMappingKind
+                            == PATH_MAPPING_DIFFUSE_RECONNECTION
+                                    ? PATH_GUIDE_PAIRED_HISTORY_PAIR_REPLAY_PREVIOUS_SELECTED
+                                    : PATH_GUIDE_PAIRED_HISTORY_PAIR_REPLAY_PREVIOUS_RETAINED],
+                            1u);
+                    InterlockedAdd(counters[sourceMappingKind
+                            == PATH_MAPPING_DIFFUSE_RECONNECTION
+                                    ? PATH_GUIDE_PAIRED_HISTORY_PAIR_REPLAY_MAPPED_SOURCE
+                                    : PATH_GUIDE_PAIRED_HISTORY_PAIR_REPLAY_IDENTITY_SOURCE],
+                            1u);
+                    InterlockedAdd(counters[pairedSegments == 1u
+                            ? PATH_GUIDE_PAIRED_HISTORY_PAIR_REPLAY_ONE_SEGMENT
+                            : PATH_GUIDE_PAIRED_HISTORY_PAIR_REPLAY_TWO_SEGMENT], 1u);
+                }
             }
         }
         return;

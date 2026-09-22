@@ -1318,9 +1318,15 @@ The paired-history pair gate now performs that pairing in registers only, follow
 origins exactly once and replace source/receiver guides with the independently reprojected current
 surfaces; retained records capture a fresh queue root. Empty outcomes intentionally have no root.
 Twenty new counters bring view-20 storage to 938 uints / 3752 B; allocations, `WorldPush`, inline
-push constants and replay ABI 10 are unchanged. The next gate may replay the paired register record
-and root from the current camera-relative position, still without any storage write or estimator
-use.
+push constants and replay ABI 10 are unchanged.
+
+The paired-history pair replay gate extends the register-pair audit with the exact seeded replay
+of every accepted paired record directly from the paired current-frame root, still in registers
+only. The camera-relative segment origins are rebased to absolute positions before the replay
+trace, selected output compares only the immutable original-source replay lanes, and retained
+identity output must match the full generic replay comparator. Twelve new counters bring
+view-20 storage to 950 uints / 3800 B; `WorldPush`, allocation sizes and replay ABI 10 are
+unchanged. The pass still returns before any scratch, history, promotion-tag or estimator write.
 
 ## Delivery Phases
 

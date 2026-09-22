@@ -2340,6 +2340,51 @@ final class RtPathSpatialReuseReferenceTest {
     }
 
     @Test
+    void pairedHistoryPairReplayUsesBranchSpecificComparators() {
+        var selected = RtPathSpatialReuseReference.BranchDirectPairOutcome.SELECTED_READY;
+        var retained = RtPathSpatialReuseReference.BranchDirectPairOutcome.RETAINED_READY;
+        var identity = RtPathSpatialReuseReference.MappingKind.IDENTITY;
+        var mapped = RtPathSpatialReuseReference.MappingKind.DIFFUSE_RECONNECTION;
+
+        assertEquals(new RtPathSpatialReuseReference.PairedHistoryPairReplayAudit(
+                        RtPathSpatialReuseReference.BranchDirectPairReplayOutcome.SELECTED_ACCEPTED,
+                        RtPathSpatialReuseReference.BranchDirectPairReplayComparator.MAPPING_SOURCE,
+                        1),
+                RtPathSpatialReuseReference.pairedHistoryPairReplayAudit(
+                        selected, mapped, 1, true, 7));
+        assertEquals(RtPathSpatialReuseReference.BranchDirectPairReplayOutcome.SELECTED_REJECT,
+                RtPathSpatialReuseReference.pairedHistoryPairReplayAudit(
+                        selected, mapped, 2, false, 0).outcome());
+        assertEquals(RtPathSpatialReuseReference.BranchDirectPairReplayOutcome.SELECTED_REJECT,
+                RtPathSpatialReuseReference.pairedHistoryPairReplayAudit(
+                        selected, identity, 1, true, 0).outcome());
+
+        assertEquals(new RtPathSpatialReuseReference.PairedHistoryPairReplayAudit(
+                        RtPathSpatialReuseReference.BranchDirectPairReplayOutcome.RETAINED_ACCEPTED,
+                        RtPathSpatialReuseReference.BranchDirectPairReplayComparator.EXACT,
+                        2),
+                RtPathSpatialReuseReference.pairedHistoryPairReplayAudit(
+                        retained, identity, 2, false, 0));
+        assertEquals(RtPathSpatialReuseReference.BranchDirectPairReplayOutcome.RETAINED_REJECT,
+                RtPathSpatialReuseReference.pairedHistoryPairReplayAudit(
+                        retained, identity, 1, true, 4).outcome());
+        assertEquals(RtPathSpatialReuseReference.BranchDirectPairReplayOutcome.RETAINED_REJECT,
+                RtPathSpatialReuseReference.pairedHistoryPairReplayAudit(
+                        retained, mapped, 1, true, 0).outcome());
+
+        assertEquals(RtPathSpatialReuseReference.BranchDirectPairReplayOutcome.NOT_ELIGIBLE,
+                RtPathSpatialReuseReference.pairedHistoryPairReplayAudit(
+                        RtPathSpatialReuseReference.BranchDirectPairOutcome.EMPTY_READY,
+                        null, 0, false, 0).outcome());
+        assertThrows(IllegalArgumentException.class,
+                () -> RtPathSpatialReuseReference.pairedHistoryPairReplayAudit(
+                        null, identity, 1, true, 0));
+        assertThrows(IllegalArgumentException.class,
+                () -> RtPathSpatialReuseReference.pairedHistoryPairReplayAudit(
+                        selected, mapped, 3, true, 0));
+    }
+
+    @Test
     void branchWinnerPairReplayUsesBranchSpecificComparators() {
         var selected = RtPathSpatialReuseReference.BranchDirectPairOutcome.SELECTED_READY;
         var retained = RtPathSpatialReuseReference.BranchDirectPairOutcome.RETAINED_READY;
@@ -4040,8 +4085,8 @@ final class RtPathSpatialReuseReferenceTest {
                 RtPathReservoirHistory.GUIDE_PAIRED_HISTORY_BERNOULLI_MAPPED_SOURCE_READY_INDEX);
         assertEquals(873,
                 RtPathReservoirHistory.GUIDE_PAIRED_HISTORY_BERNOULLI_TWO_SEGMENT_READY_INDEX);
-        assertEquals(938, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
-        assertEquals(938 * Integer.BYTES,
+        assertEquals(950, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
+        assertEquals(950 * Integer.BYTES,
                 RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_COUNTER_BYTES);
         assertEquals(32, RtPathReservoirHistory.SHIFTED_RECEIVER_GUIDE_STRIDE);
         assertEquals(8, RtPathReservoirHistory.BRANCH_RECEIVER_OWNERSHIP_STRIDE);
