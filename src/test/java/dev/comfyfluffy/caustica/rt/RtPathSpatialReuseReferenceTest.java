@@ -1864,6 +1864,84 @@ final class RtPathSpatialReuseReferenceTest {
     }
 
     @Test
+    void pairedHistoryPostSelectionKeepsStoredCapsAndBranchTargetsRegisterOnly() {
+        var selectedOutcome = RtPathSpatialReuseReference.BranchDirectBernoulliOutcome.SELECTED;
+        var retainedOutcome = RtPathSpatialReuseReference.BranchDirectBernoulliOutcome.RETAINED;
+
+        var selected = RtPathSpatialReuseReference.pairedHistoryPostSelectionAudit(
+                selectedOutcome, 10.0, 2.0, 5.0, 6.0, 4.0, 3.0);
+        assertEquals(RtPathSpatialReuseReference.BranchDirectPostSelectionOutcome.SELECTED_READY,
+                selected.outcome());
+        assertEquals(RtPathSpatialReuseReference.BranchDirectStoredCapOutcome.UNCAPPED,
+                selected.weightCap());
+        assertEquals(RtPathSpatialReuseReference.BranchDirectStoredCapOutcome.UNCAPPED,
+                selected.countCap());
+        assertEquals(16.0, selected.nextWeightSum(), 0.0);
+        assertEquals(6.0, selected.nextEffectiveCount(), 0.0);
+        assertEquals(3.0, selected.selectedTarget(), 0.0);
+        assertEquals(16.0 / 18.0, selected.finalWeight(), 1.0e-12);
+        assertTrue(selected.sourceSelected());
+        assertFalse(selected.empty());
+
+        var retained = RtPathSpatialReuseReference.pairedHistoryPostSelectionAudit(
+                retainedOutcome, 10.0, 2.0, 5.0, 6.0, 4.0, 3.0);
+        assertEquals(RtPathSpatialReuseReference.BranchDirectPostSelectionOutcome.RETAINED_READY,
+                retained.outcome());
+        assertEquals(5.0, retained.selectedTarget(), 0.0);
+        assertEquals(16.0 / 30.0, retained.finalWeight(), 1.0e-12);
+        assertFalse(retained.sourceSelected());
+
+        var empty = RtPathSpatialReuseReference.pairedHistoryPostSelectionAudit(
+                retainedOutcome, 0.0, 0.0, 0.0, 0.0, 4.0, 0.0);
+        assertEquals(RtPathSpatialReuseReference.BranchDirectPostSelectionOutcome.RETAINED_READY,
+                empty.outcome());
+        assertEquals(0.0, empty.nextWeightSum(), 0.0);
+        assertEquals(4.0, empty.nextEffectiveCount(), 0.0);
+        assertEquals(0.0, empty.finalWeight(), 0.0);
+        assertTrue(empty.empty());
+
+        var capped = RtPathSpatialReuseReference.pairedHistoryPostSelectionAudit(
+                selectedOutcome, 1.0e30, 16_777_216.0, 2.0,
+                Double.MAX_VALUE, 16.0, 2.0);
+        assertEquals(RtPathSpatialReuseReference.BranchDirectPostSelectionOutcome.SELECTED_READY,
+                capped.outcome());
+        assertEquals(RtPathSpatialReuseReference.BranchDirectStoredCapOutcome.CAPPED,
+                capped.weightCap());
+        assertEquals(RtPathSpatialReuseReference.BranchDirectStoredCapOutcome.CAPPED,
+                capped.countCap());
+        assertEquals(1.0e30, capped.nextWeightSum(), 0.0);
+        assertEquals(16_777_216.0, capped.nextEffectiveCount(), 0.0);
+
+        assertEquals(RtPathSpatialReuseReference.BranchDirectPostSelectionOutcome.BERNOULLI_REJECT,
+                RtPathSpatialReuseReference.pairedHistoryPostSelectionAudit(
+                        RtPathSpatialReuseReference.BranchDirectBernoulliOutcome.INVALID,
+                        1.0, 1.0, 1.0, 1.0, 1.0, 1.0).outcome());
+        assertEquals(RtPathSpatialReuseReference.BranchDirectPostSelectionOutcome.CURRENT_REJECT,
+                RtPathSpatialReuseReference.pairedHistoryPostSelectionAudit(
+                        retainedOutcome, Double.NaN, 1.0, 1.0,
+                        1.0, 1.0, 1.0).outcome());
+        assertEquals(RtPathSpatialReuseReference.BranchDirectPostSelectionOutcome.NEXT_REJECT,
+                RtPathSpatialReuseReference.pairedHistoryPostSelectionAudit(
+                        selectedOutcome, 1.0, 1.0, 1.0,
+                        Double.POSITIVE_INFINITY, 1.0, 1.0).outcome());
+        assertEquals(
+                RtPathSpatialReuseReference.BranchDirectPostSelectionOutcome.SELECTED_TARGET_REJECT,
+                RtPathSpatialReuseReference.pairedHistoryPostSelectionAudit(
+                        selectedOutcome, 1.0, 1.0, 1.0,
+                        1.0, 1.0, 0.0).outcome());
+        assertEquals(
+                RtPathSpatialReuseReference.BranchDirectPostSelectionOutcome.RETAINED_TARGET_REJECT,
+                RtPathSpatialReuseReference.pairedHistoryPostSelectionAudit(
+                        retainedOutcome, 1.0, 1.0, 0.0,
+                        1.0, 1.0, 1.0).outcome());
+        assertEquals(
+                RtPathSpatialReuseReference.BranchDirectPostSelectionOutcome.SELECTED_FINAL_REJECT,
+                RtPathSpatialReuseReference.pairedHistoryPostSelectionAudit(
+                        selectedOutcome, 1.0, 16_777_216.0, 1.0,
+                        1.0, 0.0, Double.MAX_VALUE).outcome());
+    }
+
+    @Test
     void branchWinnerDirectRemapRequiresAcceptedReplayAndOrdersRejects() {
         var replay = RtPathSpatialReuseReference.BranchWinnerPreviousReplayOutcome.class;
         var remap = RtPathSpatialReuseReference.BranchWinnerDirectRemapOutcome.class;
@@ -3871,8 +3949,8 @@ final class RtPathSpatialReuseReferenceTest {
                 RtPathReservoirHistory.GUIDE_PAIRED_HISTORY_BERNOULLI_MAPPED_SOURCE_READY_INDEX);
         assertEquals(873,
                 RtPathReservoirHistory.GUIDE_PAIRED_HISTORY_BERNOULLI_TWO_SEGMENT_READY_INDEX);
-        assertEquals(874, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
-        assertEquals(874 * Integer.BYTES,
+        assertEquals(894, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
+        assertEquals(894 * Integer.BYTES,
                 RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_COUNTER_BYTES);
         assertEquals(32, RtPathReservoirHistory.SHIFTED_RECEIVER_GUIDE_STRIDE);
         assertEquals(8, RtPathReservoirHistory.BRANCH_RECEIVER_OWNERSHIP_STRIDE);

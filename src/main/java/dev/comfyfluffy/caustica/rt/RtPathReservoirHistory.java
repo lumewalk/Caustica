@@ -919,7 +919,27 @@ final class RtPathReservoirHistory {
     static final int GUIDE_PAIRED_HISTORY_BERNOULLI_MAPPED_SOURCE_READY_INDEX = 871;
     static final int GUIDE_PAIRED_HISTORY_BERNOULLI_ONE_SEGMENT_READY_INDEX = 872;
     static final int GUIDE_PAIRED_HISTORY_BERNOULLI_TWO_SEGMENT_READY_INDEX = 873;
-    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 874;
+    static final int GUIDE_PAIRED_HISTORY_POST_SELECTION_ELIGIBLE_INDEX = 874;
+    static final int GUIDE_PAIRED_HISTORY_POST_SELECTION_CURRENT_REJECT_INDEX = 875;
+    static final int GUIDE_PAIRED_HISTORY_POST_SELECTION_NEXT_INVALID_INDEX = 876;
+    static final int GUIDE_PAIRED_HISTORY_POST_SELECTION_SELECTED_READY_INDEX = 877;
+    static final int GUIDE_PAIRED_HISTORY_POST_SELECTION_SELECTED_TARGET_REJECT_INDEX = 878;
+    static final int GUIDE_PAIRED_HISTORY_POST_SELECTION_SELECTED_FINAL_REJECT_INDEX = 879;
+    static final int GUIDE_PAIRED_HISTORY_POST_SELECTION_RETAINED_READY_INDEX = 880;
+    static final int GUIDE_PAIRED_HISTORY_POST_SELECTION_RETAINED_TARGET_REJECT_INDEX = 881;
+    static final int GUIDE_PAIRED_HISTORY_POST_SELECTION_RETAINED_FINAL_REJECT_INDEX = 882;
+    static final int GUIDE_PAIRED_HISTORY_POST_SELECTION_EMPTY_READY_INDEX = 883;
+    static final int GUIDE_PAIRED_HISTORY_POST_SELECTION_WEIGHT_UNCAPPED_INDEX = 884;
+    static final int GUIDE_PAIRED_HISTORY_POST_SELECTION_WEIGHT_CAPPED_INDEX = 885;
+    static final int GUIDE_PAIRED_HISTORY_POST_SELECTION_COUNT_UNCAPPED_INDEX = 886;
+ static final int GUIDE_PAIRED_HISTORY_POST_SELECTION_COUNT_CAPPED_INDEX = 887;
+    static final int GUIDE_PAIRED_HISTORY_POST_SELECTION_PREVIOUS_SELECTED_INDEX = 888;
+    static final int GUIDE_PAIRED_HISTORY_POST_SELECTION_PREVIOUS_RETAINED_INDEX = 889;
+    static final int GUIDE_PAIRED_HISTORY_POST_SELECTION_IDENTITY_SOURCE_INDEX = 890;
+    static final int GUIDE_PAIRED_HISTORY_POST_SELECTION_MAPPED_SOURCE_INDEX = 891;
+    static final int GUIDE_PAIRED_HISTORY_POST_SELECTION_ONE_SEGMENT_INDEX = 892;
+    static final int GUIDE_PAIRED_HISTORY_POST_SELECTION_TWO_SEGMENT_INDEX = 893;
+    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 894;
     static final int SHIFTED_RECEIVER_GUIDE_STRIDE = 8 * Float.BYTES;
     static final int BRANCH_RECEIVER_OWNERSHIP_STRIDE = 2 * Integer.BYTES;
     static final int BRANCH_CANDIDATE_TAG_STRIDE = 2 * Integer.BYTES;
@@ -3182,6 +3202,46 @@ final class RtPathReservoirHistory {
                     counters.get(GUIDE_PAIRED_HISTORY_BERNOULLI_ONE_SEGMENT_READY_INDEX));
             long pairedHistoryBernoulliTwoSegmentReady = Integer.toUnsignedLong(
                     counters.get(GUIDE_PAIRED_HISTORY_BERNOULLI_TWO_SEGMENT_READY_INDEX));
+            long pairedHistoryPostSelectionEligible = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_POST_SELECTION_ELIGIBLE_INDEX));
+            long pairedHistoryPostSelectionCurrentReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_POST_SELECTION_CURRENT_REJECT_INDEX));
+            long pairedHistoryPostSelectionNextInvalid = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_POST_SELECTION_NEXT_INVALID_INDEX));
+            long pairedHistoryPostSelectionSelectedReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_POST_SELECTION_SELECTED_READY_INDEX));
+            long pairedHistoryPostSelectionSelectedTargetReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_POST_SELECTION_SELECTED_TARGET_REJECT_INDEX));
+            long pairedHistoryPostSelectionSelectedFinalReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_POST_SELECTION_SELECTED_FINAL_REJECT_INDEX));
+            long pairedHistoryPostSelectionRetainedReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_POST_SELECTION_RETAINED_READY_INDEX));
+            long pairedHistoryPostSelectionRetainedTargetReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_POST_SELECTION_RETAINED_TARGET_REJECT_INDEX));
+            long pairedHistoryPostSelectionRetainedFinalReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_POST_SELECTION_RETAINED_FINAL_REJECT_INDEX));
+            long pairedHistoryPostSelectionEmptyReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_POST_SELECTION_EMPTY_READY_INDEX));
+            long pairedHistoryPostSelectionWeightUncapped = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_POST_SELECTION_WEIGHT_UNCAPPED_INDEX));
+            long pairedHistoryPostSelectionWeightCapped = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_POST_SELECTION_WEIGHT_CAPPED_INDEX));
+            long pairedHistoryPostSelectionCountUncapped = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_POST_SELECTION_COUNT_UNCAPPED_INDEX));
+            long pairedHistoryPostSelectionCountCapped = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_POST_SELECTION_COUNT_CAPPED_INDEX));
+            long pairedHistoryPostSelectionPreviousSelected = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_POST_SELECTION_PREVIOUS_SELECTED_INDEX));
+            long pairedHistoryPostSelectionPreviousRetained = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_POST_SELECTION_PREVIOUS_RETAINED_INDEX));
+            long pairedHistoryPostSelectionIdentitySource = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_POST_SELECTION_IDENTITY_SOURCE_INDEX));
+            long pairedHistoryPostSelectionMappedSource = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_POST_SELECTION_MAPPED_SOURCE_INDEX));
+            long pairedHistoryPostSelectionOneSegment = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_POST_SELECTION_ONE_SEGMENT_INDEX));
+            long pairedHistoryPostSelectionTwoSegment = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_POST_SELECTION_TWO_SEGMENT_INDEX));
             long crossFrameReceiverReject = crossFrameReceiverSurfaceReject
                     + crossFrameReceiverSampleReject + crossFrameReceiverEdgeReject
                     + crossFrameReceiverTopologyReject + crossFrameReceiverDepthReject
@@ -5893,6 +5953,94 @@ final class RtPathReservoirHistory {
                     pairedHistoryBernoulliOneSegmentReady,
                     pairedHistoryBernoulliTwoSegmentReady,
                     pairedHistoryBernoulliReady - pairedHistoryBernoulliSegments);
+            long pairedHistoryPostSelectionSelectedTerminal =
+                    pairedHistoryPostSelectionSelectedReady
+                            + pairedHistoryPostSelectionSelectedTargetReject
+                            + pairedHistoryPostSelectionSelectedFinalReject;
+            long pairedHistoryPostSelectionRetainedTerminal =
+                    pairedHistoryPostSelectionRetainedReady
+                            + pairedHistoryPostSelectionRetainedTargetReject
+                            + pairedHistoryPostSelectionRetainedFinalReject;
+            long pairedHistoryPostSelectionTerminal =
+                    pairedHistoryPostSelectionCurrentReject
+                            + pairedHistoryPostSelectionNextInvalid
+                            + pairedHistoryPostSelectionSelectedTerminal
+                            + pairedHistoryPostSelectionRetainedTerminal;
+            long pairedHistoryPostSelectionReady =
+                    pairedHistoryPostSelectionSelectedReady
+                            + pairedHistoryPostSelectionRetainedReady;
+            long pairedHistoryPostSelectionCapEligible =
+                    pairedHistoryPostSelectionEligible
+                            - pairedHistoryPostSelectionCurrentReject
+                            - pairedHistoryPostSelectionNextInvalid;
+            long pairedHistoryPostSelectionWeightCap =
+                    pairedHistoryPostSelectionWeightUncapped
+                            + pairedHistoryPostSelectionWeightCapped;
+            long pairedHistoryPostSelectionCountCap =
+                    pairedHistoryPostSelectionCountUncapped
+                            + pairedHistoryPostSelectionCountCapped;
+            long pairedHistoryPostSelectionPrevious =
+                    pairedHistoryPostSelectionPreviousSelected
+                            + pairedHistoryPostSelectionPreviousRetained;
+            long pairedHistoryPostSelectionSource =
+                    pairedHistoryPostSelectionIdentitySource
+                            + pairedHistoryPostSelectionMappedSource;
+            long pairedHistoryPostSelectionSegments =
+                    pairedHistoryPostSelectionOneSegment
+                            + pairedHistoryPostSelectionTwoSegment;
+            CausticaMod.LOGGER.info(
+                    "RT path paired history post-selection: BernoulliReady={} "
+                            + "eligible={} currentReject={} nextInvalid={} "
+                            + "selected[ready={},targetReject={},finalReject={},terminal={},"
+                            + "gateDelta={}] retained[ready={},targetReject={},finalReject={},"
+                            + "terminal={},gateDelta={}] empty={} terminal={} delta={} gateDelta={} "
+                            + "weight[uncapped={},capped={},delta={}] "
+                            + "count[uncapped={},capped={},delta={}] "
+                            + "previous[selected={},retained={},delta={}] "
+                            + "source[identity={},mapped={},delta={}] "
+                            + "segments[one={},two={},delta={}]",
+                    pairedHistoryBernoulliReady,
+                    pairedHistoryPostSelectionEligible,
+                    pairedHistoryPostSelectionCurrentReject,
+                    pairedHistoryPostSelectionNextInvalid,
+                    pairedHistoryPostSelectionSelectedReady,
+                    pairedHistoryPostSelectionSelectedTargetReject,
+                    pairedHistoryPostSelectionSelectedFinalReject,
+                    pairedHistoryPostSelectionSelectedTerminal,
+                    pairedHistoryBernoulliSelected
+                            - pairedHistoryPostSelectionSelectedTerminal,
+                    pairedHistoryPostSelectionRetainedReady,
+                    pairedHistoryPostSelectionRetainedTargetReject,
+                    pairedHistoryPostSelectionRetainedFinalReject,
+                    pairedHistoryPostSelectionRetainedTerminal,
+                    pairedHistoryBernoulliRetained
+                            - pairedHistoryPostSelectionRetainedTerminal,
+                    pairedHistoryPostSelectionEmptyReady,
+                    pairedHistoryPostSelectionTerminal,
+                    pairedHistoryPostSelectionEligible
+                            - pairedHistoryPostSelectionTerminal,
+                    pairedHistoryBernoulliReady
+                            - pairedHistoryPostSelectionEligible,
+                    pairedHistoryPostSelectionWeightUncapped,
+                    pairedHistoryPostSelectionWeightCapped,
+                    pairedHistoryPostSelectionCapEligible
+                            - pairedHistoryPostSelectionWeightCap,
+                    pairedHistoryPostSelectionCountUncapped,
+                    pairedHistoryPostSelectionCountCapped,
+                    pairedHistoryPostSelectionCapEligible
+                            - pairedHistoryPostSelectionCountCap,
+                    pairedHistoryPostSelectionPreviousSelected,
+                    pairedHistoryPostSelectionPreviousRetained,
+                    pairedHistoryPostSelectionReady
+                            - pairedHistoryPostSelectionPrevious,
+                    pairedHistoryPostSelectionIdentitySource,
+                    pairedHistoryPostSelectionMappedSource,
+                    pairedHistoryPostSelectionReady
+                            - pairedHistoryPostSelectionSource,
+                    pairedHistoryPostSelectionOneSegment,
+                    pairedHistoryPostSelectionTwoSegment,
+                    pairedHistoryPostSelectionReady
+                            - pairedHistoryPostSelectionSegments);
             spatialDiagnosticViewPending = 0;
             return;
         }

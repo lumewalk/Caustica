@@ -1294,6 +1294,17 @@ selection-probability gate exactly on every frame. Boundary violations, branch/s
 partition deltas and every accounting delta were zero, and no Vulkan/device/GPU/shader failure
 occurred. The client was closed after validation.
 
+The paired-history post-selection gate extends that Bernoulli outcome with the stored-lane
+arithmetic in registers only. It validates the current same-pixel weight sum, effective count and
+target, saturates the prospective stored sum to `1e30` and the prospective stored M to
+`16777216` using the already capped source M, selects the shifted target for selected outcomes
+and the current target for retained outcomes, and computes the prospective final weight as the
+stored sum divided by the stored M times the selected target. Empty records keep a zero weight.
+The pass returns before record construction and any reservoir/scratch/history/estimator write.
+Twenty new counters bring view-20 storage to 894 uints / 3576 B; allocations, `WorldPush`, inline
+push constants and replay ABI 10 are unchanged. The next gate may assemble the complete register
+record and run the common metadata validator, still without any storage write or estimator use.
+
 ## Delivery Phases
 
 ### Phase 0 — Wavefront Integration Baseline

@@ -1083,6 +1083,19 @@ selected and 777 retained, with zero invalid. Probability partitions matched the
 probability gate exactly (5274 open + 45952 exact-one, zero exact-zero), boundary violations and
 all partition deltas were zero, and no Vulkan/GPU/shader fault was logged.
 
+`RT path paired history post-selection` consumes exactly the Bernoulli-ready population and
+performs the stored-lane arithmetic in registers only. It reads the current same-pixel weight sum,
+effective count and target, validates them, then forms the saturation-safe prospective stored
+weight sum (`1e30` cap) and effective count (`16777216` cap) from the capped source M. Selected
+outcomes use the fresh shifted target; retained outcomes keep the current target. The final weight
+is the prospective sum divided by the prospective count times the selected target, with empty
+records allowed a zero weight. Required accounting is `BernoulliReady == eligible`, `eligible =
+currentReject + nextInvalid + selectedTerminal + retainedTerminal`, selected/retained terminal
+counts equal their Bernoulli counterparts, `empty <= ready`, cap partitions sum to the valid
+population, and previous/source/segment partitions sum to ready. The pass still returns before
+record construction and any reservoir/scratch/history/estimator write. Counter storage is 894
+uints / 3576 B; `WorldPush`, allocation sizes and replay ABI 10 are unchanged.
+
 For a fresh runtime check, use debug view 20 and inspect `run/logs/latest.log`. Normal operation
 requires `RT bring-up OK`, Vulkan, the intended NVIDIA device, exact zero-delta counter partitions,
 and no `DEVICE_LOST`, `VK_ERROR`, GPU fault or shader compilation error. Debug colors and sparse

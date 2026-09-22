@@ -1665,6 +1665,18 @@ final class RtPathSpatialReuseReference {
             boolean oneBoundaryViolation) {
     }
 
+    record PairedHistoryPostSelectionAudit(
+            BranchDirectPostSelectionOutcome outcome,
+            BranchDirectStoredCapOutcome weightCap,
+            BranchDirectStoredCapOutcome countCap,
+            double nextWeightSum,
+            double nextEffectiveCount,
+            double selectedTarget,
+            double finalWeight,
+            boolean sourceSelected,
+            boolean empty) {
+    }
+
     record BranchDirectBernoulliAudit(
             BranchDirectBernoulliOutcome outcome,
             BranchDirectBernoulliBoundary boundary,
@@ -2493,6 +2505,98 @@ final class RtPathSpatialReuseReference {
                 boundary, random,
                 probability == 0.0 && selected,
                 probability == 1.0 && !selected);
+    }
+
+    /** CPU authority for paired-history post-selection arithmetic without reservoir construction. */
+    static PairedHistoryPostSelectionAudit pairedHistoryPostSelectionAudit(
+            BranchDirectBernoulliOutcome bernoulliOutcome,
+            double currentWeightSum, double currentEffectiveCount, double currentTarget,
+            double mergeWeight, double sourceEffectiveCount, double shiftedTarget) {
+        boolean bernoulliReady = bernoulliOutcome == BranchDirectBernoulliOutcome.SELECTED
+                || bernoulliOutcome == BranchDirectBernoulliOutcome.RETAINED;
+        boolean sourceSelected = bernoulliOutcome == BranchDirectBernoulliOutcome.SELECTED;
+        if (!bernoulliReady) {
+            return pairedHistoryPostSelectionReject(
+                    BranchDirectPostSelectionOutcome.BERNOULLI_REJECT, sourceSelected);
+        }
+        if (!nonNegativeFinite(currentWeightSum)
+                || !nonNegativeFinite(currentEffectiveCount)
+                || !nonNegativeFinite(currentTarget)) {
+            return pairedHistoryPostSelectionReject(
+                    BranchDirectPostSelectionOutcome.CURRENT_REJECT, sourceSelected);
+        }
+        if (!nonNegativeFinite(mergeWeight)
+                || !nonNegativeFinite(sourceEffectiveCount)
+                || !nonNegativeFinite(shiftedTarget)) {
+            return pairedHistoryPostSelectionReject(
+                    BranchDirectPostSelectionOutcome.NEXT_REJECT, sourceSelected);
+        }
+
+        double sourceCount = Math.min(sourceEffectiveCount, MAX_SPATIAL_SOURCE_COUNT);
+        boolean weightCapped = currentWeightSum > MAX_STORED_WEIGHT_SUM - mergeWeight;
+        boolean countCapped = currentEffectiveCount
+                > MAX_STORED_EFFECTIVE_COUNT - sourceCount;
+        double nextWeightSum = weightCapped
+                ? MAX_STORED_WEIGHT_SUM : currentWeightSum + mergeWeight;
+        double nextEffectiveCount = countCapped
+                ? MAX_STORED_EFFECTIVE_COUNT : currentEffectiveCount + sourceCount;
+        if (!nonNegativeFinite(nextWeightSum) || !nonNegativeFinite(nextEffectiveCount)) {
+            return pairedHistoryPostSelectionReject(
+                    BranchDirectPostSelectionOutcome.NEXT_REJECT, sourceSelected);
+        }
+
+        BranchDirectStoredCapOutcome weightCap = weightCapped
+                ? BranchDirectStoredCapOutcome.CAPPED
+                : BranchDirectStoredCapOutcome.UNCAPPED;
+        BranchDirectStoredCapOutcome countCap = countCapped
+                ? BranchDirectStoredCapOutcome.CAPPED
+                : BranchDirectStoredCapOutcome.UNCAPPED;
+        double selectedTarget = sourceSelected ? shiftedTarget : currentTarget;
+        boolean empty = nextWeightSum == 0.0;
+        if (!nonNegativeFinite(selectedTarget) || (!empty && selectedTarget == 0.0)) {
+            return new PairedHistoryPostSelectionAudit(
+                    sourceSelected
+                            ? BranchDirectPostSelectionOutcome.SELECTED_TARGET_REJECT
+                            : BranchDirectPostSelectionOutcome.RETAINED_TARGET_REJECT,
+                    weightCap, countCap, nextWeightSum, nextEffectiveCount,
+                    selectedTarget, 0.0, sourceSelected, false);
+        }
+
+        double finalWeight = 0.0;
+        if (!empty) {
+            if (nextEffectiveCount == 0.0) {
+                return new PairedHistoryPostSelectionAudit(
+                        sourceSelected
+                                ? BranchDirectPostSelectionOutcome.SELECTED_FINAL_REJECT
+                                : BranchDirectPostSelectionOutcome.RETAINED_FINAL_REJECT,
+                        weightCap, countCap, nextWeightSum, nextEffectiveCount,
+                        selectedTarget, 0.0, sourceSelected, false);
+            }
+            double denominator = nextEffectiveCount * selectedTarget;
+            finalWeight = nextWeightSum / denominator;
+            if (!positiveFinite(denominator) || !positiveFinite(finalWeight)) {
+                return new PairedHistoryPostSelectionAudit(
+                        sourceSelected
+                                ? BranchDirectPostSelectionOutcome.SELECTED_FINAL_REJECT
+                                : BranchDirectPostSelectionOutcome.RETAINED_FINAL_REJECT,
+                        weightCap, countCap, nextWeightSum, nextEffectiveCount,
+                        selectedTarget, 0.0, sourceSelected, false);
+            }
+        }
+        return new PairedHistoryPostSelectionAudit(
+                sourceSelected
+                        ? BranchDirectPostSelectionOutcome.SELECTED_READY
+                        : BranchDirectPostSelectionOutcome.RETAINED_READY,
+                weightCap, countCap, nextWeightSum, nextEffectiveCount,
+                selectedTarget, finalWeight, sourceSelected, empty);
+    }
+
+    private static PairedHistoryPostSelectionAudit pairedHistoryPostSelectionReject(
+            BranchDirectPostSelectionOutcome outcome, boolean sourceSelected) {
+        return new PairedHistoryPostSelectionAudit(outcome,
+                BranchDirectStoredCapOutcome.NOT_ELIGIBLE,
+                BranchDirectStoredCapOutcome.NOT_ELIGIBLE,
+                0.0, 0.0, 0.0, 0.0, sourceSelected, false);
     }
 
     enum BranchWinnerDirectRemapOutcome {
