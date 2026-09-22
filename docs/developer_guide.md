@@ -1111,6 +1111,17 @@ still returns before any scratch, history, promotion-tag or estimator write. Twe
 counters bring view-20 storage to 918 uints / 3672 B; `WorldPush`, allocation sizes and
 replay ABI 10 are unchanged.
 
+`RT path paired history pair` pairs every accepted register record with the current-frame
+`PathSourceRoot` that would accompany it, still in registers only, following the winner-path
+`BranchWinnerDirectPairAudit` precedent. Selected records rebase the immutable queue segment
+origins exactly once by -camDelta and replace source/receiver guides with the independently
+reprojected current surfaces; retained records capture a fresh queue root through
+`pathCaptureCurrentGuideRoot`. Empty outcomes intentionally have no root. Required accounting is
+`RecordReady == eligible`, `eligible = selectedTerminal + retainedTerminal`, lane ready/reject
+partitions sum to their populations, and previous/source/segment partitions sum to pair ready.
+Twenty new counters bring view-20 storage to 938 uints / 3752 B; `WorldPush`, allocation sizes
+and replay ABI 10 are unchanged.
+
 For a fresh runtime check, use debug view 20 and inspect `run/logs/latest.log`. Normal operation
 requires `RT bring-up OK`, Vulkan, the intended NVIDIA device, exact zero-delta counter partitions,
 and no `DEVICE_LOST`, `VK_ERROR`, GPU fault or shader compilation error. Debug colors and sparse

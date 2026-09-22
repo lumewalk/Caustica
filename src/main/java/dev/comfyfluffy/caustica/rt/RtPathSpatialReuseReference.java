@@ -2696,6 +2696,75 @@ final class RtPathSpatialReuseReference {
                 retainedPreserve, weights, metadata, sourceKey, sourceSelected);
     }
 
+    record PairedHistoryPairAudit(
+            BranchDirectPairOutcome outcome,
+            BranchDirectLaneOutcome selectedKey,
+            BranchDirectLaneOutcome selectedRoot,
+            BranchDirectLaneOutcome retainedRoot) {
+    }
+
+    /** CPU mirror for current-frame root pairing after the paired-history record gate. */
+    static PairedHistoryPairAudit pairedHistoryPairAudit(
+            BranchDirectRecordOutcome recordOutcome,
+            boolean selectedKeyReady,
+            boolean selectedRootReady,
+            boolean retainedRootReady,
+            boolean rootChainValid,
+            boolean rootIdentityValid) {
+        if (recordOutcome == null) {
+            throw new IllegalArgumentException("paired pair audit requires a record outcome");
+        }
+        if (recordOutcome == BranchDirectRecordOutcome.EMPTY_READY) {
+            return pairedHistoryPairAuditResult(BranchDirectPairOutcome.EMPTY_READY,
+                    BranchDirectLaneOutcome.NOT_ELIGIBLE,
+                    BranchDirectLaneOutcome.NOT_ELIGIBLE,
+                    BranchDirectLaneOutcome.NOT_ELIGIBLE);
+        }
+        if (recordOutcome != BranchDirectRecordOutcome.SELECTED_READY
+                && recordOutcome != BranchDirectRecordOutcome.RETAINED_READY) {
+            return pairedHistoryPairAuditResult(BranchDirectPairOutcome.RECORD_REJECT,
+                    BranchDirectLaneOutcome.NOT_ELIGIBLE,
+                    BranchDirectLaneOutcome.NOT_ELIGIBLE,
+                    BranchDirectLaneOutcome.NOT_ELIGIBLE);
+        }
+
+        if (recordOutcome == BranchDirectRecordOutcome.SELECTED_READY) {
+            BranchDirectLaneOutcome key = selectedKeyReady
+                    ? BranchDirectLaneOutcome.READY : BranchDirectLaneOutcome.REJECT;
+            if (!selectedKeyReady) {
+                return pairedHistoryPairAuditResult(
+                        BranchDirectPairOutcome.SELECTED_KEY_REJECT, key,
+                        BranchDirectLaneOutcome.NOT_ELIGIBLE,
+                        BranchDirectLaneOutcome.NOT_ELIGIBLE);
+            }
+            boolean completeRoot = selectedRootReady && rootChainValid && rootIdentityValid;
+            return pairedHistoryPairAuditResult(
+                    completeRoot ? BranchDirectPairOutcome.SELECTED_READY
+                            : BranchDirectPairOutcome.SELECTED_ROOT_REJECT,
+                    key, completeRoot ? BranchDirectLaneOutcome.READY
+                            : BranchDirectLaneOutcome.REJECT,
+                    BranchDirectLaneOutcome.NOT_ELIGIBLE);
+        }
+
+        boolean completeRoot = retainedRootReady && rootChainValid && rootIdentityValid;
+        return pairedHistoryPairAuditResult(
+                completeRoot ? BranchDirectPairOutcome.RETAINED_READY
+                        : BranchDirectPairOutcome.RETAINED_ROOT_REJECT,
+                BranchDirectLaneOutcome.NOT_ELIGIBLE,
+                BranchDirectLaneOutcome.NOT_ELIGIBLE,
+                completeRoot ? BranchDirectLaneOutcome.READY
+                        : BranchDirectLaneOutcome.REJECT);
+    }
+
+    private static PairedHistoryPairAudit pairedHistoryPairAuditResult(
+            BranchDirectPairOutcome outcome,
+            BranchDirectLaneOutcome selectedKey,
+            BranchDirectLaneOutcome selectedRoot,
+            BranchDirectLaneOutcome retainedRoot) {
+        return new PairedHistoryPairAudit(
+                outcome, selectedKey, selectedRoot, retainedRoot);
+    }
+
     enum BranchWinnerDirectRemapOutcome {
         PREVIOUS_REPLAY_REJECT,
         GUIDE_REJECT,

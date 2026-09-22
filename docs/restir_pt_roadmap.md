@@ -1311,9 +1311,16 @@ source replay/proposal lanes while replacing every receiver-dependent lane and a
 independently reprojected source key; retained outcomes preserve the current sample metadata
 bit-for-bit. The common metadata validator plus lane-level checks run entirely on the register
 record before the pass returns. Twenty-four new counters bring view-20 storage to 918 uints / 3672 B;
-allocations, `WorldPush`, inline push constants and replay ABI 10 are unchanged. The next gate may
-pair the register record with a current-frame root in registers only, still without any storage
-write or estimator use.
+allocations, `WorldPush`, inline push constants and replay ABI 10 are unchanged.
+
+The paired-history pair gate now performs that pairing in registers only, following the winner-path
+`BranchWinnerDirectPairAudit` precedent. Selected records rebase the immutable queue segment
+origins exactly once and replace source/receiver guides with the independently reprojected current
+surfaces; retained records capture a fresh queue root. Empty outcomes intentionally have no root.
+Twenty new counters bring view-20 storage to 938 uints / 3752 B; allocations, `WorldPush`, inline
+push constants and replay ABI 10 are unchanged. The next gate may replay the paired register record
+and root from the current camera-relative position, still without any storage write or estimator
+use.
 
 ## Delivery Phases
 

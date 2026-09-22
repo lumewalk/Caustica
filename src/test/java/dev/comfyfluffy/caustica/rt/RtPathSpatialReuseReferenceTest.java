@@ -2294,6 +2294,52 @@ final class RtPathSpatialReuseReferenceTest {
     }
 
     @Test
+    void pairedHistoryPairOrdersKeyAndCurrentRootValidation() {
+        var selected = RtPathSpatialReuseReference.BranchDirectRecordOutcome.SELECTED_READY;
+        var retained = RtPathSpatialReuseReference.BranchDirectRecordOutcome.RETAINED_READY;
+        var ready = RtPathSpatialReuseReference.BranchDirectLaneOutcome.READY;
+        var reject = RtPathSpatialReuseReference.BranchDirectLaneOutcome.REJECT;
+        var notEligible = RtPathSpatialReuseReference.BranchDirectLaneOutcome.NOT_ELIGIBLE;
+
+        assertEquals(new RtPathSpatialReuseReference.PairedHistoryPairAudit(
+                        RtPathSpatialReuseReference.BranchDirectPairOutcome.SELECTED_READY,
+                        ready, ready, notEligible),
+                RtPathSpatialReuseReference.pairedHistoryPairAudit(
+                        selected, true, true, false, true, true));
+        assertEquals(new RtPathSpatialReuseReference.PairedHistoryPairAudit(
+                        RtPathSpatialReuseReference.BranchDirectPairOutcome.SELECTED_KEY_REJECT,
+                        reject, notEligible, notEligible),
+                RtPathSpatialReuseReference.pairedHistoryPairAudit(
+                        selected, false, true, false, true, true));
+        assertEquals(RtPathSpatialReuseReference.BranchDirectPairOutcome.SELECTED_ROOT_REJECT,
+                RtPathSpatialReuseReference.pairedHistoryPairAudit(
+                        selected, true, true, false, false, true).outcome());
+        assertEquals(RtPathSpatialReuseReference.BranchDirectPairOutcome.SELECTED_ROOT_REJECT,
+                RtPathSpatialReuseReference.pairedHistoryPairAudit(
+                        selected, true, true, false, true, false).outcome());
+
+        assertEquals(new RtPathSpatialReuseReference.PairedHistoryPairAudit(
+                        RtPathSpatialReuseReference.BranchDirectPairOutcome.RETAINED_READY,
+                        notEligible, notEligible, ready),
+                RtPathSpatialReuseReference.pairedHistoryPairAudit(
+                        retained, false, false, true, true, true));
+        assertEquals(RtPathSpatialReuseReference.BranchDirectPairOutcome.RETAINED_ROOT_REJECT,
+                RtPathSpatialReuseReference.pairedHistoryPairAudit(
+                        retained, false, false, false, true, true).outcome());
+        assertEquals(RtPathSpatialReuseReference.BranchDirectPairOutcome.EMPTY_READY,
+                RtPathSpatialReuseReference.pairedHistoryPairAudit(
+                        RtPathSpatialReuseReference.BranchDirectRecordOutcome.EMPTY_READY,
+                        false, false, false, false, false).outcome());
+        assertEquals(RtPathSpatialReuseReference.BranchDirectPairOutcome.RECORD_REJECT,
+                RtPathSpatialReuseReference.pairedHistoryPairAudit(
+                        RtPathSpatialReuseReference.BranchDirectRecordOutcome.SELECTED_REJECT,
+                        true, true, true, true, true).outcome());
+        assertThrows(IllegalArgumentException.class,
+                () -> RtPathSpatialReuseReference.pairedHistoryPairAudit(
+                        null, true, true, true, true, true));
+    }
+
+    @Test
     void branchWinnerPairReplayUsesBranchSpecificComparators() {
         var selected = RtPathSpatialReuseReference.BranchDirectPairOutcome.SELECTED_READY;
         var retained = RtPathSpatialReuseReference.BranchDirectPairOutcome.RETAINED_READY;
@@ -3994,8 +4040,8 @@ final class RtPathSpatialReuseReferenceTest {
                 RtPathReservoirHistory.GUIDE_PAIRED_HISTORY_BERNOULLI_MAPPED_SOURCE_READY_INDEX);
         assertEquals(873,
                 RtPathReservoirHistory.GUIDE_PAIRED_HISTORY_BERNOULLI_TWO_SEGMENT_READY_INDEX);
-        assertEquals(918, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
-        assertEquals(918 * Integer.BYTES,
+        assertEquals(938, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
+        assertEquals(938 * Integer.BYTES,
                 RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_COUNTER_BYTES);
         assertEquals(32, RtPathReservoirHistory.SHIFTED_RECEIVER_GUIDE_STRIDE);
         assertEquals(8, RtPathReservoirHistory.BRANCH_RECEIVER_OWNERSHIP_STRIDE);

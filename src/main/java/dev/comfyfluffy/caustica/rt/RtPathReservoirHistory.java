@@ -963,7 +963,27 @@ final class RtPathReservoirHistory {
     static final int GUIDE_PAIRED_HISTORY_RECORD_MAPPED_SOURCE_INDEX = 915;
     static final int GUIDE_PAIRED_HISTORY_RECORD_ONE_SEGMENT_INDEX = 916;
     static final int GUIDE_PAIRED_HISTORY_RECORD_TWO_SEGMENT_INDEX = 917;
-    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 918;
+    static final int GUIDE_PAIRED_HISTORY_PAIR_EMPTY_READY_INDEX = 918;
+    static final int GUIDE_PAIRED_HISTORY_PAIR_ELIGIBLE_INDEX = 919;
+    static final int GUIDE_PAIRED_HISTORY_PAIR_SELECTED_KEY_READY_INDEX = 920;
+    static final int GUIDE_PAIRED_HISTORY_PAIR_SELECTED_KEY_REJECT_INDEX = 921;
+    static final int GUIDE_PAIRED_HISTORY_PAIR_SELECTED_ROOT_READY_INDEX = 922;
+    static final int GUIDE_PAIRED_HISTORY_PAIR_SELECTED_ROOT_REJECT_INDEX = 923;
+    static final int GUIDE_PAIRED_HISTORY_PAIR_RETAINED_ROOT_READY_INDEX = 924;
+    static final int GUIDE_PAIRED_HISTORY_PAIR_RETAINED_ROOT_REJECT_INDEX = 925;
+    static final int GUIDE_PAIRED_HISTORY_PAIR_ROOT_CHAIN_REJECT_INDEX = 926;
+    static final int GUIDE_PAIRED_HISTORY_PAIR_ROOT_IDENTITY_REJECT_INDEX = 927;
+    static final int GUIDE_PAIRED_HISTORY_PAIR_SELECTED_READY_INDEX = 928;
+    static final int GUIDE_PAIRED_HISTORY_PAIR_SELECTED_REJECT_INDEX = 929;
+    static final int GUIDE_PAIRED_HISTORY_PAIR_RETAINED_READY_INDEX = 930;
+    static final int GUIDE_PAIRED_HISTORY_PAIR_RETAINED_REJECT_INDEX = 931;
+    static final int GUIDE_PAIRED_HISTORY_PAIR_PREVIOUS_SELECTED_INDEX = 932;
+    static final int GUIDE_PAIRED_HISTORY_PAIR_PREVIOUS_RETAINED_INDEX = 933;
+    static final int GUIDE_PAIRED_HISTORY_PAIR_IDENTITY_SOURCE_INDEX = 934;
+    static final int GUIDE_PAIRED_HISTORY_PAIR_MAPPED_SOURCE_INDEX = 935;
+    static final int GUIDE_PAIRED_HISTORY_PAIR_ONE_SEGMENT_INDEX = 936;
+    static final int GUIDE_PAIRED_HISTORY_PAIR_TWO_SEGMENT_INDEX = 937;
+    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 938;
     static final int SHIFTED_RECEIVER_GUIDE_STRIDE = 8 * Float.BYTES;
     static final int BRANCH_RECEIVER_OWNERSHIP_STRIDE = 2 * Integer.BYTES;
     static final int BRANCH_CANDIDATE_TAG_STRIDE = 2 * Integer.BYTES;
@@ -3314,6 +3334,46 @@ final class RtPathReservoirHistory {
                     counters.get(GUIDE_PAIRED_HISTORY_RECORD_ONE_SEGMENT_INDEX));
             long pairedHistoryRecordTwoSegment = Integer.toUnsignedLong(
                     counters.get(GUIDE_PAIRED_HISTORY_RECORD_TWO_SEGMENT_INDEX));
+            long pairedHistoryPairEligible = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_PAIR_ELIGIBLE_INDEX));
+            long pairedHistoryPairSelectedReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_PAIR_SELECTED_READY_INDEX));
+            long pairedHistoryPairSelectedReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_PAIR_SELECTED_REJECT_INDEX));
+            long pairedHistoryPairRetainedReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_PAIR_RETAINED_READY_INDEX));
+            long pairedHistoryPairRetainedReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_PAIR_RETAINED_REJECT_INDEX));
+            long pairedHistoryPairEmptyReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_PAIR_EMPTY_READY_INDEX));
+            long pairedHistoryPairSelectedKeyReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_PAIR_SELECTED_KEY_READY_INDEX));
+            long pairedHistoryPairSelectedKeyReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_PAIR_SELECTED_KEY_REJECT_INDEX));
+            long pairedHistoryPairSelectedRootReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_PAIR_SELECTED_ROOT_READY_INDEX));
+            long pairedHistoryPairSelectedRootReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_PAIR_SELECTED_ROOT_REJECT_INDEX));
+            long pairedHistoryPairRetainedRootReady = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_PAIR_RETAINED_ROOT_READY_INDEX));
+            long pairedHistoryPairRetainedRootReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_PAIR_RETAINED_ROOT_REJECT_INDEX));
+            long pairedHistoryPairRootChainReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_PAIR_ROOT_CHAIN_REJECT_INDEX));
+            long pairedHistoryPairRootIdentityReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_PAIR_ROOT_IDENTITY_REJECT_INDEX));
+            long pairedHistoryPairPreviousSelected = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_PAIR_PREVIOUS_SELECTED_INDEX));
+            long pairedHistoryPairPreviousRetained = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_PAIR_PREVIOUS_RETAINED_INDEX));
+            long pairedHistoryPairIdentitySource = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_PAIR_IDENTITY_SOURCE_INDEX));
+            long pairedHistoryPairMappedSource = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_PAIR_MAPPED_SOURCE_INDEX));
+            long pairedHistoryPairOneSegment = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_PAIR_ONE_SEGMENT_INDEX));
+            long pairedHistoryPairTwoSegment = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_PAIR_TWO_SEGMENT_INDEX));
             long crossFrameReceiverReject = crossFrameReceiverSurfaceReject
                     + crossFrameReceiverSampleReject + crossFrameReceiverEdgeReject
                     + crossFrameReceiverTopologyReject + crossFrameReceiverDepthReject
@@ -6178,6 +6238,68 @@ final class RtPathReservoirHistory {
                     pairedHistoryRecordOneSegment,
                     pairedHistoryRecordTwoSegment,
                     pairedHistoryRecordReady - pairedHistoryRecordSegments);
+            long pairedHistoryPairSelectedTerminal =
+                    pairedHistoryPairSelectedReady + pairedHistoryPairSelectedReject;
+            long pairedHistoryPairRetainedTerminal =
+                    pairedHistoryPairRetainedReady + pairedHistoryPairRetainedReject;
+            long pairedHistoryPairTerminal = pairedHistoryPairSelectedTerminal
+                    + pairedHistoryPairRetainedTerminal;
+            long pairedHistoryPairReady = pairedHistoryPairSelectedReady
+                    + pairedHistoryPairRetainedReady;
+            long pairedHistoryPairSelectedKey = pairedHistoryPairSelectedKeyReady
+                    + pairedHistoryPairSelectedKeyReject;
+            long pairedHistoryPairSelectedRoot = pairedHistoryPairSelectedRootReady
+                    + pairedHistoryPairSelectedRootReject;
+            long pairedHistoryPairRetainedRoot = pairedHistoryPairRetainedRootReady
+                    + pairedHistoryPairRetainedRootReject;
+            long pairedHistoryPairPrevious = pairedHistoryPairPreviousSelected
+                    + pairedHistoryPairPreviousRetained;
+            long pairedHistoryPairSource = pairedHistoryPairIdentitySource
+                    + pairedHistoryPairMappedSource;
+            long pairedHistoryPairSegments = pairedHistoryPairOneSegment
+                    + pairedHistoryPairTwoSegment;
+            CausticaMod.LOGGER.info(
+                    "RT path paired history pair: RecordReady={} "
+                            + "eligible={} selected[ready={},reject={},terminal={},"
+                            + "gateDelta={},key={}/{},root={}/{}] "
+                            + "retained[ready={},reject={},terminal={},gateDelta={},"
+                            + "root={}/{}] empty={} terminal={} delta={} gateDelta={} "
+                            + "rootReject[chain={},identity={}] ready={} "
+                            + "previous[selected={},retained={},delta={}] "
+                            + "source[identity={},mapped={},delta={}] "
+                            + "segments[one={},two={},delta={}]",
+                    pairedHistoryRecordReady,
+                    pairedHistoryPairEligible,
+                    pairedHistoryPairSelectedReady,
+                    pairedHistoryPairSelectedReject,
+                    pairedHistoryPairSelectedTerminal,
+                    pairedHistoryRecordSelectedReady - pairedHistoryPairSelectedTerminal,
+                    pairedHistoryPairSelectedKeyReady,
+                    pairedHistoryPairSelectedKeyReject,
+                    pairedHistoryPairSelectedRootReady,
+                    pairedHistoryPairSelectedRootReject,
+                    pairedHistoryPairRetainedReady,
+                    pairedHistoryPairRetainedReject,
+                    pairedHistoryPairRetainedTerminal,
+                    pairedHistoryRecordRetainedReady - pairedHistoryPairRetainedTerminal,
+                    pairedHistoryPairRetainedRootReady,
+                    pairedHistoryPairRetainedRootReject,
+                    pairedHistoryPairEmptyReady,
+                    pairedHistoryPairTerminal,
+                    pairedHistoryPairEligible - pairedHistoryPairTerminal,
+                    pairedHistoryRecordReady - pairedHistoryPairEligible,
+                    pairedHistoryPairRootChainReject,
+                    pairedHistoryPairRootIdentityReject,
+                    pairedHistoryPairReady,
+                    pairedHistoryPairPreviousSelected,
+                    pairedHistoryPairPreviousRetained,
+                    pairedHistoryPairReady - pairedHistoryPairPrevious,
+                    pairedHistoryPairIdentitySource,
+                    pairedHistoryPairMappedSource,
+                    pairedHistoryPairReady - pairedHistoryPairSource,
+                    pairedHistoryPairOneSegment,
+                    pairedHistoryPairTwoSegment,
+                    pairedHistoryPairReady - pairedHistoryPairSegments);
             spatialDiagnosticViewPending = 0;
             return;
         }
