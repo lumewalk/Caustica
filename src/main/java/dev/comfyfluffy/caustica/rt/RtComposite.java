@@ -1635,16 +1635,10 @@ public final class RtComposite {
                         pathReservoirs.beginCurrentBranchWinnerCandidateOwnership(
                                 cmd, branchWinnerScratchFrame);
                         // The persistent pair owner has its own physical slots and lifecycle. Clear
-                        // the complete write slot before the policy pass can publish any pair.
+                        // the complete write slot before the policy pass can publish any pair. The
+                        // paired replay dispatch runs after the policy pass, so replay-approved
+                        // pairs are the final writers of their receiver indices.
                         pathReservoirs.beginCurrentPairedHistory(cmd, pairedHistoryFrame);
-                        try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd,
-                                     "path paired history previous replay");
-                             RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage(
-                                     "frame.pathPairedHistoryPreviousReplay")) {
-                            active.trace(cmd, renderW, renderH,
-                                    pairedHistoryPreviousReplayPushConstants, 1);
-                        }
-                        VulkanCommandEncoder.memoryBarrier(cmd, stack);
                         if (branchWinnerScratchFrame.previousAvailable()) {
                             try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd,
                                          "path branch winner previous replay");
@@ -1732,6 +1726,14 @@ public final class RtComposite {
                                      "frame.pathBranchWinnerPersistencePolicy")) {
                             active.trace(cmd, renderW, renderH,
                                     branchWinnerPersistencePolicyPushConstants, 1);
+                        }
+                        VulkanCommandEncoder.memoryBarrier(cmd, stack);
+                        try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd,
+                                     "path paired history previous replay");
+                             RtFrameStats.Scope ignoredStats = RtFrameStats.FRAME.stage(
+                                     "frame.pathPairedHistoryPreviousReplay")) {
+                            active.trace(cmd, renderW, renderH,
+                                    pairedHistoryPreviousReplayPushConstants, 1);
                         }
                         VulkanCommandEncoder.memoryBarrier(cmd, stack);
                         try (RtDebugLabels.Scope ignored = RtDebugLabels.scope(ctx, cmd,

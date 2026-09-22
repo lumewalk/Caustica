@@ -1133,6 +1133,16 @@ bring view-20 storage to 950 uints / 3800 B; `WorldPush`, allocation sizes and r
 are unchanged, and the pass still returns before any scratch, history, promotion-tag or
 estimator write.
 
+RT-path-paired-history-persistent follows the pair replay dispatch, which now runs after the
+persistence policy. The paired chain publishes every replay-approved pair (reservoir, source
+root, tag written last) into the same paired-history write slot at its own receiver pixel index,
+so policy copies survive only where no replay-approved pair exists. The paired-history storage
+validator attributes each stored record to exactly one source (policy bits or a bounded paired
+capture), and the dedicated capture validator proves the bounded paired captures bit-exactly
+against the dense slot. Publication remains view-20 full-audit-only: no estimator, legacy
+history, replay ABI 10 or WorldPush change. Capture overflow is expected because the bounded
+proof list holds at most 4096 of the eligible pairs.
+
 
 For a fresh runtime check, use debug view 20 and inspect `run/logs/latest.log`. Normal operation
 requires `RT bring-up OK`, Vulkan, the intended NVIDIA device, exact zero-delta counter partitions,

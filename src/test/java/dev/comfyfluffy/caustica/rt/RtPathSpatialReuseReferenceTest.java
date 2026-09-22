@@ -2668,6 +2668,32 @@ final class RtPathSpatialReuseReferenceTest {
     }
 
     @Test
+    void pairedHistoryPersistentAttributionPrefersPolicyBitsThenPairedCaptures() {
+        var identity = RtPathSpatialReuseReference.MappingKind.IDENTITY;
+        var mapped = RtPathSpatialReuseReference.MappingKind.DIFFUSE_RECONNECTION;
+
+        assertEquals(RtPathSpatialReuseReference.PairedHistoryPersistentSource.POLICY,
+                RtPathSpatialReuseReference.pairedHistoryPersistentAudit(
+                        true, false, false, false, false, false, null).source());
+        assertEquals(RtPathSpatialReuseReference.PairedHistoryPersistentSource.POLICY,
+                RtPathSpatialReuseReference.pairedHistoryPersistentAudit(
+                        false, true, false, true, true, true, mapped).source());
+        var policy = RtPathSpatialReuseReference.pairedHistoryPersistentAudit(
+                false, true, false, true, false, false, identity);
+        assertFalse(policy.reservoirBitsMatch());
+        assertFalse(policy.rootBitsMatch());
+        assertEquals(RtPathSpatialReuseReference.PairedHistoryPersistentSource.PAIRED,
+                RtPathSpatialReuseReference.pairedHistoryPersistentAudit(
+                        false, false, true, true, false, false, mapped).source());
+        assertEquals(RtPathSpatialReuseReference.PairedHistoryPersistentSource.UNKNOWN,
+                RtPathSpatialReuseReference.pairedHistoryPersistentAudit(
+                        false, false, false, true, false, false, identity).source());
+        assertThrows(IllegalArgumentException.class,
+                () -> RtPathSpatialReuseReference.pairedHistoryPersistentAudit(
+                        false, false, true, true, false, false, null));
+    }
+
+    @Test
     void pairedMomentsExposeCovarianceAndCorrelationWithoutBatchStorage() {
         var moments = new RtPathSpatialReuseReference.PairMoments();
         moments.add(1.0, 2.0);
@@ -4085,8 +4111,8 @@ final class RtPathSpatialReuseReferenceTest {
                 RtPathReservoirHistory.GUIDE_PAIRED_HISTORY_BERNOULLI_MAPPED_SOURCE_READY_INDEX);
         assertEquals(873,
                 RtPathReservoirHistory.GUIDE_PAIRED_HISTORY_BERNOULLI_TWO_SEGMENT_READY_INDEX);
-        assertEquals(950, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
-        assertEquals(950 * Integer.BYTES,
+        assertEquals(966, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
+        assertEquals(966 * Integer.BYTES,
                 RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_COUNTER_BYTES);
         assertEquals(32, RtPathReservoirHistory.SHIFTED_RECEIVER_GUIDE_STRIDE);
         assertEquals(8, RtPathReservoirHistory.BRANCH_RECEIVER_OWNERSHIP_STRIDE);

@@ -949,7 +949,27 @@ public static const uint PATH_GUIDE_PAIRED_HISTORY_PAIR_REPLAY_MAPPED_SOURCE = 9
 public static const uint PATH_GUIDE_PAIRED_HISTORY_PAIR_REPLAY_ONE_SEGMENT = 947u;
 public static const uint PATH_GUIDE_PAIRED_HISTORY_PAIR_REPLAY_TWO_SEGMENT = 948u;
 public static const uint PATH_GUIDE_PAIRED_HISTORY_PAIR_REPLAY_DELTA = 949u;
-public static const uint PATH_SHIFT_DIAGNOSTIC_COUNTER_COUNT = 950u;
+// Persistent paired-history publication. The paired replay pass now writes its replay-
+// approved pair into the separately owned paired-history write slot, after the policy pass
+// has already published its policy-approved copies into the same slot. The validator below
+// must attribute every stored record to exactly one source.
+public static const uint PATH_GUIDE_PAIRED_HISTORY_PERSISTENT_WRITE_ELIGIBLE = 950u;
+public static const uint PATH_GUIDE_PAIRED_HISTORY_PERSISTENT_WRITE_COMPLETED = 951u;
+public static const uint PATH_GUIDE_PAIRED_HISTORY_PERSISTENT_WRITE_OVERFLOW = 952u;
+public static const uint PATH_GUIDE_PAIRED_HISTORY_PERSISTENT_CAPTURE_CURSOR = 953u;
+public static const uint PATH_GUIDE_PAIRED_HISTORY_PERSISTENT_POLICY_SOURCE = 954u;
+public static const uint PATH_GUIDE_PAIRED_HISTORY_PERSISTENT_PAIRED_SOURCE = 955u;
+public static const uint PATH_GUIDE_PAIRED_HISTORY_PERSISTENT_SOURCE_UNKNOWN = 956u;
+public static const uint PATH_GUIDE_PAIRED_HISTORY_PERSISTENT_LIFECYCLE_REJECT = 957u;
+public static const uint PATH_GUIDE_PAIRED_HISTORY_PERSISTENT_TAG_MISMATCH = 958u;
+public static const uint PATH_GUIDE_PAIRED_HISTORY_PERSISTENT_RESERVOIR_MISMATCH = 959u;
+public static const uint PATH_GUIDE_PAIRED_HISTORY_PERSISTENT_ROOT_MISMATCH = 960u;
+public static const uint PATH_GUIDE_PAIRED_HISTORY_PERSISTENT_CAPTURE_PAIR_REJECT = 961u;
+public static const uint PATH_GUIDE_PAIRED_HISTORY_PERSISTENT_CAPTURE_PAIR_ACCEPTED = 962u;
+public static const uint PATH_GUIDE_PAIRED_HISTORY_PERSISTENT_CAPTURE_METADATA_REJECT = 963u;
+public static const uint PATH_GUIDE_PAIRED_HISTORY_PERSISTENT_CAPTURE_OVERFLOW = 964u;
+public static const uint PATH_GUIDE_PAIRED_HISTORY_PERSISTENT_DELTA = 965u;
+public static const uint PATH_SHIFT_DIAGNOSTIC_COUNTER_COUNT = 966u;
 public static const uint PATH_SHIFT_DIAGNOSTIC_PAIR_MASK = 3u;
 public static const uint PATH_SHIFT_DIAGNOSTIC_MERGE_PAIR_OFFSET =
         PATH_SPATIAL_DIAGNOSTIC_PAIR_CAPACITY * 2u;

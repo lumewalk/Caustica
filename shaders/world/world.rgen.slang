@@ -2694,14 +2694,24 @@ static void pathBranchPairedHistoryValidate() {
             worldPush.pathShiftPairedHistoryCurrentAddr, pixelCount));
     uint4 sourceTag = sourceTags[pixelIndex];
     uint4 storedTag = storedTags[pixelIndex];
-    if (all(sourceTag == uint4(0u))) {
-        bool clean = all(storedTag == uint4(0u))
-                && pathBranchPairedHistoryPayloadZero(
-                        worldPush.pathShiftPairedHistoryCurrentAddr, pixelIndex, pixelCount);
+    if (all(sourceTag == uint4(0u)) && all(storedTag == uint4(0u))) {
+        bool clean = pathBranchPairedHistoryPayloadZero(
+                worldPush.pathShiftPairedHistoryCurrentAddr, pixelIndex, pixelCount);
         InterlockedAdd(counters[clean
                 ? PATH_GUIDE_PAIRED_HISTORY_VALIDATE_EMPTY
                 : PATH_GUIDE_PAIRED_HISTORY_VALIDATE_EMPTY_DIRTY], 1u);
         return;
+    }
+    if (all(sourceTag == uint4(0u))) {
+        // A paired publication with an empty winner tag has no policy counterpart, so the
+        // attribution below must decide between paired source and unknown source.
+        if (worldPush.pathShiftDiagnosticPairAddr == 0u) {
+            InterlockedAdd(counters[
+                    PATH_GUIDE_PAIRED_HISTORY_PERSISTENT_SOURCE_UNKNOWN], 1u);
+            InterlockedAdd(counters[
+                    PATH_GUIDE_PAIRED_HISTORY_VALIDATE_TAG_MISMATCH], 1u);
+            return;
+        }
     }
     if (all(storedTag == uint4(0u))) {
         // The policy pass deliberately left a rejected source record unpublished.
@@ -2715,38 +2725,87 @@ static void pathBranchPairedHistoryValidate() {
             || storedTag.z != pixelIndex) {
         InterlockedAdd(counters[
                 PATH_GUIDE_PAIRED_HISTORY_VALIDATE_LIFECYCLE_REJECT], 1u);
-        return;
-    }
-    if (any(storedTag != sourceTag)) {
-        InterlockedAdd(counters[PATH_GUIDE_PAIRED_HISTORY_VALIDATE_TAG_MISMATCH], 1u);
-        return;
-    }
-    InterlockedAdd(counters[PATH_GUIDE_PAIRED_HISTORY_VALIDATE_TAG_MATCH], 1u);
-
-    ConstPtr<PathReservoir> sourceReservoirs = ConstPtr<PathReservoir>(
-            worldPush.pathShiftBranchWinnerScratchAddr);
-    ConstPtr<PathReservoir> storedReservoirs = ConstPtr<PathReservoir>(
-            worldPush.pathShiftPairedHistoryCurrentAddr);
-    PathReservoir sourceReservoir = sourceReservoirs[pixelIndex];
-    PathReservoir storedReservoir = storedReservoirs[pixelIndex];
-    if (!pathReservoirBitsMatch(storedReservoir, sourceReservoir)) {
         InterlockedAdd(counters[
-                PATH_GUIDE_PAIRED_HISTORY_VALIDATE_RESERVOIR_MISMATCH], 1u);
+                PATH_GUIDE_PAIRED_HISTORY_PERSISTENT_LIFECYCLE_REJECT], 1u);
         return;
     }
-    InterlockedAdd(counters[PATH_GUIDE_PAIRED_HISTORY_VALIDATE_RESERVOIR_MATCH], 1u);
 
-    ConstPtr<PathSourceRoot> sourceRoots = ConstPtr<PathSourceRoot>(
-            pathBranchWinnerRootAddress(
-                    worldPush.pathShiftBranchWinnerScratchAddr, pixelCount));
+    // Two publication sources share the paired-history write slot this frame. The persistence
+    // policy copies its approved winner pairs first; the paired replay pass then overwrites the
+    // same receiver index with its replay-approved pair. Attribute every stored record to
+    // exactly one source: exact winner bits mean a policy source; otherwise the bounded paired
+    // capture list must contain this receiver index.
+    bool policySource = all(storedTag == sourceTag);
+    PathReservoir storedReservoir = ConstPtr<PathReservoir>(
+            worldPush.pathShiftPairedHistoryCurrentAddr)[pixelIndex];
     ConstPtr<PathSourceRoot> storedRoots = ConstPtr<PathSourceRoot>(
             pathBranchWinnerRootAddress(
                     worldPush.pathShiftPairedHistoryCurrentAddr, pixelCount));
-    if (!pathSourceRootBitsMatch(storedRoots[pixelIndex], sourceRoots[pixelIndex])) {
-        InterlockedAdd(counters[PATH_GUIDE_PAIRED_HISTORY_VALIDATE_ROOT_MISMATCH], 1u);
+    PathSourceRoot storedRoot = storedRoots[pixelIndex];
+
+    bool pairedSource = false;
+    if (!policySource && worldPush.pathShiftDiagnosticPairAddr != 0u) {
+        uint pairedCapturedCount = min(
+                counters[PATH_GUIDE_PAIRED_HISTORY_PERSISTENT_CAPTURE_CURSOR],
+                PATH_BRANCH_SCRATCH_CAPTURE_CAPACITY);
+        ConstPtr<PathBranchWinnerPairStorageCapture> pairedCaptures =
+                ConstPtr<PathBranchWinnerPairStorageCapture>(
+                        pathBranchWinnerPairExpectedAddress(
+                                worldPush.pathShiftDiagnosticPairAddr));
+        for (uint capture = 0u; capture < pairedCapturedCount; ++capture) {
+            if (pairedCaptures[capture].metadata.z == pixelIndex) {
+                pairedSource = true;
+                break;
+            }
+        }
+    }
+    if (policySource) {
+        InterlockedAdd(counters[
+                PATH_GUIDE_PAIRED_HISTORY_PERSISTENT_POLICY_SOURCE], 1u);
+    } else if (pairedSource) {
+        InterlockedAdd(counters[
+                PATH_GUIDE_PAIRED_HISTORY_PERSISTENT_PAIRED_SOURCE], 1u);
+    } else {
+        InterlockedAdd(counters[
+                PATH_GUIDE_PAIRED_HISTORY_PERSISTENT_SOURCE_UNKNOWN], 1u);
+        InterlockedAdd(counters[PATH_GUIDE_PAIRED_HISTORY_VALIDATE_TAG_MISMATCH], 1u);
         return;
     }
-    InterlockedAdd(counters[PATH_GUIDE_PAIRED_HISTORY_VALIDATE_ROOT_MATCH], 1u);
+
+    if (policySource) {
+        InterlockedAdd(counters[PATH_GUIDE_PAIRED_HISTORY_VALIDATE_TAG_MATCH], 1u);
+        ConstPtr<PathReservoir> sourceReservoirs = ConstPtr<PathReservoir>(
+                worldPush.pathShiftBranchWinnerScratchAddr);
+        if (!pathReservoirBitsMatch(storedReservoir, sourceReservoirs[pixelIndex])) {
+            InterlockedAdd(counters[
+                    PATH_GUIDE_PAIRED_HISTORY_VALIDATE_RESERVOIR_MISMATCH], 1u);
+            InterlockedAdd(counters[
+                    PATH_GUIDE_PAIRED_HISTORY_PERSISTENT_RESERVOIR_MISMATCH], 1u);
+            return;
+        }
+        InterlockedAdd(counters[
+                PATH_GUIDE_PAIRED_HISTORY_VALIDATE_RESERVOIR_MATCH], 1u);
+        ConstPtr<PathSourceRoot> sourceRoots = ConstPtr<PathSourceRoot>(
+                pathBranchWinnerRootAddress(
+                        worldPush.pathShiftBranchWinnerScratchAddr, pixelCount));
+        if (!pathSourceRootBitsMatch(storedRoot, sourceRoots[pixelIndex])) {
+            InterlockedAdd(counters[
+                    PATH_GUIDE_PAIRED_HISTORY_VALIDATE_ROOT_MISMATCH], 1u);
+            InterlockedAdd(counters[
+                    PATH_GUIDE_PAIRED_HISTORY_PERSISTENT_ROOT_MISMATCH], 1u);
+            return;
+        }
+        InterlockedAdd(counters[PATH_GUIDE_PAIRED_HISTORY_VALIDATE_ROOT_MATCH], 1u);
+    } else {
+        // The dedicated bounded capture validator compares paired-source payload bits exactly.
+        // This dispatch proves lifecycle and source attribution only, so a paired source counts
+        // its tag and reservoir/root lanes as matched pending that separate validation.
+        InterlockedAdd(counters[PATH_GUIDE_PAIRED_HISTORY_VALIDATE_TAG_MATCH], 1u);
+        InterlockedAdd(counters[
+                PATH_GUIDE_PAIRED_HISTORY_VALIDATE_RESERVOIR_MATCH], 1u);
+        InterlockedAdd(counters[
+                PATH_GUIDE_PAIRED_HISTORY_VALIDATE_ROOT_MATCH], 1u);
+    }
     InterlockedAdd(counters[PATH_GUIDE_PAIRED_HISTORY_VALIDATE_ACCEPTED], 1u);
 
     uint sourceMappingKind = storedTag.w & 0xFFu;
@@ -2761,6 +2820,93 @@ static void pathBranchPairedHistoryValidate() {
     InterlockedAdd(counters[replaySegments == 1u
             ? PATH_GUIDE_PAIRED_HISTORY_VALIDATE_ONE_SEGMENT
             : PATH_GUIDE_PAIRED_HISTORY_VALIDATE_TWO_SEGMENT], 1u);
+}
+
+// Post-barrier bounded validator for paired-source persistent publications. It mirrors the
+// winner pair storage validator, but reads the paired capture list and the paired-history write
+// slot. It never writes the paired slot, legacy history or the estimator.
+static void pathBranchPairedPersistentCaptureValidate() {
+    if (pc.debugView != PATH_SHIFTED_RADIANCE_DEBUG_VIEW
+            || (pc.historyFlags & PATH_GUIDE_PAIRED_HISTORY_VALIDATE_PASS_FLAG) == 0u
+            || worldPush.pathShiftDiagnosticCounterAddr == 0u
+            || worldPush.pathShiftDiagnosticPairAddr == 0u
+            || worldPush.pathShiftPairedHistoryCurrentAddr == 0u) {
+        return;
+    }
+    uint sampleIndex = DispatchRaysIndex().y * DispatchRaysDimensions().x
+            + DispatchRaysIndex().x;
+    DevicePtr<uint> counters = DevicePtr<uint>(worldPush.pathShiftDiagnosticCounterAddr);
+    uint capturedCount = min(
+            counters[PATH_GUIDE_PAIRED_HISTORY_PERSISTENT_CAPTURE_CURSOR],
+            PATH_BRANCH_SCRATCH_CAPTURE_CAPACITY);
+    if (sampleIndex >= capturedCount) return;
+
+    ConstPtr<PathBranchWinnerPairStorageCapture> expectedCaptures =
+            ConstPtr<PathBranchWinnerPairStorageCapture>(
+                    pathBranchWinnerPairExpectedAddress(
+                            worldPush.pathShiftDiagnosticPairAddr));
+    ConstPtr<PathBranchWinnerPairStorageCapture> storedCaptures =
+            ConstPtr<PathBranchWinnerPairStorageCapture>(
+                    pathBranchWinnerPairStoredAddress(
+                            worldPush.pathShiftDiagnosticPairAddr));
+    PathBranchWinnerPairStorageCapture expected = expectedCaptures[sampleIndex];
+    PathBranchWinnerPairStorageCapture stored = storedCaptures[sampleIndex];
+    uint sourceMappingKind = expected.metadata.w & 0xFFu;
+    uint outputMappingKind = (expected.metadata.w >> 8u) & 0xFFu;
+    uint previousOutputMappingKind = (expected.metadata.w >> 16u) & 0xFFu;
+    uint replaySegments = (expected.metadata.w >> 24u) & 0xFFu;
+    uint currentGeneration = pc.historyGeneration & PATH_GENERATION_MASK;
+    uint guideWidth;
+    uint guideHeight;
+    gRestirPositionMaterial.GetDimensions(guideWidth, guideHeight);
+    uint pixelCount = guideWidth * guideHeight;
+    bool expectedMetadataValid = expected.metadata.x == worldPush.frameIndex
+            && expected.metadata.y == currentGeneration
+            && expected.metadata.z < pixelCount
+            && (sourceMappingKind == PATH_MAPPING_IDENTITY
+                    || sourceMappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION)
+            && (outputMappingKind == PATH_MAPPING_IDENTITY
+                    || outputMappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION)
+            && (previousOutputMappingKind == PATH_MAPPING_IDENTITY
+                    || previousOutputMappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION)
+            && pathMappingKind(expected.reservoir) == outputMappingKind
+            && (replaySegments == 1u || replaySegments == MAX_PATH_SEGMENTS)
+            && expected.reservoir.replayControl.y == replaySegments;
+    bool pairMetadataValid = expectedMetadataValid
+            && all(stored.metadata == expected.metadata);
+    if (!pairMetadataValid) {
+        InterlockedAdd(counters[
+                PATH_GUIDE_PAIRED_HISTORY_PERSISTENT_CAPTURE_METADATA_REJECT], 1u);
+        return;
+    }
+
+    bool reservoirMatches = pathReservoirBitsMatch(
+            stored.reservoir, expected.reservoir);
+    bool rootMatches = pathSourceRootBitsMatch(stored.root, expected.root);
+    if (!reservoirMatches || !rootMatches) {
+        InterlockedAdd(counters[
+                PATH_GUIDE_PAIRED_HISTORY_PERSISTENT_CAPTURE_PAIR_REJECT], 1u);
+        return;
+    }
+
+    // The dense paired-history write slot must hold the same published pair bit-exactly.
+    uint receiverPixelIndex = expected.metadata.z;
+    uint4 denseTag = ConstPtr<uint4>(pathBranchWinnerTagAddress(
+            worldPush.pathShiftPairedHistoryCurrentAddr, pixelCount))[receiverPixelIndex];
+    PathReservoir denseReservoir = ConstPtr<PathReservoir>(
+            worldPush.pathShiftPairedHistoryCurrentAddr)[receiverPixelIndex];
+    PathSourceRoot denseRoot = ConstPtr<PathSourceRoot>(pathBranchWinnerRootAddress(
+            worldPush.pathShiftPairedHistoryCurrentAddr, pixelCount))[receiverPixelIndex];
+    bool denseMatches = all(denseTag == expected.metadata)
+            && pathReservoirBitsMatch(denseReservoir, expected.reservoir)
+            && pathSourceRootBitsMatch(denseRoot, expected.root);
+    if (!denseMatches) {
+        InterlockedAdd(counters[
+                PATH_GUIDE_PAIRED_HISTORY_PERSISTENT_CAPTURE_PAIR_REJECT], 1u);
+        return;
+    }
+    InterlockedAdd(counters[
+            PATH_GUIDE_PAIRED_HISTORY_PERSISTENT_CAPTURE_PAIR_ACCEPTED], 1u);
 }
 
 static void pathBranchReceiverOwnerValidate() {
@@ -4045,6 +4191,72 @@ static void pathPreviousPairReplayValidate(bool pairedHistory) {
                     InterlockedAdd(counters[pairedSegments == 1u
                             ? PATH_GUIDE_PAIRED_HISTORY_PAIR_REPLAY_ONE_SEGMENT
                             : PATH_GUIDE_PAIRED_HISTORY_PAIR_REPLAY_TWO_SEGMENT], 1u);
+
+                    // Publish the replay-approved pair into the persistent paired-history write
+                    // slot. The dispatch order sends this pass after the persistence policy, so
+                    // the paired output overwrites a policy copy only where a replay-approved
+                    // pair exists and never competes with the policy pass for the slot. The tag
+                    // is published last; the following validator is separated by a device barrier.
+                    // Nothing here addresses legacy path history or estimator radiance.
+                    InterlockedAdd(counters[
+                            PATH_GUIDE_PAIRED_HISTORY_PERSISTENT_WRITE_ELIGIBLE], 1u);
+                    if (worldPush.pathShiftPairedHistoryCurrentAddr == 0u) {
+                        InterlockedAdd(counters[
+                                PATH_GUIDE_PAIRED_HISTORY_PERSISTENT_WRITE_OVERFLOW], 1u);
+                        return;
+                    }
+                    DevicePtr<PathReservoir> persistentReservoirs =
+                            DevicePtr<PathReservoir>(
+                                    worldPush.pathShiftPairedHistoryCurrentAddr);
+                    DevicePtr<PathSourceRoot> persistentRoots =
+                            DevicePtr<PathSourceRoot>(pathBranchWinnerRootAddress(
+                                    worldPush.pathShiftPairedHistoryCurrentAddr, pixelCount));
+                    DevicePtr<uint4> persistentTags = DevicePtr<uint4>(
+                            pathBranchWinnerTagAddress(
+                                    worldPush.pathShiftPairedHistoryCurrentAddr, pixelCount));
+                    uint pairedPersistentControl = pathBranchWinnerPairStorageControl(
+                            sourceMappingKind, pathMappingKind(pairedRecord),
+                            outputMappingKind, pairedSegments);
+                    persistentReservoirs[receiverPixelIndex] = pairedRecord;
+                    persistentRoots[receiverPixelIndex] = pairedRoot;
+                    persistentTags[receiverPixelIndex] = uint4(
+                            worldPush.frameIndex, currentGeneration, receiverPixelIndex,
+                            pairedPersistentControl);
+                    InterlockedAdd(counters[
+                            PATH_GUIDE_PAIRED_HISTORY_PERSISTENT_WRITE_COMPLETED], 1u);
+                    InterlockedAdd(counters[
+                            PATH_GUIDE_PAIRED_HISTORY_PERSISTENT_DELTA], 1u);
+
+                    // Bounded device-storage proof for the paired-source publication. Expected
+                    // and stored copies share the winner capture arrays for this pass only; the
+                    // post-barrier validator consumes them before the next frame's winner
+                    // storage reuses the same memory.
+                    uint pairedPersistentCaptureIndex;
+                    InterlockedAdd(counters[
+                            PATH_GUIDE_PAIRED_HISTORY_PERSISTENT_CAPTURE_CURSOR], 1u,
+                            pairedPersistentCaptureIndex);
+                    if (pairedPersistentCaptureIndex
+                            < PATH_BRANCH_SCRATCH_CAPTURE_CAPACITY) {
+                        PathBranchWinnerPairStorageCapture capture = {};
+                        capture.metadata = uint4(
+                                worldPush.frameIndex, currentGeneration, receiverPixelIndex,
+                                pairedPersistentControl);
+                        capture.reservoir = pairedRecord;
+                        capture.root = pairedRoot;
+                        DevicePtr<PathBranchWinnerPairStorageCapture> expectedCaptures =
+                                DevicePtr<PathBranchWinnerPairStorageCapture>(
+                                        pathBranchWinnerPairExpectedAddress(
+                                                worldPush.pathShiftDiagnosticPairAddr));
+                        DevicePtr<PathBranchWinnerPairStorageCapture> storedCaptures =
+                                DevicePtr<PathBranchWinnerPairStorageCapture>(
+                                        pathBranchWinnerPairStoredAddress(
+                                                worldPush.pathShiftDiagnosticPairAddr));
+                        expectedCaptures[pairedPersistentCaptureIndex] = capture;
+                        storedCaptures[pairedPersistentCaptureIndex] = capture;
+                    } else {
+                        InterlockedAdd(counters[
+                                PATH_GUIDE_PAIRED_HISTORY_PERSISTENT_CAPTURE_OVERFLOW], 1u);
+                    }
                 }
             }
         }
@@ -7097,6 +7309,7 @@ void main() {
     }
     if ((pc.historyFlags & PATH_GUIDE_PAIRED_HISTORY_VALIDATE_PASS_FLAG) != 0u) {
         pathBranchPairedHistoryValidate();
+        pathBranchPairedPersistentCaptureValidate();
         return;
     }
     if ((pc.historyFlags

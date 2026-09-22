@@ -2809,6 +2809,65 @@ final class RtPathSpatialReuseReference {
                 BranchDirectPairReplayComparator.EXACT, segmentCount);
     }
 
+    enum PairedHistoryPersistentSource {
+        POLICY,
+        PAIRED,
+        UNKNOWN
+    }
+
+    record PairedHistoryPersistentAudit(
+            PairedHistoryPersistentSource source,
+            boolean lifecycleValid,
+            boolean tagBitsMatch,
+            boolean reservoirBitsMatch,
+            boolean rootBitsMatch,
+            MappingKind outputMappingKind) {
+    }
+
+    /**
+     * Ordered CPU mirror for attributing a stored paired-history record to its publication
+     * source. The persistence policy publishes first; the paired replay pass overwrites its
+     * receiver index only when its pair replay accepted. Exact winner bits mean a policy
+     * source; otherwise a paired capture at this receiver index must exist.
+     */
+    static PairedHistoryPersistentAudit pairedHistoryPersistentAudit(
+            boolean storedEmpty,
+            boolean policyTagBitsMatch,
+            boolean pairedCaptureContainsReceiver,
+            boolean lifecycleValid,
+            boolean policyReservoirBitsMatch,
+            boolean policyRootBitsMatch,
+            MappingKind outputMappingKind) {
+        if (storedEmpty) {
+            return new PairedHistoryPersistentAudit(
+                    PairedHistoryPersistentSource.POLICY, true, true, true, true, null);
+        }
+        if (!lifecycleValid) {
+            return new PairedHistoryPersistentAudit(
+                    PairedHistoryPersistentSource.POLICY, false, false, false, false, null);
+        }
+        if (policyTagBitsMatch) {
+            if (outputMappingKind == null) {
+                throw new IllegalArgumentException(
+                        "policy publication requires an output mapping kind");
+            }
+            return new PairedHistoryPersistentAudit(
+                    PairedHistoryPersistentSource.POLICY, true, true,
+                    policyReservoirBitsMatch, policyRootBitsMatch, outputMappingKind);
+        }
+        if (pairedCaptureContainsReceiver) {
+            if (outputMappingKind == null) {
+                throw new IllegalArgumentException(
+                        "paired publication requires an output mapping kind");
+            }
+            return new PairedHistoryPersistentAudit(
+                    PairedHistoryPersistentSource.PAIRED, true, true, true, true,
+                    outputMappingKind);
+        }
+        return new PairedHistoryPersistentAudit(
+                PairedHistoryPersistentSource.UNKNOWN, true, false, false, false, null);
+    }
+
     enum BranchWinnerDirectRemapOutcome {
         PREVIOUS_REPLAY_REJECT,
         GUIDE_REJECT,

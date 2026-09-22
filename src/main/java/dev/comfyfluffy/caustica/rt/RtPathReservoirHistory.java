@@ -995,7 +995,23 @@ final class RtPathReservoirHistory {
     static final int GUIDE_PAIRED_HISTORY_PAIR_REPLAY_ONE_SEGMENT_INDEX = 947;
     static final int GUIDE_PAIRED_HISTORY_PAIR_REPLAY_TWO_SEGMENT_INDEX = 948;
     static final int GUIDE_PAIRED_HISTORY_PAIR_REPLAY_DELTA_INDEX = 949;
-    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 950;
+    static final int GUIDE_PAIRED_HISTORY_PERSISTENT_WRITE_ELIGIBLE_INDEX = 950;
+    static final int GUIDE_PAIRED_HISTORY_PERSISTENT_WRITE_COMPLETED_INDEX = 951;
+    static final int GUIDE_PAIRED_HISTORY_PERSISTENT_WRITE_OVERFLOW_INDEX = 952;
+    static final int GUIDE_PAIRED_HISTORY_PERSISTENT_CAPTURE_CURSOR_INDEX = 953;
+    static final int GUIDE_PAIRED_HISTORY_PERSISTENT_POLICY_SOURCE_INDEX = 954;
+    static final int GUIDE_PAIRED_HISTORY_PERSISTENT_PAIRED_SOURCE_INDEX = 955;
+    static final int GUIDE_PAIRED_HISTORY_PERSISTENT_SOURCE_UNKNOWN_INDEX = 956;
+    static final int GUIDE_PAIRED_HISTORY_PERSISTENT_LIFECYCLE_REJECT_INDEX = 957;
+    static final int GUIDE_PAIRED_HISTORY_PERSISTENT_TAG_MISMATCH_INDEX = 958;
+    static final int GUIDE_PAIRED_HISTORY_PERSISTENT_RESERVOIR_MISMATCH_INDEX = 959;
+    static final int GUIDE_PAIRED_HISTORY_PERSISTENT_ROOT_MISMATCH_INDEX = 960;
+    static final int GUIDE_PAIRED_HISTORY_PERSISTENT_CAPTURE_PAIR_REJECT_INDEX = 961;
+    static final int GUIDE_PAIRED_HISTORY_PERSISTENT_CAPTURE_PAIR_ACCEPTED_INDEX = 962;
+    static final int GUIDE_PAIRED_HISTORY_PERSISTENT_CAPTURE_METADATA_REJECT_INDEX = 963;
+    static final int GUIDE_PAIRED_HISTORY_PERSISTENT_CAPTURE_OVERFLOW_INDEX = 964;
+    static final int GUIDE_PAIRED_HISTORY_PERSISTENT_DELTA_INDEX = 965;
+    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 966;
     static final int SHIFTED_RECEIVER_GUIDE_STRIDE = 8 * Float.BYTES;
     static final int BRANCH_RECEIVER_OWNERSHIP_STRIDE = 2 * Integer.BYTES;
     static final int BRANCH_CANDIDATE_TAG_STRIDE = 2 * Integer.BYTES;
@@ -3408,6 +3424,39 @@ final class RtPathReservoirHistory {
                     counters.get(GUIDE_PAIRED_HISTORY_PAIR_REPLAY_ONE_SEGMENT_INDEX));
             long pairedHistoryPairReplayTwoSegment = Integer.toUnsignedLong(
                     counters.get(GUIDE_PAIRED_HISTORY_PAIR_REPLAY_TWO_SEGMENT_INDEX));
+            long pairedHistoryPersistentWriteEligible = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_PERSISTENT_WRITE_ELIGIBLE_INDEX));
+            long pairedHistoryPersistentWriteCompleted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_PERSISTENT_WRITE_COMPLETED_INDEX));
+            long pairedHistoryPersistentWriteOverflow = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_PERSISTENT_WRITE_OVERFLOW_INDEX));
+            long pairedHistoryPersistentCaptureCursor = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_PERSISTENT_CAPTURE_CURSOR_INDEX));
+            long pairedHistoryPersistentPolicySource = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_PERSISTENT_POLICY_SOURCE_INDEX));
+            long pairedHistoryPersistentPairedSource = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_PERSISTENT_PAIRED_SOURCE_INDEX));
+            long pairedHistoryPersistentSourceUnknown = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_PERSISTENT_SOURCE_UNKNOWN_INDEX));
+            long pairedHistoryPersistentLifecycleReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_PERSISTENT_LIFECYCLE_REJECT_INDEX));
+            long pairedHistoryPersistentTagMismatch = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_PERSISTENT_TAG_MISMATCH_INDEX));
+            long pairedHistoryPersistentReservoirMismatch = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_PERSISTENT_RESERVOIR_MISMATCH_INDEX));
+            long pairedHistoryPersistentRootMismatch = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_PERSISTENT_ROOT_MISMATCH_INDEX));
+            long pairedHistoryPersistentCapturePairReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_PERSISTENT_CAPTURE_PAIR_REJECT_INDEX));
+            long pairedHistoryPersistentCapturePairAccepted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_PERSISTENT_CAPTURE_PAIR_ACCEPTED_INDEX));
+            long pairedHistoryPersistentCaptureMetadataReject = Integer.toUnsignedLong(
+                    counters.get(
+                            GUIDE_PAIRED_HISTORY_PERSISTENT_CAPTURE_METADATA_REJECT_INDEX));
+            long pairedHistoryPersistentCaptureOverflow = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_PERSISTENT_CAPTURE_OVERFLOW_INDEX));
+            long pairedHistoryPersistentDelta = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_PERSISTENT_DELTA_INDEX));
             long crossFrameReceiverReject = crossFrameReceiverSurfaceReject
                     + crossFrameReceiverSampleReject + crossFrameReceiverEdgeReject
                     + crossFrameReceiverTopologyReject + crossFrameReceiverDepthReject
@@ -5816,7 +5865,7 @@ final class RtPathReservoirHistory {
                     "RT path paired history storage: attempted={} empty={} "
                             + "reject[emptyDirty={},policy={},lifecycle={},tag={},reservoir={},root={}] "
                             + "match[tag={},reservoir={},root={}] accepted={} terminal={} delta={} "
-                            + "policyDelta={} branch[selected={},retained={},delta={}] "
+                            + "policySource={} branch[selected={},retained={},delta={}] "
                             + "source[identity={},mapped={},delta={}] "
                             + "segments[one={},two={},delta={}]",
                     pairedHistoryValidateAttempted,
@@ -5833,7 +5882,7 @@ final class RtPathReservoirHistory {
                     pairedHistoryValidateAccepted,
                     pairedHistoryValidateTerminal,
                     pairedHistoryValidateAttempted - pairedHistoryValidateTerminal,
-                    guideBranchWinnerPersistenceAccepted - pairedHistoryValidateAccepted,
+                    pairedHistoryPersistentPolicySource,
                     pairedHistoryValidateSelected,
                     pairedHistoryValidateRetained,
                     pairedHistoryValidateAccepted - pairedHistoryValidateBranch,
@@ -6385,6 +6434,44 @@ final class RtPathReservoirHistory {
                     pairedHistoryPairReplayTwoSegment,
                     pairedHistoryPairReplayAccepted
                             - pairedHistoryPairReplaySegments);
+            long pairedHistoryPersistentWriteTerminal = pairedHistoryPersistentWriteCompleted
+                    + pairedHistoryPersistentWriteOverflow;
+            long pairedHistoryPersistentCaptureCursorCapped = Math.min(
+                    pairedHistoryPersistentCaptureCursor,
+                    RtPathReservoirHistory.PATH_BRANCH_SCRATCH_CAPTURE_CAPACITY);
+            long pairedHistoryPersistentCaptureAttempted = pairedHistoryPersistentCapturePairAccepted
+                    + pairedHistoryPersistentCapturePairReject
+                    + pairedHistoryPersistentCaptureMetadataReject;
+            long pairedHistoryPersistentCaptureTerminal = pairedHistoryPersistentCaptureAttempted
+                    + pairedHistoryPersistentCaptureOverflow;
+            long pairedHistoryPersistentSource = pairedHistoryPersistentPolicySource
+                    + pairedHistoryPersistentPairedSource + pairedHistoryPersistentSourceUnknown;
+            CausticaMod.LOGGER.info(
+                    "RT path paired history persistent: write[eligible={},completed={},"
+                            + "overflow={},delta={}] captureCursor={} capture[accepted={},"
+                            + "pairReject={},metadataReject={},overflow={},delta={}] "
+                            + "source[policy={},paired={},unknown={},delta={}] "
+                            + "reject[lifecycle={},tag={},reservoir={},root={}] delta={}",
+                    pairedHistoryPersistentWriteEligible,
+                    pairedHistoryPersistentWriteCompleted,
+                    pairedHistoryPersistentWriteOverflow,
+                    pairedHistoryPersistentWriteEligible - pairedHistoryPersistentWriteTerminal,
+                    pairedHistoryPersistentCaptureCursorCapped,
+                    pairedHistoryPersistentCapturePairAccepted,
+                    pairedHistoryPersistentCapturePairReject,
+                    pairedHistoryPersistentCaptureMetadataReject,
+                    pairedHistoryPersistentCaptureOverflow,
+                    pairedHistoryPersistentCaptureCursorCapped
+                            - pairedHistoryPersistentCaptureTerminal,
+                    pairedHistoryPersistentPolicySource,
+                    pairedHistoryPersistentPairedSource,
+                    pairedHistoryPersistentSourceUnknown,
+                    pairedHistoryValidateAccepted - pairedHistoryPersistentSource,
+                    pairedHistoryPersistentLifecycleReject,
+                    pairedHistoryPersistentTagMismatch,
+                    pairedHistoryPersistentReservoirMismatch,
+                    pairedHistoryPersistentRootMismatch,
+                    pairedHistoryPersistentDelta);
             spatialDiagnosticViewPending = 0;
             return;
         }

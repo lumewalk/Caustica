@@ -1328,6 +1328,15 @@ identity output must match the full generic replay comparator. Twelve new counte
 view-20 storage to 950 uints / 3800 B; `WorldPush`, allocation sizes and replay ABI 10 are
 unchanged. The pass still returns before any scratch, history, promotion-tag or estimator write.
 
+The persistent paired-history publication gate reorders the paired replay dispatch after the
+persistence policy. Replay-approved pairs publish reservoir, source root and tag into the
+paired-history write slot at their receiver pixel index; policy copies remain where no paired
+pair exists. Storage validation attributes each record to one source, and bounded captures are
+proven bit-exactly against the dense slot. Sixteen new counters bring view-20 storage to 966
+uints / 3864 B. Publication is still debug-view-20 full-audit-only: no estimator change, no
+legacy history write, and replay ABI 10 is unchanged. The next gate is isolated one-frame
+ping-pong of the published pairs before any cross-frame reuse.
+
 ## Delivery Phases
 
 ### Phase 0 — Wavefront Integration Baseline
