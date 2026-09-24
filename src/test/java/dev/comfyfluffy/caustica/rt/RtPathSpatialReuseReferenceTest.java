@@ -2694,6 +2694,28 @@ final class RtPathSpatialReuseReferenceTest {
     }
 
     @Test
+    void pairedHistoryPingPongAuditClassifiesSurvivalAfterSlotSwap() {
+        assertEquals(RtPathSpatialReuseReference.PairedHistoryPingPongOutcome.EMPTY,
+                RtPathSpatialReuseReference.pairedHistoryPingPongAudit(
+                        true, true, false, false, false));
+        assertEquals(RtPathSpatialReuseReference.PairedHistoryPingPongOutcome.TAG_REJECT,
+                RtPathSpatialReuseReference.pairedHistoryPingPongAudit(
+                        true, false, false, false, false));
+        assertEquals(RtPathSpatialReuseReference.PairedHistoryPingPongOutcome.TAG_REJECT,
+                RtPathSpatialReuseReference.pairedHistoryPingPongAudit(
+                        false, true, false, true, true));
+        assertEquals(RtPathSpatialReuseReference.PairedHistoryPingPongOutcome.RESERVOIR_REJECT,
+                RtPathSpatialReuseReference.pairedHistoryPingPongAudit(
+                        false, true, true, false, true));
+        assertEquals(RtPathSpatialReuseReference.PairedHistoryPingPongOutcome.ROOT_REJECT,
+                RtPathSpatialReuseReference.pairedHistoryPingPongAudit(
+                        false, true, true, true, false));
+        assertEquals(RtPathSpatialReuseReference.PairedHistoryPingPongOutcome.SURVIVED,
+                RtPathSpatialReuseReference.pairedHistoryPingPongAudit(
+                        false, true, true, true, true));
+    }
+
+    @Test
     void pairedMomentsExposeCovarianceAndCorrelationWithoutBatchStorage() {
         var moments = new RtPathSpatialReuseReference.PairMoments();
         moments.add(1.0, 2.0);
@@ -4111,8 +4133,8 @@ final class RtPathSpatialReuseReferenceTest {
                 RtPathReservoirHistory.GUIDE_PAIRED_HISTORY_BERNOULLI_MAPPED_SOURCE_READY_INDEX);
         assertEquals(873,
                 RtPathReservoirHistory.GUIDE_PAIRED_HISTORY_BERNOULLI_TWO_SEGMENT_READY_INDEX);
-        assertEquals(966, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
-        assertEquals(966 * Integer.BYTES,
+        assertEquals(978, RtPathReservoirHistory.SHIFTED_DIAGNOSTIC_COUNTER_COUNT);
+        assertEquals(978 * Integer.BYTES,
                 RtPathReservoirHistory.SPATIAL_DIAGNOSTIC_COUNTER_BYTES);
         assertEquals(32, RtPathReservoirHistory.SHIFTED_RECEIVER_GUIDE_STRIDE);
         assertEquals(8, RtPathReservoirHistory.BRANCH_RECEIVER_OWNERSHIP_STRIDE);

@@ -2868,6 +2868,41 @@ final class RtPathSpatialReuseReference {
                 PairedHistoryPersistentSource.UNKNOWN, true, false, false, false, null);
     }
 
+    enum PairedHistoryPingPongOutcome {
+        EMPTY,
+        TAG_REJECT,
+        RESERVOIR_REJECT,
+        ROOT_REJECT,
+        SURVIVED
+    }
+
+    /**
+     * Ordered CPU mirror for the counter-only survival audit of the persistent paired-history
+     * pairs after the slot swap. It re-classifies the previous slot exactly as the shader
+     * validator does, without reprojection, replay or capture comparison.
+     */
+    static PairedHistoryPingPongOutcome pairedHistoryPingPongAudit(
+            boolean storedEmpty,
+            boolean payloadClean,
+            boolean tagSurvived,
+            boolean reservoirValid,
+            boolean rootValid) {
+        if (storedEmpty) {
+            return payloadClean ? PairedHistoryPingPongOutcome.EMPTY
+                    : PairedHistoryPingPongOutcome.TAG_REJECT;
+        }
+        if (!tagSurvived) {
+            return PairedHistoryPingPongOutcome.TAG_REJECT;
+        }
+        if (!reservoirValid) {
+            return PairedHistoryPingPongOutcome.RESERVOIR_REJECT;
+        }
+        if (!rootValid) {
+            return PairedHistoryPingPongOutcome.ROOT_REJECT;
+        }
+        return PairedHistoryPingPongOutcome.SURVIVED;
+    }
+
     enum BranchWinnerDirectRemapOutcome {
         PREVIOUS_REPLAY_REJECT,
         GUIDE_REJECT,

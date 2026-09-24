@@ -969,7 +969,21 @@ public static const uint PATH_GUIDE_PAIRED_HISTORY_PERSISTENT_CAPTURE_PAIR_ACCEP
 public static const uint PATH_GUIDE_PAIRED_HISTORY_PERSISTENT_CAPTURE_METADATA_REJECT = 963u;
 public static const uint PATH_GUIDE_PAIRED_HISTORY_PERSISTENT_CAPTURE_OVERFLOW = 964u;
 public static const uint PATH_GUIDE_PAIRED_HISTORY_PERSISTENT_DELTA = 965u;
-public static const uint PATH_SHIFT_DIAGNOSTIC_COUNTER_COUNT = 966u;
+// Counter-only survival audit of the published paired-history pairs after the slot swap. The
+// previous slot is scanned densely; no new capture memory is introduced.
+public static const uint PATH_GUIDE_PAIRED_HISTORY_PING_PONG_ATTEMPTED = 966u;
+public static const uint PATH_GUIDE_PAIRED_HISTORY_PING_PONG_EMPTY = 967u;
+public static const uint PATH_GUIDE_PAIRED_HISTORY_PING_PONG_TAG_REJECT = 968u;
+public static const uint PATH_GUIDE_PAIRED_HISTORY_PING_PONG_RESERVOIR_REJECT = 969u;
+public static const uint PATH_GUIDE_PAIRED_HISTORY_PING_PONG_ROOT_REJECT = 970u;
+public static const uint PATH_GUIDE_PAIRED_HISTORY_PING_PONG_SELECTED = 971u;
+public static const uint PATH_GUIDE_PAIRED_HISTORY_PING_PONG_RETAINED = 972u;
+public static const uint PATH_GUIDE_PAIRED_HISTORY_PING_PONG_IDENTITY_SOURCE = 973u;
+public static const uint PATH_GUIDE_PAIRED_HISTORY_PING_PONG_MAPPED_SOURCE = 974u;
+public static const uint PATH_GUIDE_PAIRED_HISTORY_PING_PONG_ONE_SEGMENT = 975u;
+public static const uint PATH_GUIDE_PAIRED_HISTORY_PING_PONG_TWO_SEGMENT = 976u;
+public static const uint PATH_GUIDE_PAIRED_HISTORY_PING_PONG_DELTA = 977u;
+public static const uint PATH_SHIFT_DIAGNOSTIC_COUNTER_COUNT = 978u;
 public static const uint PATH_SHIFT_DIAGNOSTIC_PAIR_MASK = 3u;
 public static const uint PATH_SHIFT_DIAGNOSTIC_MERGE_PAIR_OFFSET =
         PATH_SPATIAL_DIAGNOSTIC_PAIR_CAPACITY * 2u;

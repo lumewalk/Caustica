@@ -1337,6 +1337,12 @@ uints / 3864 B. Publication is still debug-view-20 full-audit-only: no estimator
 legacy history write, and replay ABI 10 is unchanged. The next gate is isolated one-frame
 ping-pong of the published pairs before any cross-frame reuse.
 
+The paired-history ping-pong gate now proves survival after the swap counter-only. The validate
+dispatch densely scans the previous slot and re-classifies every stored pair with the exact
+tag/reservoir/root contract the next frame's previous replay expects, without reprojection,
+replay, captures or any write. Twelve new counters bring view-20 storage to 978 uints / 3912 B.
+WorldPush, allocations and replay ABI 10 are unchanged.
+
 ## Delivery Phases
 
 ### Phase 0 — Wavefront Integration Baseline

@@ -1143,6 +1143,16 @@ against the dense slot. Publication remains view-20 full-audit-only: no estimato
 history, replay ABI 10 or WorldPush change. Capture overflow is expected because the bounded
 proof list holds at most 4096 of the eligible pairs.
 
+RT path paired history ping-pong proves that the published pairs survive the physical slot swap.
+The paired-history validate dispatch now also densely scans the previous slot and re-classifies
+every stored tag, reservoir and root lane exactly as the next frame's previous-replay contract
+expects (frame-1 tag, generation, owner, mapping-kind, segment, metadata and chain invariants).
+The audit is counter-only: no reprojection, replay or capture comparison runs here, and no paired
+slot, legacy history or estimator write happens. Required accounting is
+attempted = empty + tagReject + reservoirReject + rootReject + survived, survived = selected +
+retained = identity + mapped = one + two. Twelve new counters bring view-20 storage to 978
+uints / 3912 B.
+
 
 For a fresh runtime check, use debug view 20 and inspect `run/logs/latest.log`. Normal operation
 requires `RT bring-up OK`, Vulkan, the intended NVIDIA device, exact zero-delta counter partitions,

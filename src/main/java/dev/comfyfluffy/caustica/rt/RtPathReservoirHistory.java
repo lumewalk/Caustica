@@ -1011,7 +1011,19 @@ final class RtPathReservoirHistory {
     static final int GUIDE_PAIRED_HISTORY_PERSISTENT_CAPTURE_METADATA_REJECT_INDEX = 963;
     static final int GUIDE_PAIRED_HISTORY_PERSISTENT_CAPTURE_OVERFLOW_INDEX = 964;
     static final int GUIDE_PAIRED_HISTORY_PERSISTENT_DELTA_INDEX = 965;
-    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 966;
+    static final int GUIDE_PAIRED_HISTORY_PING_PONG_ATTEMPTED_INDEX = 966;
+    static final int GUIDE_PAIRED_HISTORY_PING_PONG_EMPTY_INDEX = 967;
+    static final int GUIDE_PAIRED_HISTORY_PING_PONG_TAG_REJECT_INDEX = 968;
+    static final int GUIDE_PAIRED_HISTORY_PING_PONG_RESERVOIR_REJECT_INDEX = 969;
+    static final int GUIDE_PAIRED_HISTORY_PING_PONG_ROOT_REJECT_INDEX = 970;
+    static final int GUIDE_PAIRED_HISTORY_PING_PONG_SELECTED_INDEX = 971;
+    static final int GUIDE_PAIRED_HISTORY_PING_PONG_RETAINED_INDEX = 972;
+    static final int GUIDE_PAIRED_HISTORY_PING_PONG_IDENTITY_SOURCE_INDEX = 973;
+    static final int GUIDE_PAIRED_HISTORY_PING_PONG_MAPPED_SOURCE_INDEX = 974;
+    static final int GUIDE_PAIRED_HISTORY_PING_PONG_ONE_SEGMENT_INDEX = 975;
+    static final int GUIDE_PAIRED_HISTORY_PING_PONG_TWO_SEGMENT_INDEX = 976;
+    static final int GUIDE_PAIRED_HISTORY_PING_PONG_DELTA_INDEX = 977;
+    static final int SHIFTED_DIAGNOSTIC_COUNTER_COUNT = 978;
     static final int SHIFTED_RECEIVER_GUIDE_STRIDE = 8 * Float.BYTES;
     static final int BRANCH_RECEIVER_OWNERSHIP_STRIDE = 2 * Integer.BYTES;
     static final int BRANCH_CANDIDATE_TAG_STRIDE = 2 * Integer.BYTES;
@@ -3457,6 +3469,30 @@ final class RtPathReservoirHistory {
                     counters.get(GUIDE_PAIRED_HISTORY_PERSISTENT_CAPTURE_OVERFLOW_INDEX));
             long pairedHistoryPersistentDelta = Integer.toUnsignedLong(
                     counters.get(GUIDE_PAIRED_HISTORY_PERSISTENT_DELTA_INDEX));
+            long pairedHistoryPingPongAttempted = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_PING_PONG_ATTEMPTED_INDEX));
+            long pairedHistoryPingPongEmpty = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_PING_PONG_EMPTY_INDEX));
+            long pairedHistoryPingPongTagReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_PING_PONG_TAG_REJECT_INDEX));
+            long pairedHistoryPingPongReservoirReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_PING_PONG_RESERVOIR_REJECT_INDEX));
+            long pairedHistoryPingPongRootReject = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_PING_PONG_ROOT_REJECT_INDEX));
+            long pairedHistoryPingPongSelected = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_PING_PONG_SELECTED_INDEX));
+            long pairedHistoryPingPongRetained = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_PING_PONG_RETAINED_INDEX));
+            long pairedHistoryPingPongIdentitySource = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_PING_PONG_IDENTITY_SOURCE_INDEX));
+            long pairedHistoryPingPongMappedSource = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_PING_PONG_MAPPED_SOURCE_INDEX));
+            long pairedHistoryPingPongOneSegment = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_PING_PONG_ONE_SEGMENT_INDEX));
+            long pairedHistoryPingPongTwoSegment = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_PING_PONG_TWO_SEGMENT_INDEX));
+            long pairedHistoryPingPongDelta = Integer.toUnsignedLong(
+                    counters.get(GUIDE_PAIRED_HISTORY_PING_PONG_DELTA_INDEX));
             long crossFrameReceiverReject = crossFrameReceiverSurfaceReject
                     + crossFrameReceiverSampleReject + crossFrameReceiverEdgeReject
                     + crossFrameReceiverTopologyReject + crossFrameReceiverDepthReject
@@ -6472,6 +6508,39 @@ final class RtPathReservoirHistory {
                     pairedHistoryPersistentReservoirMismatch,
                     pairedHistoryPersistentRootMismatch,
                     pairedHistoryPersistentDelta);
+            long pairedHistoryPingPongBranch = pairedHistoryPingPongSelected
+                    + pairedHistoryPingPongRetained;
+            long pairedHistoryPingPongSource = pairedHistoryPingPongIdentitySource
+                    + pairedHistoryPingPongMappedSource;
+            long pairedHistoryPingPongSegments = pairedHistoryPingPongOneSegment
+                    + pairedHistoryPingPongTwoSegment;
+            CausticaMod.LOGGER.info(
+                    "RT path paired history ping-pong: attempted={} empty={} "
+                            + "reject[tag={},reservoir={},root={},delta={}] survived={} "
+                            + "delta={} branch[selected={},retained={},delta={}] "
+                            + "source[identity={},mapped={},delta={}] "
+                            + "segments[one={},two={},delta={}]",
+                    pairedHistoryPingPongAttempted,
+                    pairedHistoryPingPongEmpty,
+                    pairedHistoryPingPongTagReject,
+                    pairedHistoryPingPongReservoirReject,
+                    pairedHistoryPingPongRootReject,
+                    pairedHistoryPingPongAttempted - pairedHistoryPingPongEmpty
+                            - pairedHistoryPingPongTagReject
+                            - pairedHistoryPingPongReservoirReject
+                            - pairedHistoryPingPongRootReject,
+                    pairedHistoryPingPongDelta,
+                    pairedHistoryPingPongDelta - pairedHistoryPingPongBranch,
+                    pairedHistoryPingPongSelected,
+                    pairedHistoryPingPongRetained,
+                    pairedHistoryPingPongBranch - pairedHistoryPingPongSelected
+                            - pairedHistoryPingPongRetained,
+                    pairedHistoryPingPongIdentitySource,
+                    pairedHistoryPingPongMappedSource,
+                    pairedHistoryPingPongBranch - pairedHistoryPingPongSource,
+                    pairedHistoryPingPongOneSegment,
+                    pairedHistoryPingPongTwoSegment,
+                    pairedHistoryPingPongBranch - pairedHistoryPingPongSegments);
             spatialDiagnosticViewPending = 0;
             return;
         }

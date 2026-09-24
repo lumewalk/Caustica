@@ -2909,6 +2909,102 @@ static void pathBranchPairedPersistentCaptureValidate() {
             PATH_GUIDE_PAIRED_HISTORY_PERSISTENT_CAPTURE_PAIR_ACCEPTED], 1u);
 }
 
+// Counter-only survival audit of the published persistent pairs after the physical slot swap.
+// It densely scans the previous paired-history slot one frame after publication and
+// re-classifies every stored tag, reservoir and root lanes exactly as the previous-frame replay
+// contract expects them. It performs no reprojection, replay or capture comparison, and never
+// writes the paired slots, captures, legacy path history or the estimator.
+static void pathBranchPairedHistoryPingPongValidate() {
+    if (pc.debugView != PATH_SHIFTED_RADIANCE_DEBUG_VIEW
+            || (pc.historyFlags & PATH_GUIDE_PAIRED_HISTORY_VALIDATE_PASS_FLAG) == 0u
+            || (pc.historyFlags & PATH_GUIDE_PAIRED_HISTORY_PREVIOUS_AVAILABLE_FLAG) == 0u
+            || worldPush.pathShiftDiagnosticCounterAddr == 0u
+            || worldPush.pathShiftPairedHistoryPreviousAddr == 0u) {
+        return;
+    }
+    uint2 pixel = DispatchRaysIndex().xy;
+    uint2 dimensions = DispatchRaysDimensions().xy;
+    uint pixelIndex = pixel.y * dimensions.x + pixel.x;
+    uint pixelCount = dimensions.x * dimensions.y;
+    DevicePtr<uint> counters = DevicePtr<uint>(worldPush.pathShiftDiagnosticCounterAddr);
+    InterlockedAdd(counters[PATH_GUIDE_PAIRED_HISTORY_PING_PONG_ATTEMPTED], 1u);
+
+    uint64_t previousSlot = worldPush.pathShiftPairedHistoryPreviousAddr;
+    uint4 storedTag = ConstPtr<uint4>(pathBranchWinnerTagAddress(
+            previousSlot, pixelCount))[pixelIndex];
+    if (all(storedTag == uint4(0u))) {
+        bool clean = pathBranchPairedHistoryPayloadZero(
+                previousSlot, pixelIndex, pixelCount);
+        InterlockedAdd(counters[clean
+                ? PATH_GUIDE_PAIRED_HISTORY_PING_PONG_EMPTY
+                : PATH_GUIDE_PAIRED_HISTORY_PING_PONG_TAG_REJECT], 1u);
+        return;
+    }
+
+    uint currentGeneration = pc.historyGeneration & PATH_GENERATION_MASK;
+    uint sourceMappingKind = storedTag.w & 0xFFu;
+    uint outputMappingKind = (storedTag.w >> 8u) & 0xFFu;
+    uint previousOutputMappingKind = (storedTag.w >> 16u) & 0xFFu;
+    uint replaySegments = (storedTag.w >> 24u) & 0xFFu;
+    bool tagSurvived = storedTag.x == worldPush.frameIndex - 1u
+            && storedTag.y == currentGeneration
+            && storedTag.z == pixelIndex
+            && (sourceMappingKind == PATH_MAPPING_IDENTITY
+                    || sourceMappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION)
+            && (outputMappingKind == PATH_MAPPING_IDENTITY
+                    || outputMappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION)
+            && (previousOutputMappingKind == PATH_MAPPING_IDENTITY
+                    || previousOutputMappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION)
+            && (replaySegments == 1u || replaySegments == MAX_PATH_SEGMENTS);
+    if (!tagSurvived) {
+        InterlockedAdd(counters[PATH_GUIDE_PAIRED_HISTORY_PING_PONG_TAG_REJECT], 1u);
+        return;
+    }
+
+    PathReservoir stored = ConstPtr<PathReservoir>(previousSlot)[pixelIndex];
+    uint sourceIndex = stored.identity.y;
+    bool reservoirValid = pathMappingKind(stored) == outputMappingKind
+            && stored.replayControl.y == replaySegments
+            && all(isfinite(stored.weights))
+            && all(stored.weights > float4(0.0))
+            && pathReservoirSampleMetadataReady(stored)
+            && (stored.identity.w & PATH_GENERATION_MASK) == currentGeneration
+            && sourceIndex < pixelCount;
+    if (!reservoirValid) {
+        InterlockedAdd(counters[
+                PATH_GUIDE_PAIRED_HISTORY_PING_PONG_RESERVOIR_REJECT], 1u);
+        return;
+    }
+
+    PathSourceRoot root = ConstPtr<PathSourceRoot>(pathBranchWinnerRootAddress(
+            previousSlot, pixelCount))[pixelIndex];
+    bool rootFinite = all(isfinite(root.sourcePositionMaterial))
+            && all(isfinite(root.sourceNormalRoughness))
+            && all(isfinite(root.receiverPositionMaterial))
+            && all(isfinite(root.receiverNormalRoughness))
+            && all(isfinite(root.segment0.ro))
+            && all(isfinite(root.segment1.ro));
+    bool rootChainValid = replaySegments == 1u
+            ? root.segment0.nextRecord == PATH_NO_NEXT
+            : root.segment0.nextRecord != PATH_NO_NEXT
+                    && root.segment1.nextRecord == PATH_NO_NEXT;
+    if (!rootFinite || !rootChainValid) {
+        InterlockedAdd(counters[PATH_GUIDE_PAIRED_HISTORY_PING_PONG_ROOT_REJECT], 1u);
+        return;
+    }
+
+    InterlockedAdd(counters[PATH_GUIDE_PAIRED_HISTORY_PING_PONG_DELTA], 1u);
+    InterlockedAdd(counters[outputMappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION
+            ? PATH_GUIDE_PAIRED_HISTORY_PING_PONG_SELECTED
+            : PATH_GUIDE_PAIRED_HISTORY_PING_PONG_RETAINED], 1u);
+    InterlockedAdd(counters[sourceMappingKind == PATH_MAPPING_DIFFUSE_RECONNECTION
+            ? PATH_GUIDE_PAIRED_HISTORY_PING_PONG_MAPPED_SOURCE
+            : PATH_GUIDE_PAIRED_HISTORY_PING_PONG_IDENTITY_SOURCE], 1u);
+    InterlockedAdd(counters[replaySegments == 1u
+            ? PATH_GUIDE_PAIRED_HISTORY_PING_PONG_ONE_SEGMENT
+            : PATH_GUIDE_PAIRED_HISTORY_PING_PONG_TWO_SEGMENT], 1u);
+}
+
 static void pathBranchReceiverOwnerValidate() {
     if (pc.debugView != PATH_SHIFTED_RADIANCE_DEBUG_VIEW
             || (pc.historyFlags & PATH_GUIDE_BRANCH_RECEIVER_OWNER_VALIDATE_PASS_FLAG) == 0u
@@ -7310,6 +7406,7 @@ void main() {
     if ((pc.historyFlags & PATH_GUIDE_PAIRED_HISTORY_VALIDATE_PASS_FLAG) != 0u) {
         pathBranchPairedHistoryValidate();
         pathBranchPairedPersistentCaptureValidate();
+        pathBranchPairedHistoryPingPongValidate();
         return;
     }
     if ((pc.historyFlags
